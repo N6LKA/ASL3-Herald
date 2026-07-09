@@ -15,6 +15,8 @@ TailMessage:
   Enable: true
 
   # Minimum seconds between tail messages (prevents rapid replay)
+  # This is in SECONDS, not milliseconds like rpt.conf's tailmessagetime.
+  # Examples: 5 min = 300 | 10 min = 600 | 15 min = 900
   MinInterval: 300
 
   # Blackout window — no tail messages between these times (24-hour HH:MM format)
