@@ -58,7 +58,13 @@
     border-bottom: 1px solid #ddd;
     font-size: 1em;
   }
-  #herald-ui button { cursor: pointer; padding: 4px 10px; margin-right: 4px; }
+  #herald-ui button {
+    cursor: pointer;
+    padding: 4px 10px;
+    margin-right: 4px;
+    display: inline-block !important;
+    width: auto !important;
+  }
   #herald-ui .btn-danger { background: #e74c3c; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-play   { background: #2980b9; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-primary{ background: #27ae60; color: #fff; border: none; border-radius: 4px; padding: 8px 16px; }
