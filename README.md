@@ -240,12 +240,14 @@ journalctl -u asl3-herald -f          # Follow live log output
 
 When an unkey is detected, the daemon checks in priority order:
 1. **Minimum interval** — if not enough time has passed since the last tail message, skip
-2. **SkywarnPlus WX alert** — if the `wx-tail.wav` file is larger than `SilenceThreshold` bytes, play it (takes priority over rotation)
+2. **SkywarnPlus WX alert** — if the `wx-tail.wav` file is larger than `SilenceThreshold` bytes, an alert is active
 3. **Rotation** — otherwise, play the next file in the rotation list and advance the index
+
+A newly-appeared or changed WX alert always plays immediately, taking priority over the rotation. But a **persistent** alert (unchanged since it last played — detected via `wx-tail.wav`'s own modification time, not a separate/optional SkywarnPlus feed) alternates with the rotation on each unkey instead of playing every single time, so a long-running alert (common in some areas, e.g. summer heat warnings) doesn't shut the rotation out entirely. As soon as the alert changes or a new one appears, it immediately jumps back to the front of the line.
 
 **Scheduled announcements** run on a separate time-based path, unaffected by the tail message interval or repeater activity. They fire once per configured `HH:MM` per day, optionally restricted to a specific week of the month via `Week`.
 
-State (rotation index and last played time) is saved to a JSON file so it survives service restarts.
+State (rotation index, WX alternation, and last played time) is saved to a JSON file so it survives service restarts.
 
 ---
 

@@ -74,7 +74,9 @@ def load_state():
     defaults = {
         "rotation_index": 0,
         "last_tail_played": 0.0,
-        "scheduled_played": {}
+        "scheduled_played": {},
+        "swp_last_mtime": None,
+        "swp_next_is_rotation": False,
     }
     try:
         if os.path.exists(STATE_FILE):
@@ -436,15 +438,61 @@ def main():
                         last_kerchunks = cur
                         log_debug(f"Unkey detected (kerchunks now {cur})")
 
+                        # A persistent WX alert would otherwise starve the rotation
+                        # entirely (constant alerts are common for some users, e.g.
+                        # in summer heat-warning season). Reset the alternation
+                        # state as soon as there's no active alert, so a future
+                        # alert always plays immediately the first time it appears.
+                        swp_active = swp_on and wx_is_active(swp_file, swp_thr)
+                        if not swp_active:
+                            state["swp_next_is_rotation"] = False
+                            state["swp_last_mtime"] = None
+
                         if (now - state["last_tail_played"]) < min_int:
                             remaining = int(min_int - (now - state["last_tail_played"]))
                             log_debug(f"Min interval not reached - {remaining}s remaining")
 
-                        elif swp_on and wx_is_active(swp_file, swp_thr):
-                            log_info("Playing SkywarnPlus WX tail message (priority)")
-                            play_file(node, swp_file)
-                            state["last_tail_played"] = now
-                            save_state(state)
+                        elif swp_active:
+                            try:
+                                swp_mtime = os.path.getmtime(swp_file)
+                            except OSError:
+                                swp_mtime = None
+                            is_new_alert = swp_mtime is not None and swp_mtime != state.get("swp_last_mtime")
+
+                            if is_new_alert:
+                                # New/changed alert always plays immediately,
+                                # regardless of whose turn it was.
+                                log_info("Playing SkywarnPlus WX tail message (new/changed alert)")
+                                play_file(node, swp_file)
+                                state["swp_last_mtime"] = swp_mtime
+                                state["swp_next_is_rotation"] = True
+                                state["last_tail_played"] = now
+                                save_state(state)
+
+                            elif rotation and state.get("swp_next_is_rotation"):
+                                # Same alert as before - alternate with the rotation
+                                # instead of playing the WX tail on every unkey.
+                                idx      = state["rotation_index"] % len(rotation)
+                                filepath = rotation[idx]
+                                if os.path.exists(filepath):
+                                    log_info(f"Playing rotation [{idx + 1}/{len(rotation)}] (alternating with active WX alert): {Path(filepath).name}")
+                                    play_file(node, filepath)
+                                    state["rotation_index"]       = (idx + 1) % len(rotation)
+                                    state["swp_next_is_rotation"] = False
+                                    state["last_tail_played"]     = now
+                                    save_state(state)
+                                else:
+                                    log_warn(f"Rotation file not found: {filepath} - playing WX alert instead")
+                                    play_file(node, swp_file)
+                                    state["last_tail_played"] = now
+                                    save_state(state)
+
+                            else:
+                                log_info("Playing SkywarnPlus WX tail message (alternating)")
+                                play_file(node, swp_file)
+                                state["swp_next_is_rotation"] = True
+                                state["last_tail_played"] = now
+                                save_state(state)
 
                         elif rotation:
                             idx      = state["rotation_index"] % len(rotation)
