@@ -209,6 +209,7 @@
 
     <label>Min Interval Between Tail Messages (seconds)</label>
     <input type="text" id="set-min-interval" style="width: 100px;">
+    <span class="muted" style="margin-left: 8px;">e.g. 300 = 5 min, 600 = 10 min, 900 = 15 min</span>
 
     <label><input type="checkbox" id="set-debug"> Enable debug logging</label>
 
