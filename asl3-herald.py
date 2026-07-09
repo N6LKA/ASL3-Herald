@@ -170,7 +170,7 @@ def extract_config(config):
     bk_end   = tm.get("BlackoutEnd",   "") or ""
 
     swp      = tm.get("SkywarnPlus", {}) or {}
-    swp_on   = swp.get("Enable", False)
+    swp_on   = swp.get("Enable", True)
     swp_file = swp.get("WxTailFile", "/tmp/SkywarnPlus/wx-tail.wav")
     swp_thr  = swp.get("SilenceThreshold", 5000)
 

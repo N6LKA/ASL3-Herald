@@ -2,7 +2,7 @@
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![Release Date](https://img.shields.io/badge/released-2026--07--09-green)
-![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
 
 **Enhanced tail message daemon for ASL3/app_rpt with advanced announcement features.**
 
@@ -14,9 +14,9 @@
 
 - **Reliable unkey detection** — polls the `rpt stats` kerchunk counter every 2 seconds to detect transmissions; not dependent on the inconsistent native tail message trigger
 - **Rotating tail messages** — cycles through a list of announcement files in order with a configurable minimum interval between plays
-- **SkywarnPlus WX integration** — when weather alerts are active, plays the SkywarnPlus `wx-tail.wav` file instead of the normal rotation (WX always has priority and **overrides the blackout window**)
+- **SkywarnPlus WX integration** — when weather alerts are active, plays the SkywarnPlus `wx-tail.wav` file instead of the normal rotation (WX always has priority)
 - **Scheduled announcements** — plays a specific file at a configured time of day on selected days of the week, independent of the tail message interval (e.g., ARRL Audio News every Saturday at 07:30)
-- **Blackout window** — suppresses non-WX tail messages between two configurable times (e.g., overnight 22:00–07:00); overnight spans are supported
+- **Blackout window** — suppresses tail messages between two configurable times (e.g., overnight 22:00–07:00); overnight spans are supported
 - **Instant disable/enable** — use `herald disable` / `herald enable` without touching the config or restarting the service
 - **Live config reload** — `herald reload` sends SIGHUP to pick up config changes immediately
 - **TTS announcement builder** — `herald add "text"` generates a 8 kHz mono WAV from text using festival or espeak-ng and adds it to the rotation automatically
@@ -56,10 +56,10 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 | `Debug` | `false` | Enable verbose debug logging |
 | `TailMessage.Enable` | `true` | Enable/disable tail message function |
 | `TailMessage.MinInterval` | `300` | Minimum seconds between tail messages |
-| `TailMessage.BlackoutStart` | _(empty)_ | No non-WX tail messages after this time (HH:MM, 24-hour) |
+| `TailMessage.BlackoutStart` | _(empty)_ | No tail messages after this time (HH:MM, 24-hour) |
 | `TailMessage.BlackoutEnd` | _(empty)_ | Resume tail messages at this time (HH:MM, 24-hour) |
 | `TailMessage.Rotation` | _(empty)_ | List of WAV file paths to rotate through |
-| `TailMessage.SkywarnPlus.Enable` | `false` | Enable SkywarnPlus WX tail integration |
+| `TailMessage.SkywarnPlus.Enable` | `true` | Enable SkywarnPlus WX tail integration |
 | `TailMessage.SkywarnPlus.WxTailFile` | `/tmp/SkywarnPlus/wx-tail.wav` | Path to SkywarnPlus wx-tail.wav |
 | `TailMessage.SkywarnPlus.SilenceThreshold` | `5000` | File size (bytes) to distinguish active alerts from silence |
 | `Scheduled[].Name` | _(required)_ | Unique name for the scheduled announcement |
@@ -176,6 +176,8 @@ WX alerts always take priority and will play even during the configured blackout
 
 ## License
 
-MIT © 2026 Larry Aycock (N6LKA)
+GPLv3 © 2026 Larry Aycock (N6LKA)
+
+This software is free and open source. You may use, modify, and redistribute it, but derivative works must remain open source under the same license — it may not be resold or relicensed as proprietary software.
 
 See [LICENSE](LICENSE) for details.
