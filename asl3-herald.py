@@ -4,8 +4,8 @@ asl3-herald - Enhanced Tail Message & Announcement Daemon for ASL3/app_rpt
 https://github.com/N6LKA/asl3-herald
 
 Replaces and enhances the native app_rpt tail message function with reliable
-unkey detection, rotating messages, SkywarnPlus WX integration, scheduled
-announcements, and blackout windows.
+unkey detection, rotating messages, SkywarnPlus WX integration, and scheduled
+announcements.
 """
 
 import os
@@ -13,6 +13,7 @@ import sys
 import time
 import json
 import signal
+import argparse
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -59,6 +60,13 @@ def load_config():
         sys.exit(1)
     with open(CONF_FILE) as f:
         return yaml.safe_load(f)
+
+def save_config(config):
+    # NOTE: this round-trips through PyYAML, which does not preserve comments.
+    # Config files edited via the CLI/web UI will lose the explanatory
+    # comments present in asl3-herald.conf.example after their first edit.
+    with open(CONF_FILE, "w") as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
 # ── State ─────────────────────────────────────────────────────────────────────
 
@@ -116,18 +124,16 @@ def play_file(node, filepath):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def in_blackout(start, end):
-    if not start or not end:
-        return False
-    now = datetime.now().strftime("%H:%M")
-    if start <= end:
-        return start <= now < end
-    return now >= start or now < end  # overnight span
-
 def wx_is_active(wx_file, threshold):
     if not wx_file or not os.path.exists(wx_file):
         return False
     return os.path.getsize(wx_file) > threshold
+
+def week_of_month_range(week):
+    # week: 1-5 (5 = last week, runs through end of month)
+    low = (week - 1) * 7 + 1
+    high = 31 if week == 5 else low + 6
+    return low, high
 
 def should_play_scheduled(sched, state):
     now   = datetime.now()
@@ -143,6 +149,17 @@ def should_play_scheduled(sched, state):
         day_list = [d.lower() for d in (days if isinstance(days, list) else [days])]
         if today not in day_list:
             return False
+
+    week = sched.get("Week")
+    if week:
+        try:
+            week = int(week)
+        except (TypeError, ValueError):
+            week = None
+        if week in (1, 2, 3, 4, 5):
+            low, high = week_of_month_range(week)
+            if not (low <= now.day <= high):
+                return False
 
     filepath = sched.get("File", "")
     if not filepath or not os.path.exists(filepath):
@@ -166,8 +183,6 @@ def extract_config(config):
     tm_on    = tm.get("Enable", True)
     min_int  = tm.get("MinInterval", 300)
     rotation = tm.get("Rotation", []) or []
-    bk_start = tm.get("BlackoutStart", "") or ""
-    bk_end   = tm.get("BlackoutEnd",   "") or ""
 
     swp      = tm.get("SkywarnPlus", {}) or {}
     swp_on   = swp.get("Enable", True)
@@ -177,7 +192,126 @@ def extract_config(config):
     scheduled = config.get("Scheduled", []) or []
 
     return (node, poll, debug, tm_on, min_int, rotation,
-            bk_start, bk_end, swp_on, swp_file, swp_thr, scheduled)
+            swp_on, swp_file, swp_thr, scheduled)
+
+# ── CLI subcommands (used by the `herald` bash CLI and the web UI) ────────────
+
+def cmd_list_json(config):
+    (node, poll, debug, tm_on, min_int, rotation,
+     swp_on, swp_file, swp_thr, scheduled) = extract_config(config)
+    out = {
+        "node": node,
+        "poll_interval": poll,
+        "debug": debug,
+        "tail_message": {
+            "enable": tm_on,
+            "min_interval": min_int,
+            "rotation": rotation,
+            "skywarnplus": {
+                "enable": swp_on,
+                "wx_tail_file": swp_file,
+                "silence_threshold": swp_thr,
+            },
+        },
+        "scheduled": scheduled,
+    }
+    print(json.dumps(out, indent=2))
+
+def cmd_add_rotation(config, filepath):
+    tm = config.setdefault("TailMessage", {})
+    rotation = tm.setdefault("Rotation", [])
+    if filepath in rotation:
+        print(json.dumps({"success": False, "message": f"Already in rotation: {filepath}"}))
+        return
+    rotation.append(filepath)
+    save_config(config)
+    print(json.dumps({"success": True, "message": f"Added to rotation: {filepath}"}))
+
+def cmd_add_scheduled(config, args):
+    scheduled = config.setdefault("Scheduled", [])
+    if any(s.get("Name") == args.name for s in scheduled):
+        print(json.dumps({"success": False, "message": f"Scheduled entry already exists: {args.name}"}))
+        return
+
+    entry = {
+        "Name": args.name,
+        "Time": args.time,
+        "Days": "daily" if args.days == "daily" else [d.strip().lower() for d in args.days.split(",")],
+        "File": args.file,
+    }
+    if args.week:
+        entry["Week"] = int(args.week)
+
+    scheduled.append(entry)
+    save_config(config)
+    print(json.dumps({"success": True, "message": f"Added scheduled announcement: {args.name}"}))
+
+def cmd_remove(config, identifier):
+    tm = config.get("TailMessage", {}) or {}
+    rotation = tm.get("Rotation", []) or []
+    scheduled = config.get("Scheduled", []) or []
+
+    for i, s in enumerate(scheduled):
+        if s.get("Name") == identifier:
+            del scheduled[i]
+            save_config(config)
+            print(json.dumps({"success": True, "type": "scheduled",
+                               "message": f"Removed scheduled announcement: {identifier}"}))
+            return
+
+    target = os.path.basename(identifier)
+    target_noext = os.path.splitext(target)[0]
+    for i, filepath in enumerate(rotation):
+        base = os.path.basename(filepath)
+        base_noext = os.path.splitext(base)[0]
+        if base == target or base_noext == target_noext:
+            removed = rotation.pop(i)
+            save_config(config)
+            print(json.dumps({"success": True, "type": "rotation",
+                               "message": f"Removed from rotation: {removed}"}))
+            return
+
+    print(json.dumps({"success": False, "message": f"No match found for: {identifier}"}))
+
+def build_arg_parser():
+    parser = argparse.ArgumentParser(prog="asl3-herald.py")
+    sub = parser.add_subparsers(dest="command")
+
+    sub.add_parser("list-json", help="Print current config as JSON")
+
+    p_add_rot = sub.add_parser("add-rotation", help="Add a WAV file to the tail message rotation")
+    p_add_rot.add_argument("filepath")
+
+    p_add_sched = sub.add_parser("add-scheduled", help="Add a scheduled announcement")
+    p_add_sched.add_argument("--name", required=True)
+    p_add_sched.add_argument("--time", required=True, help="HH:MM 24-hour")
+    p_add_sched.add_argument("--days", default="daily", help='"daily" or comma-separated day names')
+    p_add_sched.add_argument("--week", default=None, help="1-5 (5 = last week of month)")
+    p_add_sched.add_argument("--file", required=True)
+
+    p_remove = sub.add_parser("remove", help="Remove a rotation file or scheduled announcement by name")
+    p_remove.add_argument("identifier")
+
+    return parser
+
+def cli_main():
+    parser = build_arg_parser()
+    args = parser.parse_args()
+
+    if not args.command:
+        main()
+        return
+
+    config = load_config()
+
+    if args.command == "list-json":
+        cmd_list_json(config)
+    elif args.command == "add-rotation":
+        cmd_add_rotation(config, args.filepath)
+    elif args.command == "add-scheduled":
+        cmd_add_scheduled(config, args)
+    elif args.command == "remove":
+        cmd_remove(config, args.identifier)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -188,7 +322,7 @@ def main():
 
     config = load_config()
     (node, poll, DEBUG, tm_on, min_int, rotation,
-     bk_start, bk_end, swp_on, swp_file, swp_thr, scheduled) = extract_config(config)
+     swp_on, swp_file, swp_thr, scheduled) = extract_config(config)
 
     if not node:
         log_error("Node not set in config. Exiting.")
@@ -205,8 +339,6 @@ def main():
         log_info(f"Rotation: {len(rotation)} message(s)")
     if scheduled:
         log_info(f"Scheduled: {len(scheduled)} announcement(s)")
-    if bk_start and bk_end:
-        log_info(f"Blackout window: {bk_start} - {bk_end}")
 
     disabled_logged = False
     reload_flag = [False]
@@ -224,7 +356,7 @@ def main():
                 log_info("Reloading config (SIGHUP)")
                 config = load_config()
                 (node, poll, DEBUG, tm_on, min_int, rotation,
-                 bk_start, bk_end, swp_on, swp_file, swp_thr, scheduled) = extract_config(config)
+                 swp_on, swp_file, swp_thr, scheduled) = extract_config(config)
                 log_info("Config reloaded")
 
             # ── Disabled flag ─────────────────────────────────────────────
@@ -270,23 +402,15 @@ def main():
                         last_kerchunks = cur
                         log_debug(f"Unkey detected (kerchunks now {cur})")
 
-                        if swp_on and wx_is_active(swp_file, swp_thr):
-                            # WX alerts override blackout — safety messages always play
-                            if (now - state["last_tail_played"]) < min_int:
-                                remaining = int(min_int - (now - state["last_tail_played"]))
-                                log_debug(f"Min interval not reached - {remaining}s remaining")
-                            else:
-                                log_info("Playing SkywarnPlus WX tail message (priority, overrides blackout)")
-                                play_file(node, swp_file)
-                                state["last_tail_played"] = now
-                                save_state(state)
-
-                        elif in_blackout(bk_start, bk_end):
-                            log_debug("Blackout window active - skipping tail message")
-
-                        elif (now - state["last_tail_played"]) < min_int:
+                        if (now - state["last_tail_played"]) < min_int:
                             remaining = int(min_int - (now - state["last_tail_played"]))
                             log_debug(f"Min interval not reached - {remaining}s remaining")
+
+                        elif swp_on and wx_is_active(swp_file, swp_thr):
+                            log_info("Playing SkywarnPlus WX tail message (priority)")
+                            play_file(node, swp_file)
+                            state["last_tail_played"] = now
+                            save_state(state)
 
                         elif rotation:
                             idx      = state["rotation_index"] % len(rotation)
@@ -313,4 +437,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    cli_main()

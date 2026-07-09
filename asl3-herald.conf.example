@@ -19,19 +19,15 @@ TailMessage:
   # Examples: 5 min = 300 | 10 min = 600 | 15 min = 900
   MinInterval: 300
 
-  # Blackout window — no tail messages between these times (24-hour HH:MM format)
-  # Leave both empty to disable blackout
-  BlackoutStart: "22:00"
-  BlackoutEnd:   "07:00"
-
   # Rotating tail message files (played in order, then repeats)
   Rotation:
     - /etc/asterisk/scripts/asl3-herald/announcements/tail1.wav
     # - /etc/asterisk/scripts/asl3-herald/announcements/tail2.wav
 
   SkywarnPlus:
-    # Play the SkywarnPlus wx-tail.wav instead of rotation when WX alerts are active
-    # wx-tail.wav is a large file (>5000 bytes) when alerts are present, silent when not
+    # Play the SkywarnPlus wx-tail.wav instead of rotation when WX alerts are active.
+    # wx-tail.wav is a large file (>5000 bytes) when alerts are present, silent when not.
+    # WX alerts always take priority over the rotation.
     Enable: true
     WxTailFile: /tmp/SkywarnPlus/wx-tail.wav
     # File size threshold to distinguish an active alert file from the silent placeholder
@@ -39,6 +35,8 @@ TailMessage:
 
 # Scheduled announcements — play at specific times, regardless of tail message interval
 # Days: "daily" or a list: ["saturday", "sunday"]  (case-insensitive)
+# Week (optional): 1-5, restricts to the nth week of the month (5 = last week).
+#   Omit Week to play on every matching day.
 Scheduled:
   - Name: "ARRL Audio News"
     Time: "07:30"
@@ -49,3 +47,9 @@ Scheduled:
   #   Time: "19:45"
   #   Days: ["thursday"]
   #   File: /etc/asterisk/scripts/asl3-herald/announcements/net-announcement.wav
+
+  # - Name: "Second Saturday Breakfast Net"
+  #   Time: "08:00"
+  #   Days: ["saturday"]
+  #   Week: 2
+  #   File: /etc/asterisk/scripts/asl3-herald/announcements/breakfast-net.wav

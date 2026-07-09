@@ -6,25 +6,37 @@ CONF_FILE="$INSTALL_DIR/asl3-herald.conf"
 SERVICE="asl3-herald"
 ANNOUNCE_DIR="$INSTALL_DIR/announcements"
 DISABLE_FLAG="$INSTALL_DIR/asl3-herald-disabled"
-PID_FILE="/run/asl3-herald.pid"
+DAEMON_PY="/usr/local/bin/asl3-herald/asl3-herald.py"
+PIPER_BIN="/opt/piper/bin/piper/piper"
+PIPER_VOICE_DIR="/opt/piper/voices"
 
 usage() {
     cat <<EOF
 Usage: herald <command> [options]
 
-Commands:
-  status                Show daemon status and current config summary
-  enable                Remove disable flag and start daemon
-  disable               Stop daemon and set disable flag
-  reload                Reload config without restarting (SIGHUP)
-  add "<text>" [--name <name>]
-                        Generate TTS announcement WAV and add to config
-  add-file <path> [--name <name>]
-                        Copy existing WAV file and add to rotation
-  list                  List all rotation entries and scheduled announcements
-  remove <name>         Remove an announcement from rotation/config
-  play <name>           Play an announcement immediately on the node
-  help                  Show this message
+General:
+  status                                  Show daemon status and config summary
+  enable                                  Remove disable flag and start daemon
+  disable                                 Stop daemon and set disable flag
+  toggle                                  Flip enabled/disabled state
+  reload                                  Reload config without restarting (SIGHUP)
+  list-json                               Print config as JSON (used by the web UI)
+  voices [--json]                         List available TTS voices
+  help                                    Show this message
+
+Tail Messages (unkey-triggered rotation):
+  add "<text>" [--name <name>] [--voice <voice>]
+                                           Generate TTS announcement and add to rotation
+  add-file <path> [--name <name>]         Copy an existing WAV file into rotation
+  list                                    List rotation + scheduled announcements
+  remove <name>                           Remove a rotation file or scheduled announcement
+  play <name>                             Play an announcement immediately on the node
+
+Scheduled Announcements (clock-triggered):
+  add-schedule "<text>" --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5] [--voice <voice>]
+                                           Generate TTS announcement and schedule it
+  add-schedule-file <path> --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5]
+                                           Schedule an existing WAV file
 EOF
 }
 
@@ -35,16 +47,82 @@ need_root() {
     fi
 }
 
-get_node() {
-    if [[ ! -f "$CONF_FILE" ]]; then
-        echo ""
-        return
-    fi
-    grep -E '^Node:' "$CONF_FILE" | awk '{print $2}' | tr -d '"'
+json_get() {
+    # json_get <jq-ish python path expression on the parsed dict, e.g. "d['node']">
+    python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+try:
+    print($1)
+except Exception:
+    print('')
+"
 }
 
+daemon_list_json() {
+    python3 "$DAEMON_PY" list-json 2>/dev/null
+}
+
+get_node() {
+    daemon_list_json | json_get "d['node']"
+}
+
+# ── TTS generation (shared by add and add-schedule) ───────────────────────────
+# Writes text to $ANNOUNCE_DIR/<name>.wav using Piper (preferred), falling back
+# to festival or espeak-ng. Prints the resulting file path on success.
+generate_tts_file() {
+    local text="$1" name="$2" voice="$3"
+    mkdir -p "$ANNOUNCE_DIR"
+    local outfile="$ANNOUNCE_DIR/${name}.wav"
+
+    if [[ -x "$PIPER_BIN" ]]; then
+        local model="$PIPER_VOICE_DIR/en_US-lessac-medium.onnx"
+        if [[ -n "$voice" ]]; then
+            if [[ -f "$PIPER_VOICE_DIR/${voice}.onnx" ]]; then
+                model="$PIPER_VOICE_DIR/${voice}.onnx"
+            elif [[ -f "$voice" ]]; then
+                model="$voice"
+            else
+                echo "WARNING: voice '$voice' not found, using default (lessac)" >&2
+            fi
+        fi
+        local tmp_wav
+        tmp_wav="$(mktemp --suffix=.wav)"
+        export LD_LIBRARY_PATH="/opt/piper/bin:${LD_LIBRARY_PATH:-}"
+        echo "$text" | "$PIPER_BIN" --model "$model" --output_file "$tmp_wav" 2>/dev/null
+        sox "$tmp_wav" -r 8000 -c 1 -b 16 -t wav "$outfile"
+        rm -f "$tmp_wav"
+        echo "Generated with Piper TTS ($(basename "$model" .onnx)): $outfile" >&2
+    elif command -v text2wave &>/dev/null && command -v sox &>/dev/null; then
+        local tmp_wav
+        tmp_wav="$(mktemp --suffix=.wav)"
+        echo "$text" | text2wave -o "$tmp_wav"
+        sox "$tmp_wav" -r 8000 -c 1 -b 16 -t wav "$outfile"
+        rm -f "$tmp_wav"
+        echo "Generated with festival TTS: $outfile" >&2
+    elif command -v espeak-ng &>/dev/null && command -v sox &>/dev/null; then
+        espeak-ng -s 140 -a 150 --stdout "$text" | sox -t wav - -r 8000 -c 1 -b 16 -t wav "$outfile"
+        echo "Generated with espeak-ng TTS: $outfile" >&2
+    else
+        echo "ERROR: No TTS engine found. Install Piper (see install.sh), festival + sox, or espeak-ng + sox." >&2
+        return 1
+    fi
+
+    if [[ ! -s "$outfile" ]]; then
+        echo "ERROR: TTS output file is empty. Check TTS installation." >&2
+        return 1
+    fi
+
+    echo "$outfile"
+}
+
+slugify() {
+    echo "$1" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | cut -c1-40
+}
+
+# ── General commands ───────────────────────────────────────────────────────────
+
 cmd_status() {
-    echo "=== asl3-herald status ==="
     if systemctl is-active --quiet "$SERVICE"; then
         echo "Service:   running"
     else
@@ -57,18 +135,17 @@ cmd_status() {
         echo "Herald:    enabled"
     fi
 
-    NODE=$(get_node)
-    echo "Node:      ${NODE:-<not configured>}"
-
-    if [[ -f "$CONF_FILE" ]]; then
-        MIN=$(grep -E 'MinInterval:' "$CONF_FILE" | awk '{print $2}')
-        SWP=$(grep -E 'Enable:' "$CONF_FILE" | tail -1 | awk '{print $2}')
-        echo "MinInterval: ${MIN:-?}s"
-        echo "SkywarnPlus: ${SWP:-?}"
+    local info
+    info="$(daemon_list_json)"
+    if [[ -n "$info" ]]; then
+        echo "Node:      $(echo "$info" | json_get "d['node']")"
+        echo "MinInterval: $(echo "$info" | json_get "d['tail_message']['min_interval']")s"
+        echo "SkywarnPlus: $(echo "$info" | json_get "d['tail_message']['skywarnplus']['enable']")"
+        echo "Rotation entries:  $(echo "$info" | json_get "len(d['tail_message']['rotation'])")"
+        echo "Scheduled entries: $(echo "$info" | json_get "len(d['scheduled'])")"
+    else
+        echo "Node:      <config unreadable>"
     fi
-
-    ROT_COUNT=$(grep -cE '^\s+- .*\.wav' "$CONF_FILE" 2>/dev/null || echo 0)
-    echo "Rotation entries: $ROT_COUNT"
 
     echo ""
     systemctl status "$SERVICE" --no-pager -l 2>&1 | tail -20
@@ -102,173 +179,276 @@ cmd_reload() {
     fi
 }
 
+cmd_list_json() {
+    # Read-only JSON passthrough for the web UI — no root required.
+    daemon_list_json
+}
+
+cmd_toggle() {
+    need_root "$@"
+    if [[ -f "$DISABLE_FLAG" ]]; then
+        cmd_enable
+    else
+        cmd_disable
+    fi
+}
+
+cmd_voices() {
+    local json_mode=false
+    [[ "${1:-}" == "--json" ]] && json_mode=true
+
+    if [[ ! -x "$PIPER_BIN" ]]; then
+        if $json_mode; then
+            echo '{"voices": []}'
+        else
+            echo "Piper TTS is not installed. Re-run install.sh to add it."
+            echo "Falling back to: festival (if installed) or espeak-ng (if installed)."
+        fi
+        return
+    fi
+
+    if $json_mode; then
+        local names=()
+        if compgen -G "$PIPER_VOICE_DIR/*.onnx" > /dev/null; then
+            for f in "$PIPER_VOICE_DIR"/*.onnx; do
+                names+=("\"$(basename "$f" .onnx)\"")
+            done
+        fi
+        local joined
+        joined=$(IFS=,; echo "${names[*]}")
+        echo "{\"voices\": [$joined]}"
+        return
+    fi
+
+    echo "=== Piper voices ($PIPER_VOICE_DIR) ==="
+    if compgen -G "$PIPER_VOICE_DIR/*.onnx" > /dev/null; then
+        for f in "$PIPER_VOICE_DIR"/*.onnx; do
+            echo "  $(basename "$f" .onnx)"
+        done
+    else
+        echo "  (none installed)"
+    fi
+}
+
+# ── Tail message (rotation) commands ──────────────────────────────────────────
+
 cmd_add() {
     need_root "$@"
-    TEXT=""
-    NAME=""
+    local text="" name="" voice=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --name) NAME="$2"; shift 2 ;;
-            *) TEXT="$1"; shift ;;
+            --name)  name="$2";  shift 2 ;;
+            --voice) voice="$2"; shift 2 ;;
+            *) text="$1"; shift ;;
         esac
     done
 
-    if [[ -z "$TEXT" ]]; then
-        echo "Usage: herald add \"<text>\" [--name <name>]"
+    if [[ -z "$text" ]]; then
+        echo "Usage: herald add \"<text>\" [--name <name>] [--voice <voice>]"
         exit 1
     fi
+    [[ -z "$name" ]] && name="$(slugify "$text")"
 
-    if [[ -z "$NAME" ]]; then
-        NAME=$(echo "$TEXT" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | cut -c1-40)
-    fi
+    local outfile
+    outfile="$(generate_tts_file "$text" "$name" "$voice")" || exit 1
 
-    mkdir -p "$ANNOUNCE_DIR"
-    OUTFILE="$ANNOUNCE_DIR/${NAME}.wav"
-
-    if command -v text2wave &>/dev/null && command -v sox &>/dev/null; then
-        echo "$TEXT" | text2wave -o /tmp/herald_tts_tmp.wav
-        sox /tmp/herald_tts_tmp.wav -r 8000 -c 1 -b 16 -t wav "$OUTFILE"
-        rm -f /tmp/herald_tts_tmp.wav
-        echo "Generated with festival TTS: $OUTFILE"
-    elif command -v espeak-ng &>/dev/null && command -v sox &>/dev/null; then
-        espeak-ng -s 140 -a 150 --stdout "$TEXT" | sox -t wav - -r 8000 -c 1 -b 16 -t wav "$OUTFILE"
-        echo "Generated with espeak-ng TTS: $OUTFILE"
-    else
-        echo "ERROR: No TTS engine found. Install festival + sox or espeak-ng + sox."
-        echo "  sudo apt install festival sox  (or)  sudo apt install espeak-ng sox"
-        exit 1
-    fi
-
-    if [[ ! -s "$OUTFILE" ]]; then
-        echo "ERROR: TTS output file is empty. Check TTS installation."
-        exit 1
-    fi
-
-    if grep -qF "$OUTFILE" "$CONF_FILE" 2>/dev/null; then
-        echo "Already in rotation: $OUTFILE"
-    else
-        # Insert under Rotation: block
-        sed -i "/^  Rotation:/a\\    - $OUTFILE" "$CONF_FILE"
-        echo "Added to rotation: $OUTFILE"
-        cmd_reload 2>/dev/null || true
-    fi
+    python3 "$DAEMON_PY" add-rotation "$outfile"
+    cmd_reload 2>/dev/null || true
 }
 
 cmd_add_file() {
     need_root "$@"
-    SRC=""
-    NAME=""
+    local src="" name=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --name) NAME="$2"; shift 2 ;;
-            *) SRC="$1"; shift ;;
+            --name) name="$2"; shift 2 ;;
+            *) src="$1"; shift ;;
         esac
     done
 
-    if [[ -z "$SRC" ]]; then
+    if [[ -z "$src" ]]; then
         echo "Usage: herald add-file <path> [--name <name>]"
         exit 1
     fi
-
-    if [[ ! -f "$SRC" ]]; then
-        echo "ERROR: File not found: $SRC"
+    if [[ ! -f "$src" ]]; then
+        echo "ERROR: File not found: $src"
         exit 1
     fi
-
-    if [[ -z "$NAME" ]]; then
-        NAME=$(basename "$SRC" .wav)
-    fi
+    [[ -z "$name" ]] && name="$(basename "$src" .wav)"
 
     mkdir -p "$ANNOUNCE_DIR"
-    DEST="$ANNOUNCE_DIR/${NAME}.wav"
-    cp "$SRC" "$DEST"
-    echo "Copied to: $DEST"
+    local dest="$ANNOUNCE_DIR/${name}.wav"
+    cp "$src" "$dest"
+    echo "Copied to: $dest"
 
-    if grep -qF "$DEST" "$CONF_FILE" 2>/dev/null; then
-        echo "Already in rotation: $DEST"
-    else
-        sed -i "/^  Rotation:/a\\    - $DEST" "$CONF_FILE"
-        echo "Added to rotation: $DEST"
-        cmd_reload 2>/dev/null || true
-    fi
+    python3 "$DAEMON_PY" add-rotation "$dest"
+    cmd_reload 2>/dev/null || true
 }
 
 cmd_list() {
-    echo "=== Rotation ==="
-    if grep -qE '^\s+- .*\.wav' "$CONF_FILE" 2>/dev/null; then
-        grep -E '^\s+- .*\.wav' "$CONF_FILE" | sed 's/^[ \t]*- /  /'
-    else
-        echo "  (none)"
+    local info
+    info="$(daemon_list_json)"
+    if [[ -z "$info" ]]; then
+        echo "ERROR: Could not read config."
+        exit 1
     fi
 
+    echo "=== Tail Messages (Rotation) ==="
+    echo "$info" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+rot = d['tail_message']['rotation']
+if not rot:
+    print('  (none)')
+for i, f in enumerate(rot, 1):
+    print(f'  {i}. {f}')
+"
+
     echo ""
-    echo "=== Scheduled ==="
-    if grep -qE 'Name:' "$CONF_FILE" 2>/dev/null; then
-        grep -A3 'Name:' "$CONF_FILE" 2>/dev/null | grep -E 'Name:|Time:|Days:|File:' | \
-            sed 's/^[ \t]*/  /'
-    else
-        echo "  (none)"
-    fi
+    echo "=== Scheduled Announcements ==="
+    echo "$info" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+sched = d['scheduled']
+if not sched:
+    print('  (none)')
+for s in sched:
+    days = s.get('Days', 'daily')
+    days = days if isinstance(days, str) else ','.join(days)
+    week = f\" (week {s['Week']})\" if s.get('Week') else ''
+    print(f\"  {s.get('Name','?')} — {s.get('Time','?')} {days}{week} — {s.get('File','?')}\")
+"
 }
 
 cmd_remove() {
     need_root "$@"
-    NAME="$1"
-    if [[ -z "$NAME" ]]; then
+    local name="$1"
+    if [[ -z "$name" ]]; then
         echo "Usage: herald remove <name>"
         exit 1
     fi
 
-    if sed -i "/${NAME}/d" "$CONF_FILE"; then
-        echo "Removed entries matching '$NAME' from config."
-        cmd_reload 2>/dev/null || true
-    fi
+    python3 "$DAEMON_PY" remove "$name"
+    cmd_reload 2>/dev/null || true
 
-    WAVFILE="$ANNOUNCE_DIR/${NAME}.wav"
-    if [[ -f "$WAVFILE" ]]; then
-        rm -f "$WAVFILE"
-        echo "Deleted: $WAVFILE"
+    local wavfile="$ANNOUNCE_DIR/${name}.wav"
+    if [[ -f "$wavfile" ]]; then
+        rm -f "$wavfile"
+        echo "Deleted: $wavfile"
     fi
 }
 
 cmd_play() {
     need_root "$@"
-    NAME="$1"
-    if [[ -z "$NAME" ]]; then
+    local name="$1"
+    if [[ -z "$name" ]]; then
         echo "Usage: herald play <name>"
         exit 1
     fi
 
-    WAVFILE="$ANNOUNCE_DIR/${NAME}.wav"
-    if [[ ! -f "$WAVFILE" ]]; then
-        echo "ERROR: File not found: $WAVFILE"
+    local wavfile="$ANNOUNCE_DIR/${name}.wav"
+    if [[ ! -f "$wavfile" ]]; then
+        echo "ERROR: File not found: $wavfile"
         exit 1
     fi
 
-    NODE=$(get_node)
-    if [[ -z "$NODE" ]]; then
+    local node
+    node="$(get_node)"
+    if [[ -z "$node" ]]; then
         echo "ERROR: Node not set in config."
         exit 1
     fi
 
-    PATH_NO_EXT="${WAVFILE%.wav}"
-    echo "Playing $NAME on node $NODE ..."
-    asterisk -rx "rpt localplay $NODE $PATH_NO_EXT"
+    local path_no_ext="${wavfile%.wav}"
+    echo "Playing $name on node $node ..."
+    asterisk -rx "rpt localplay $node $path_no_ext"
 }
+
+# ── Scheduled announcement commands ───────────────────────────────────────────
+
+parse_schedule_opts() {
+    # Parses --name --time --days --week from "$@", leaving the remainder
+    # (text or filepath) in REMAINDER.
+    name="" time="" days="daily" week=""
+    REMAINDER=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --name)  name="$2";  shift 2 ;;
+            --time)  time="$2";  shift 2 ;;
+            --days)  days="$2";  shift 2 ;;
+            --week)  week="$2";  shift 2 ;;
+            --voice) voice="$2"; shift 2 ;;
+            *) REMAINDER+=("$1"); shift ;;
+        esac
+    done
+}
+
+cmd_add_schedule() {
+    need_root "$@"
+    local name time days week voice
+    parse_schedule_opts "$@"
+    local text="${REMAINDER[*]}"
+
+    if [[ -z "$text" || -z "$name" || -z "$time" ]]; then
+        echo 'Usage: herald add-schedule "<text>" --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5] [--voice <voice>]'
+        exit 1
+    fi
+
+    local outfile
+    outfile="$(generate_tts_file "$text" "$name" "$voice")" || exit 1
+
+    local args=(add-scheduled --name "$name" --time "$time" --days "$days" --file "$outfile")
+    [[ -n "$week" ]] && args+=(--week "$week")
+    python3 "$DAEMON_PY" "${args[@]}"
+    cmd_reload 2>/dev/null || true
+}
+
+cmd_add_schedule_file() {
+    need_root "$@"
+    local name time days week voice
+    parse_schedule_opts "$@"
+    local src="${REMAINDER[0]:-}"
+
+    if [[ -z "$src" || -z "$name" || -z "$time" ]]; then
+        echo "Usage: herald add-schedule-file <path> --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5]"
+        exit 1
+    fi
+    if [[ ! -f "$src" ]]; then
+        echo "ERROR: File not found: $src"
+        exit 1
+    fi
+
+    mkdir -p "$ANNOUNCE_DIR"
+    local dest="$ANNOUNCE_DIR/${name}.wav"
+    cp "$src" "$dest"
+    echo "Copied to: $dest"
+
+    local args=(add-scheduled --name "$name" --time "$time" --days "$days" --file "$dest")
+    [[ -n "$week" ]] && args+=(--week "$week")
+    python3 "$DAEMON_PY" "${args[@]}"
+    cmd_reload 2>/dev/null || true
+}
+
+# ── Dispatch ───────────────────────────────────────────────────────────────────
 
 CMD="${1:-help}"
 shift || true
 
 case "$CMD" in
-    status)    cmd_status    "$@" ;;
-    enable)    cmd_enable    "$@" ;;
-    disable)   cmd_disable   "$@" ;;
-    reload)    cmd_reload    "$@" ;;
-    add)       cmd_add       "$@" ;;
-    add-file)  cmd_add_file  "$@" ;;
-    list)      cmd_list      "$@" ;;
-    remove)    cmd_remove    "$@" ;;
-    play)      cmd_play      "$@" ;;
+    status)             cmd_status             "$@" ;;
+    enable)              cmd_enable             "$@" ;;
+    disable)             cmd_disable            "$@" ;;
+    reload)              cmd_reload             "$@" ;;
+    list-json)            cmd_list_json          "$@" ;;
+    toggle)               cmd_toggle             "$@" ;;
+    voices)              cmd_voices             "$@" ;;
+    add)                  cmd_add                "$@" ;;
+    add-file)             cmd_add_file           "$@" ;;
+    list)                 cmd_list               "$@" ;;
+    remove)               cmd_remove             "$@" ;;
+    play)                 cmd_play               "$@" ;;
+    add-schedule)         cmd_add_schedule       "$@" ;;
+    add-schedule-file)    cmd_add_schedule_file  "$@" ;;
     help|--help|-h) usage ;;
     *)
         echo "Unknown command: $CMD"
