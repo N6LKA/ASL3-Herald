@@ -20,7 +20,7 @@
     return data;
   }
 
-  // ── Tabs ─────────────────────────────────────────────────────
+  // ── Tabs ─────────────────────────────────────────────────────────────
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -30,7 +30,7 @@
     });
   });
 
-  // ── Source toggles (TTS vs file upload) ───────────────────────────────────────
+  // ── Source toggles (TTS vs file upload) ─────────────────────────────
   function wireSourceToggle(name, ttsFieldsId, fileFieldsId) {
     document.querySelectorAll('input[name="' + name + '"]').forEach(radio => {
       radio.addEventListener('change', () => {
@@ -49,7 +49,7 @@
       .forEach(cb => { cb.disabled = this.checked; if (this.checked) cb.checked = false; });
   });
 
-  // ── Load voices ──────────────────────────────────────────────────────────────
+  // ── Load voices ──────────────────────────────────────────────────────
   async function loadVoices() {
     const data = await api('voices.php');
     const voices = (data && data.voices) || [];
@@ -68,7 +68,7 @@
     });
   }
 
-  // ── Load status + lists ───────────────────────────────────────────────────────
+  // ── Load status + lists ──────────────────────────────────────────────
   async function loadAll() {
     const data = await api('list.php');
     if (!data || data.success === false) return;
@@ -140,17 +140,21 @@
     });
   }
 
-  // ── Enable/disable + reload ────────────────────────────────────────────────
+  // ── Enable/disable + reload ──────────────────────────────────────────
   document.getElementById('btn-toggle-enable').addEventListener('click', async () => {
-    await api('toggle.php', { method: 'POST' });
+    const msgEl = document.getElementById('herald-daemon-msg');
+    const data = await api('toggle.php', { method: 'POST' });
+    showMsg(msgEl, data.message || 'Toggled', data.success !== false);
     loadAll();
   });
   document.getElementById('btn-reload').addEventListener('click', async () => {
-    await api('reload.php', { method: 'POST' });
+    const msgEl = document.getElementById('herald-daemon-msg');
+    const data = await api('reload.php', { method: 'POST' });
+    showMsg(msgEl, data.message || 'Config reloaded', data.success !== false);
     loadAll();
   });
 
-  // ── Settings ─────────────────────────────────────────────────────
+  // ── Settings ──────────────────────────────────────────────────────────
   document.getElementById('btn-save-settings').addEventListener('click', async () => {
     const msgEl = document.getElementById('settings-msg');
     const data = await api('settings.php', {
@@ -169,7 +173,7 @@
     if (data.success) loadAll();
   });
 
-  // ── Add tail message ─────────────────────────────────────────────────────
+  // ── Add tail message ─────────────────────────────────────────────────
   document.getElementById('btn-add-tail').addEventListener('click', async () => {
     const msgEl = document.getElementById('tail-msg');
     const name = document.getElementById('tail-name').value.trim();
@@ -194,7 +198,7 @@
     if (data.success) loadAll();
   });
 
-  // ── Add scheduled announcement ─────────────────────────────────────────────
+  // ── Add scheduled announcement ───────────────────────────────────────
   document.getElementById('btn-add-sched').addEventListener('click', async () => {
     const msgEl = document.getElementById('sched-msg');
     const name = document.getElementById('sched-name').value.trim();

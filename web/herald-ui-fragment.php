@@ -73,8 +73,9 @@
     padding: 6px; margin: 4px 6px 4px 0;
   }
   #herald-ui .add-form { border-top: 2px solid #eee; margin-top: 12px; padding-top: 12px; }
-  #herald-ui .add-form label { display: block; font-size: 0.95em; margin-top: 8px; }
+  #herald-ui label { display: block; font-size: 0.95em; margin-top: 8px; }
   #herald-ui .days-picker label { display: inline-block; margin-right: 10px; font-weight: normal; }
+  #herald-ui .days-picker input[type=checkbox] { margin-right: 10px; }
   #herald-ui .source-toggle { margin: 8px 0; }
   #herald-ui .msg { font-weight: bold; margin-top: 8px; min-height: 1.2em; }
   #herald-ui .msg.ok { color: #27ae60; }
@@ -95,7 +96,7 @@
   <button class="tab-btn" data-tab="settings">Settings</button>
 </div>
 
-<!-- ════════════════════════ TAIL MESSAGES (unkey-triggered) ════════════════════════ -->
+<!-- ══════════════════ TAIL MESSAGES (unkey-triggered) ══════════════════ -->
 <div class="tab-panel active" id="tab-tail">
   <div class="card">
     <h3>Rotation</h3>
@@ -133,7 +134,7 @@
   </div>
 </div>
 
-<!-- ════════════════════════ SCHEDULED ANNOUNCEMENTS (clock-triggered) ════════════════════════ -->
+<!-- ══════════════════ SCHEDULED ANNOUNCEMENTS (clock-triggered) ══════════════════ -->
 <div class="tab-panel" id="tab-scheduled">
   <div class="card">
     <h3>Scheduled Announcements</h3>
@@ -196,13 +197,14 @@
   </div>
 </div>
 
-<!-- ════════════════════════ SETTINGS ════════════════════════ -->
+<!-- ══════════════════ SETTINGS ══════════════════ -->
 <div class="tab-panel" id="tab-settings">
   <div class="card">
     <h3>Herald Daemon</h3>
     <p class="muted">Status: <span id="set-herald-status">—</span></p>
     <button class="btn-toggle" id="btn-toggle-enable">Enable/Disable Herald</button>
     <button id="btn-reload">Reload Config</button>
+    <div class="msg" id="herald-daemon-msg"></div>
   </div>
 
   <div class="card">

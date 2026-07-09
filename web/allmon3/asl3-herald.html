@@ -166,7 +166,12 @@ window.addEventListener('pageshow', async function() {
     const gate = document.getElementById("herald-gate");
     if (document.body.classList.contains("logged-in")) {
         try {
-            const resp = await fetch("/asl3-herald/herald-ui-fragment.php");
+            // Cache-bust: unlike Supermon (which includes this fragment
+            // server-side via PHP on every request), this page fetches it
+            // over HTTP, which both the browser and any CDN in front of
+            // this domain can cache - stale copies have shown up here
+            // before after edits to the fragment's own CSS/markup.
+            const resp = await fetch("/asl3-herald/herald-ui-fragment.php?_=" + Date.now(), { cache: "no-store" });
             gate.innerHTML = await resp.text();
             const s = document.createElement("script");
             s.src = "/asl3-herald/herald-ui.js";
