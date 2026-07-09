@@ -17,7 +17,9 @@ WEB_DIR="/var/www/html/asl3-herald"
 SUDOERS_WEB="/etc/sudoers.d/asl3-herald-web"
 MENU_INI="/etc/allmon3/menu.ini"
 ALLMON3_CUSTOM_CSS="/etc/allmon3/custom.css"
-SUPERMON_FOOTER="/var/www/html/supermon/footer.inc"
+ALLMON3_WEB_ROOT="/usr/share/allmon3"
+SUPERMON_DIR="/var/www/html/supermon"
+SUPERMON_FOOTER="$SUPERMON_DIR/footer.inc"
 PIPER_DIR="/opt/piper"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
@@ -97,12 +99,22 @@ if [[ -f "$ALLMON3_CUSTOM_CSS" ]] && grep -qF 'a[href*="asl3-herald"]' "$ALLMON3
         > "$ALLMON3_CUSTOM_CSS.tmp" && mv "$ALLMON3_CUSTOM_CSS.tmp" "$ALLMON3_CUSTOM_CSS"
 fi
 
-if [[ -f "$SUPERMON_FOOTER" ]] && grep -q "asl3-herald/herald-frame-supermon.php" "$SUPERMON_FOOTER"; then
+if [[ -f "$ALLMON3_WEB_ROOT/asl3-herald.html" ]]; then
+    info "Removing Allmon3 Announcement Settings page..."
+    rm -f "$ALLMON3_WEB_ROOT/asl3-herald.html"
+fi
+
+if [[ -f "$SUPERMON_FOOTER" ]] && grep -q "asl3-herald.php" "$SUPERMON_FOOTER"; then
     info "Removing asl3-herald link from Supermon footer..."
     cp "$SUPERMON_FOOTER" "$SUPERMON_FOOTER.bak.$(date +%Y%m%d-%H%M%S)"
-    grep -v "asl3-herald/herald-frame-supermon.php" "$SUPERMON_FOOTER" > "$SUPERMON_FOOTER.tmp" \
+    grep -v "asl3-herald.php" "$SUPERMON_FOOTER" > "$SUPERMON_FOOTER.tmp" \
         && mv "$SUPERMON_FOOTER.tmp" "$SUPERMON_FOOTER"
     chown www-data:www-data "$SUPERMON_FOOTER" 2>/dev/null || true
+fi
+
+if [[ -f "$SUPERMON_DIR/asl3-herald.php" ]]; then
+    info "Removing Supermon Announcement Settings page..."
+    rm -f "$SUPERMON_DIR/asl3-herald.php"
 fi
 
 # ── Config / announcements / state (preserved by default) ─────────────────────

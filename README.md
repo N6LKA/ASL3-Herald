@@ -46,7 +46,7 @@ The installer will:
 4. Install the `herald` management command to `/usr/local/bin/herald`
 5. Create `/etc/asterisk/scripts/asl3-herald/` with an example config (if no config exists)
 6. Install and enable the `asl3-herald` systemd service
-7. Install the web UI to `/var/www/html/asl3-herald/` — installs `apache2` + `php` first if neither Allmon3 nor Supermon is already present, then adds an Allmon3 sidebar link (`menu.ini`) and/or a Supermon footer link if either is detected
+7. Install the web UI to `/var/www/html/asl3-herald/` — installs `apache2` + `php` first if neither Allmon3 nor Supermon is already present, then installs a dedicated page directly into Allmon3's and/or Supermon's own directory (with a sidebar/footer link to it) for whichever is detected
 
 **After installation:**
 
@@ -189,15 +189,15 @@ sudo apt install espeak-ng sox
 
 ## Web UI
 
-An optional browser-based UI for managing both Tail Messages and Scheduled Announcements, installed to `/var/www/html/asl3-herald/`. The two functions are kept on clearly separate panels in the UI, matching the CLI's own Tail Message / Scheduled Announcement split — they're never mixed into one list.
+An optional browser-based UI for managing both Tail Messages and Scheduled Announcements. The shared UI and JSON API live at `/var/www/html/asl3-herald/`, but the actual entry points are installed *inside* Allmon3's and Supermon's own directories — not as a separate app linked via cookie-forwarding. The two functions are kept on clearly separate panels in the UI, matching the CLI's own Tail Message / Scheduled Announcement split — they're never mixed into one list.
 
-- **Allmon3**: a dedicated standalone page, not an inline panel — `install.sh` appends a `[Herald]` entry to the bottom of `/etc/allmon3/menu.ini` (Allmon3's own supported sidebar-customization mechanism), giving you a normal sidebar link. This deliberately avoids Allmon3's native `iframepost` per-node embedding: that feature is very new upstream, isn't in any packaged release yet, and — more importantly — embeds per *config section*, so a node with `multinodes=` grouping (several node numbers sharing one AMI connection) would show the panel redundantly under every grouped node instead of just once. A dedicated page sidesteps both issues entirely. Access is gated by calling Allmon3's own `master/auth/check` API server-side (hitting Allmon3's internal HTTP port directly, not the public hostname, to avoid any CDN/reverse-proxy interference) and forwarding your browser's session cookie — no separate login, no reimplementation of Allmon3's session logic.
-- **Optional**: `install.sh` also appends a rule to `/etc/allmon3/custom.css` that hides the sidebar link entirely until you're logged into Allmon3, using Allmon3's own stock `body.logged-in`/`body.logged-out` class toggle. This is cosmetic only — the page itself still enforces the real login check regardless of whether the link is visible.
-- **Supermon 7**: a link appears at the bottom of the page after logging in (added to `footer.inc` by `install.sh`, inside Supermon's own existing login-conditional block — so it's already hidden until logged in, natively). Access is gated by checking Supermon's own `$_SESSION['sm61loggedin']`.
+- **Allmon3**: `install.sh` installs `asl3-herald.html` directly into Allmon3's own web root (`/usr/share/allmon3/`, alongside `index.html`) and appends a `[Herald]` entry to the bottom of `/etc/allmon3/menu.ini` (Allmon3's own supported sidebar-customization mechanism) pointing at it. Because the page lives inside Allmon3's own directory, it loads Allmon3's real `functions.js`/`index.js` unmodified — same header/sidebar chrome as any other Allmon3 page, and a same-origin `master/auth/check` fetch for login detection. (A page living outside Allmon3's own directory can't reliably read Allmon3's session cookie server-side — its `Path` ends up scoped to Allmon3's own API prefix — which is why an earlier design based on a separate PHP page cookie-forwarding to Allmon3's internal port didn't reliably work.)
+- **Optional**: `install.sh` also appends a rule to `/etc/allmon3/custom.css` that hides the sidebar link entirely until you're logged into Allmon3, using Allmon3's own stock `body.logged-in`/`body.logged-out` class toggle. This is cosmetic only — the page itself still gates its content on real login status regardless of whether the link is visible.
+- **Supermon 7**: `install.sh` installs `asl3-herald.php` directly into Supermon's own directory (`/var/www/html/supermon/`) and adds a link at the bottom of the page after logging in (added to `footer.inc`, inside Supermon's own existing login-conditional block — so it's already hidden until logged in, natively). Because the page lives inside Supermon's own directory, it includes Supermon's real `session.inc`/`header.inc`/`footer.inc` unmodified — same nav and login dialog as any other Supermon page, and the same named session cookie (`supermon61`) Supermon itself uses, so login detection always matches Supermon's actual state.
 - Both pages support adding announcements via typed text (with Piper voice selection) or by uploading an existing `.wav`/`.mp3` file (auto-converted to 8kHz mono).
-- All mutations go through the same `herald` CLI used at the command line — the web UI never edits the YAML config directly. `www-data` is granted narrow, passwordless `sudo` access to run `herald` only (see `/etc/sudoers.d/asl3-herald-web`).
+- All mutations go through the same `herald` CLI used at the command line — the web UI never edits the YAML config directly. `www-data` is granted narrow, passwordless `sudo` access to run `herald` only (see `/etc/sudoers.d/asl3-herald-web`). The JSON API endpoints themselves are not independently re-verified against Allmon3/Supermon login state (the display pages are gated, but the raw API URLs aren't) — a deliberate simplicity/portability tradeoff, since properly closing that gap would require a per-user Apache config change that isn't reliable across arbitrary installs. The API's own blast radius is narrow regardless: `www-data` can only run the `herald` CLI, nothing else.
 
-If neither Allmon3 nor Supermon is detected at install time, `install.sh` installs `apache2` + `php` on its own so the UI still has somewhere to run. `menu.ini` and `custom.css` changes are always appended to the end of the file (never inserted in the middle) so they don't disturb any existing customizations, and both are idempotent — re-running `install.sh` won't duplicate them.
+If neither Allmon3 nor Supermon is detected at install time, `install.sh` installs `apache2` + `php` on its own so the shared UI still has somewhere to run. `menu.ini` and `custom.css` changes are always appended to the end of the file (never inserted in the middle) so they don't disturb any existing customizations, and both are idempotent — re-running `install.sh` won't duplicate them. The Allmon3/Supermon pages themselves are always overwritten on install/update, since they're fully managed by asl3-herald.
 
 ---
 
@@ -225,7 +225,9 @@ journalctl -u asl3-herald -f          # Follow live log output
 | `/etc/asterisk/scripts/asl3-herald/asl3-herald-disabled` | Disable flag (presence disables tail messages) |
 | `/etc/asterisk/scripts/asl3-herald/announcements/` | Announcement WAV files |
 | `/etc/systemd/system/asl3-herald.service` | systemd service unit |
-| `/var/www/html/asl3-herald/` | Web UI (PHP) — shared UI, Allmon3/Supermon entry points, JSON API |
+| `/var/www/html/asl3-herald/` | Shared UI fragment/JS and JSON API (PHP) |
+| `/usr/share/allmon3/asl3-herald.html` | Allmon3 entry point (installed alongside Allmon3's own `index.html`) |
+| `/var/www/html/supermon/asl3-herald.php` | Supermon entry point (installed alongside Supermon's own `index.php`) |
 | `install.sh` / `uninstall.sh` (repo root) | Installer / uninstaller — not installed on the node itself |
 | `/etc/sudoers.d/asl3-herald-web` | Narrow passwordless sudo rule for `www-data` to run `herald` |
 | `/opt/piper/` | Piper TTS binary and voice models |

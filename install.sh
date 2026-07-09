@@ -149,25 +149,16 @@ if [[ ! -d /etc/allmon3 && ! -d /var/www/html/supermon ]]; then
     systemctl enable --now apache2
 fi
 
-# Allmon3 does NOT bundle PHP the way Supermon does, so its presence alone
-# doesn't guarantee php-curl is installed (needed for the Allmon3 auth check
-# in herald-frame-allmon3.php). Ensure it unconditionally.
-if ! php -r 'exit(function_exists("curl_init") ? 0 : 1);' 2>/dev/null; then
-    info "Installing php-curl (required for the Allmon3 auth check)..."
-    apt-get install -y -qq php-curl
-    systemctl restart apache2 2>/dev/null || true
-fi
-
 info "Installing web UI to $WEB_DIR ..."
 mkdir -p "$WEB_DIR/api"
-for f in herald-ui.inc herald-common.php herald-frame-allmon3.php herald-frame-supermon.php; do
+for f in herald-common.php herald-ui-fragment.php herald-ui.js; do
     curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/$f" -o "$WEB_DIR/$f"
 done
 for f in list.php voices.php play.php reload.php toggle.php remove.php add_rotation.php add_scheduled.php; do
     curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/api/$f" -o "$WEB_DIR/api/$f"
 done
 chown -R www-data:www-data "$WEB_DIR"
-find "$WEB_DIR" -type f \( -name "*.php" -o -name "*.inc" \) -exec chmod 644 {} \;
+find "$WEB_DIR" -type f \( -name "*.php" -o -name "*.inc" -o -name "*.js" \) -exec chmod 644 {} \;
 
 info "Writing sudoers rule for www-data (herald command only) ..."
 cat > "$SUDOERS_WEB" << EOF
@@ -178,11 +169,28 @@ EOF
 chmod 0440 "$SUDOERS_WEB"
 chown root:root "$SUDOERS_WEB"
 
-# Allmon3 sidebar link — a dedicated page linked via menu.ini, NOT an iframe.
-# Appended to the END of the file so it never disturbs existing custom menu
-# entries; idempotent (skips if a [Herald] section already exists).
+# Allmon3 integration — a dedicated page installed directly into Allmon3's
+# own web root (not /asl3-herald/), so it can load Allmon3's real
+# functions.js/index.js unmodified for chrome + login detection. A page
+# living outside Allmon3's own directory can't reliably read Allmon3's
+# session cookie server-side (its Path is scoped to Allmon3's own API
+# prefix), so this is a functional requirement, not just cosmetic.
+ALLMON3_WEB_ROOT="/usr/share/allmon3"
 MENU_INI="/etc/allmon3/menu.ini"
 if [[ -d /etc/allmon3 ]]; then
+    if [[ -d "$ALLMON3_WEB_ROOT" ]]; then
+        info "Installing Allmon3 Announcement Settings page to $ALLMON3_WEB_ROOT ..."
+        curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/allmon3/asl3-herald.html" \
+            -o "$ALLMON3_WEB_ROOT/asl3-herald.html"
+        chown root:root "$ALLMON3_WEB_ROOT/asl3-herald.html" 2>/dev/null || true
+        chmod 644 "$ALLMON3_WEB_ROOT/asl3-herald.html"
+    else
+        warn "Allmon3 web root not found at $ALLMON3_WEB_ROOT — skipping Allmon3 page install"
+        warn "(this is expected only on a non-standard Allmon3 install)"
+    fi
+
+    # menu.ini — appended to the END of the file so it never disturbs existing
+    # custom menu entries; idempotent (skips if a [Herald] section already exists).
     if [[ -f "$MENU_INI" ]] && grep -q "^\[Herald\]" "$MENU_INI"; then
         info "Allmon3 menu.ini already has a [Herald] entry — skipping"
     else
@@ -201,14 +209,14 @@ if [[ -d /etc/allmon3 ]]; then
         cat >> "$MENU_INI" << 'EOF'
 [Herald]
 type = single
-Announcement Settings = /asl3-herald/herald-frame-allmon3.php
+Announcement Settings = /allmon3/asl3-herald.html
 EOF
         info "Added to the bottom of $MENU_INI — move/relabel it there if you'd like it elsewhere"
     fi
 
     # custom.css — hides the sidebar link until logged into Allmon3. Cosmetic
-    # only; herald-frame-allmon3.php still enforces the real login check
-    # regardless of whether the link is visible.
+    # only; asl3-herald.html itself still gates its content on real login
+    # status regardless of whether the link is visible.
     CUSTOM_CSS="/etc/allmon3/custom.css"
     CSS_RULE='body.logged-out a[href*="asl3-herald"] { display: none !important; }'
     if [[ -f "$CUSTOM_CSS" ]] && grep -qF "$CSS_RULE" "$CUSTOM_CSS"; then
@@ -231,11 +239,26 @@ EOF
     fi
 fi
 
-# Supermon integration — add a link to the herald web UI in the logged-in
-# footer, rather than inlining the whole UI (it lives in its own directory
-# and gates itself with its own session check).
+# Supermon integration — a dedicated page installed directly into Supermon's
+# own directory (not /asl3-herald/), so it can include Supermon's real
+# session.inc/header.inc/footer.inc unmodified. Supermon's session cookie is
+# named "supermon61" (set by session.inc) — a page living outside Supermon's
+# own directory that calls plain session_start() reads a different cookie
+# (PHP's default PHPSESSID) and never sees the real login state, so this is
+# a functional requirement, not just cosmetic.
+SUPERMON_DIR="/var/www/html/supermon"
+if [[ -d "$SUPERMON_DIR" ]]; then
+    info "Installing Supermon Announcement Settings page to $SUPERMON_DIR ..."
+    curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/supermon/asl3-herald.php" \
+        -o "$SUPERMON_DIR/asl3-herald.php"
+    chown www-data:www-data "$SUPERMON_DIR/asl3-herald.php" 2>/dev/null || true
+    chmod 644 "$SUPERMON_DIR/asl3-herald.php"
+fi
+
+# Supermon footer link — added inside Supermon's own login-conditional
+# block, so it's already hidden until logged in, natively.
 if [[ -f "$SUPERMON_FOOTER" ]]; then
-    if grep -q "asl3-herald/herald-frame-supermon.php" "$SUPERMON_FOOTER"; then
+    if grep -q "asl3-herald.php" "$SUPERMON_FOOTER"; then
         info "Supermon footer link already present — skipping"
     else
         info "Adding asl3-herald link to Supermon footer ..."
@@ -244,7 +267,7 @@ if [[ -f "$SUPERMON_FOOTER" ]]; then
         /if \(\$_SESSION\['"'"'sm61loggedin'"'"'\] === true\) \{/ { print; inblock = 1; next }
         inblock && /^\s*\?>\s*$/ {
             print
-            print "<a href=\"/asl3-herald/herald-frame-supermon.php\" target=\"_blank\">ASL3 Herald</a><br><br>"
+            print "<a href=\"/supermon/asl3-herald.php\" target=\"_blank\">ASL3 Herald</a><br><br>"
             inblock = 0
             next
         }

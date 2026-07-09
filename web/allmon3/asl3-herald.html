@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<!--
+#
+# asl3-herald — Announcement Settings page for Allmon3
+#
+# Installed directly into Allmon3's own web root (/usr/share/allmon3/) so it
+# loads Allmon3's real functions.js/index.js unmodified: same header/sidebar
+# chrome as any other Allmon3 page, and a same-origin "master/auth/check"
+# fetch for login detection (a page living outside Allmon3's own directory
+# can't reliably read Allmon3's session cookie server-side — its Path is
+# scoped to Allmon3's own API prefix).
+#
+-->
+<html lang="en">
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="ASL3 Herald Announcement Settings">
+    <meta name="author" content="N6LKA">
+    <title>ASL3 Herald — Announcement Settings</title>
+
+    <!-- CSS -->
+    <link href="css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+    <link href="css/main.css" rel="stylesheet">
+    <link href="css/custom.css" rel="stylesheet">
+
+    <!-- Favicons -->
+    <link rel="apple-touch-icon" href="img/favicons/favicon-180x180.png" type="image/png" sizes="180x180">
+    <link rel="icon" href="img/favicons/favicon-32x32.png" sizes="32x32" type="image/png">
+    <link rel="icon" href="img/favicons/favicon-16x16.png" sizes="16x16" type="image/png">
+    <link rel="icon" href="img/favicons/favicon-192x192.png" sizes="192x192" type="image/png">
+    <link rel="icon" href="img/favicons/favicon-512x512.png" sizes="512x512" type="image/png">
+    <link rel="icon" href="img/favicons/favicon.ico" type="image/png">
+</head>
+
+<body>
+
+<header class="navbar navbar-dark sticky-top flex-md-nowrap p-0">
+    <a class="navbar-brand col-md-3 col-lg-2 me-0 px-3 fs-6" href="index.html">
+        <img id="header-banner-img" class="header-banner-img" src="img/asl-banner-logo.png" alt="asl-logo">
+    </a>
+    <button id="collapse-navbar-button" class="navbar-toggler position-absolute d-md-none collapsed" type="button"
+            data-bs-toggle="collapse" data-bs-target="#sidebarMenu"
+            aria-controls="sidebarMenu" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+    <div id="navbar-midbar" class="navbar-midbar d-none d-sm-block"></div>
+    <div id="navbar-right" class="navbar-right"></div>
+</header>
+
+<!-- Login Modal -->
+<div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel"
+     aria-hidden="true" data-bs-backdrop="static" data-bs-target="#staticBackdrop">
+    <div class="modal-dialog">
+        <form id="loginBox">
+        <div id="login-modal-content" class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="loginModalLabel">Login</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div id="login-modal-body" class="modal-body">
+                <div class="container-flex">
+                    <div class="row align-items-center">
+                        <div class="col-4 fw-bolder text-end"><label for="user">Username</label></div>
+                        <div class="col-6"><input type="text" autocomplete="username" size="20" id="user" name="user"></div>
+                    </div>
+                    <div class="row align-items-center mt-2">
+                        <div class="col-4 fw-bolder text-end"><label for="pass">Password</label></div>
+                        <div class="col-6"><input type="password" autocomplete="current-password" size="20" id="pass" name="pass"></div>
+                    </div>
+                </div>
+            </div>
+            <div id="login-modal-footer" class="modal-footer mt-2">
+                <input type="hidden" id="action-login" name="action" value="login">
+                <button type="button" class="btn btn-secondary" onclick="doLogin()">Login</button>
+                <button type="button" class="btn btn-secondary" onclick="clearLogin()" data-bs-dismiss="modal">Cancel</button>
+            </div>
+        </div>
+        </form>
+    </div>
+</div>
+
+<!-- Logout Modal -->
+<div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel"
+     aria-hidden="true" data-bs-backdrop="static" data-bs-target="#staticBackdrop">
+    <div class="modal-dialog">
+        <form id="logoutBox">
+        <div id="logout-modal-content" class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="logoutModalLabel">Logout</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div id="logout-modal-body" class="modal-body">
+                Do you want to logout?
+                <input type="hidden" id="action-logout" name="action" value="logout">
+            </div>
+            <div id="logout-modal-footer" class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="doLogout()">Logout</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="clearLogout()">Cancel</button>
+            </div>
+        </div>
+        </form>
+    </div>
+</div>
+
+<!-- Main Page -->
+<div class="container-fluid">
+    <div class="row">
+
+        <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse">
+            <div class="position-sticky pt-3 sidebar-sticky">
+                <div class="d-grid gap-2 col-9 mx-auto my-2">
+                    <a id="nav-home-button" class="btn btn-secondary" role="button" href="#">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                             class="align-text-bottom" aria-hidden="true">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                        </svg>
+                        Home
+                    </a>
+                </div>
+                <div id="asl-node-navigation"></div>
+                <hr>
+                <div id="login-out-region"></div>
+                <hr>
+                <div class="text-center text-wrap">
+                    <img src="img/asl-sidebar-logo.png" alt="asl-logo"><br>
+                    <b>Allmon v3</b>
+                </div>
+            </div>
+        </nav>
+
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+            <h2 class="mt-3">ASL3 Herald — Announcement Settings</h2>
+            <div id="herald-gate">
+                <p>Checking Allmon3 login status&hellip;</p>
+            </div>
+        </main>
+
+        <footer class="col-md-9 ms-sm-auto col-lg-10 px-md-4 my-2 mx-3">
+            <hr>
+            <p>Copyright &copy; 2026 AllStarLink<br>
+            Allmon3 is distributed under the terms of the <a href="https://raw.githubusercontent.com/AllStarLink/Allmon3/develop/LICENSE">AGPLv3</a></p>
+        </footer>
+
+    </div>
+</div>
+
+<script src="js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+<script src="js/functions.js" crossorigin="anonymous"></script>
+<script src="js/commands.js" crossorigin="anonymous"></script>
+<script>
+window.addEventListener('pageshow', async function() {
+    let customElements = await getAPIJSON("master/ui/custom/html");
+    document.getElementById("navbar-midbar").innerHTML = customElements.HEADER_TITLE;
+    if (customElements.HEADER_LOGO !== "") {
+        document.getElementById("header-banner-img").src = `img/${customElements.HEADER_LOGO}`;
+        document.getElementById("header-banner-img").alt = customElements.HEADER_TITLE;
+    }
+    document.getElementById("nav-home-button").href = customElements.HOME_BUTTON_URL;
+    createSidebarMenu();
+    await checkLogonStatus();
+
+    const gate = document.getElementById("herald-gate");
+    if (document.body.classList.contains("logged-in")) {
+        try {
+            const resp = await fetch("/asl3-herald/herald-ui-fragment.php");
+            gate.innerHTML = await resp.text();
+            const s = document.createElement("script");
+            s.src = "/asl3-herald/herald-ui.js";
+            document.body.appendChild(s);
+        } catch (e) {
+            gate.innerHTML = "<p style='color:#dc3545;'>Could not load ASL3 Herald. Check that the web UI is installed.</p>";
+        }
+    } else {
+        gate.innerHTML = "<p>Please log in to Allmon3 (top-left) to manage announcements.</p>";
+    }
+});
+</script>
+</body>
+</html>
