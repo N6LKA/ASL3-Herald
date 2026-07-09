@@ -25,7 +25,7 @@
 
 Plus:
 - **Piper neural TTS** — generate announcements from text with natural-sounding voices (6 included), with festival/espeak-ng as a fallback
-- **Web UI** — optional browser-based management embedded in Allmon3 or Supermon 7, gated behind each app's own login
+- **Web UI** — optional browser-based management linked from Allmon3 or Supermon 7, gated behind each app's own login
 - **Instant disable/enable** — `herald toggle` / `herald enable` / `herald disable`, no config edits or restarts needed
 - **Live config reload** — `herald reload` sends SIGHUP to pick up config changes immediately
 
@@ -44,7 +44,7 @@ The installer will:
 4. Install the `herald` management command to `/usr/local/bin/herald`
 5. Create `/etc/asterisk/scripts/asl3-herald/` with an example config (if no config exists)
 6. Install and enable the `asl3-herald` systemd service
-7. Install the web UI to `/var/www/html/asl3-herald/` — installs `apache2` + `php` first if neither Allmon3 nor Supermon is already present, then wires an Allmon3 iframe entry and/or a Supermon footer link if either is detected
+7. Install the web UI to `/var/www/html/asl3-herald/` — installs `apache2` + `php` first if neither Allmon3 nor Supermon is already present, then adds an Allmon3 sidebar link (`menu.ini`) and/or a Supermon footer link if either is detected
 
 **After installation:**
 
@@ -189,12 +189,13 @@ sudo apt install espeak-ng sox
 
 An optional browser-based UI for managing both Tail Messages and Scheduled Announcements, installed to `/var/www/html/asl3-herald/`. The two functions are kept on clearly separate panels in the UI, matching the CLI's own Tail Message / Scheduled Announcement split — they're never mixed into one list.
 
-- **Allmon3**: appears as an iframe panel on the node page once `install.sh` adds the `iframepost` entry to `allmon3.ini`. Access is gated by calling Allmon3's own `master/auth/check` API server-side and forwarding your browser's session cookie — no separate login, and no reimplementation of Allmon3's session logic.
-- **Supermon 7**: a link appears at the bottom of the page after logging in (added to `footer.inc` by `install.sh`). Access is gated by checking Supermon's own `$_SESSION['sm61loggedin']`.
-- Both panels support adding announcements via typed text (with Piper voice selection) or by uploading an existing `.wav`/`.mp3` file (auto-converted to 8kHz mono).
+- **Allmon3**: a dedicated standalone page, not an inline panel — `install.sh` appends a `[Herald]` entry to the bottom of `/etc/allmon3/menu.ini` (Allmon3's own supported sidebar-customization mechanism), giving you a normal sidebar link. This deliberately avoids Allmon3's native `iframepost` per-node embedding: that feature is very new upstream, isn't in any packaged release yet, and — more importantly — embeds per *config section*, so a node with `multinodes=` grouping (several node numbers sharing one AMI connection) would show the panel redundantly under every grouped node instead of just once. A dedicated page sidesteps both issues entirely. Access is gated by calling Allmon3's own `master/auth/check` API server-side (hitting Allmon3's internal HTTP port directly, not the public hostname, to avoid any CDN/reverse-proxy interference) and forwarding your browser's session cookie — no separate login, no reimplementation of Allmon3's session logic.
+- **Optional**: `install.sh` also appends a rule to `/etc/allmon3/custom.css` that hides the sidebar link entirely until you're logged into Allmon3, using Allmon3's own stock `body.logged-in`/`body.logged-out` class toggle. This is cosmetic only — the page itself still enforces the real login check regardless of whether the link is visible.
+- **Supermon 7**: a link appears at the bottom of the page after logging in (added to `footer.inc` by `install.sh`, inside Supermon's own existing login-conditional block — so it's already hidden until logged in, natively). Access is gated by checking Supermon's own `$_SESSION['sm61loggedin']`.
+- Both pages support adding announcements via typed text (with Piper voice selection) or by uploading an existing `.wav`/`.mp3` file (auto-converted to 8kHz mono).
 - All mutations go through the same `herald` CLI used at the command line — the web UI never edits the YAML config directly. `www-data` is granted narrow, passwordless `sudo` access to run `herald` only (see `/etc/sudoers.d/asl3-herald-web`).
 
-If neither Allmon3 nor Supermon is detected at install time, `install.sh` installs `apache2` + `php` on its own so the UI still has somewhere to run.
+If neither Allmon3 nor Supermon is detected at install time, `install.sh` installs `apache2` + `php` on its own so the UI still has somewhere to run. `menu.ini` and `custom.css` changes are always appended to the end of the file (never inserted in the middle) so they don't disturb any existing customizations, and both are idempotent — re-running `install.sh` won't duplicate them.
 
 ---
 

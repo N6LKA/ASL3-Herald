@@ -120,17 +120,15 @@ chmod +x "$HERALD_BIN"
 mkdir -p "$CONFIG_DIR" "$ANNOUNCE_DIR"
 
 if [[ -f "$CONFIG_DIR/asl3-herald.conf" ]]; then
-    CONFIG_PREEXISTED=true
     warn "Config already exists — not overwriting: $CONFIG_DIR/asl3-herald.conf"
 else
-    CONFIG_PREEXISTED=false
     info "Installing example config ..."
     curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/asl3-herald.conf.example" \
         -o "$CONFIG_DIR/asl3-herald.conf"
     warn "Edit your config before starting: $CONFIG_DIR/asl3-herald.conf"
 fi
 
-# ── systemd service ────────────────────────────────────────────────────────────
+# ── systemd service ───────────────────────────────────────────────────────────
 
 info "Installing systemd service ..."
 curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/asl3-herald.service" -o "$SERVICE_FILE"
@@ -141,7 +139,6 @@ systemctl enable asl3-herald
 
 WEB_DIR="/var/www/html/asl3-herald"
 SUDOERS_WEB="/etc/sudoers.d/asl3-herald-web"
-ALLMON3_INI="/etc/allmon3/allmon3.ini"
 SUPERMON_FOOTER="/var/www/html/supermon/footer.inc"
 
 if [[ ! -d /etc/allmon3 && ! -d /var/www/html/supermon ]]; then
@@ -179,53 +176,48 @@ EOF
 chmod 0440 "$SUDOERS_WEB"
 chown root:root "$SUDOERS_WEB"
 
-# Allmon3 iframe integration — only auto-patched when a real node number is
-# already known (i.e. this is an upgrade of an existing install). Fresh
-# installs get printed instructions instead of a guess at the node number.
-if [[ -f "$ALLMON3_INI" ]]; then
-    if [[ "$CONFIG_PREEXISTED" == "true" ]]; then
-        NODE_NUMBER=$(grep -E '^Node:' "$CONFIG_DIR/asl3-herald.conf" | awk '{print $2}' | tr -d '"')
+# Allmon3 sidebar link — a dedicated page linked via menu.ini, NOT an iframe.
+# Appended to the END of the file so it never disturbs existing custom menu
+# entries; idempotent (skips if a [Herald] section already exists).
+MENU_INI="/etc/allmon3/menu.ini"
+if [[ -d /etc/allmon3 ]]; then
+    if [[ -f "$MENU_INI" ]] && grep -q "^\[Herald\]" "$MENU_INI"; then
+        info "Allmon3 menu.ini already has a [Herald] entry — skipping"
     else
-        NODE_NUMBER=""
+        info "Adding ASL3 Herald sidebar link to $MENU_INI ..."
+        if [[ -f "$MENU_INI" ]]; then
+            cp "$MENU_INI" "$MENU_INI.bak.$(date +%Y%m%d-%H%M%S)"
+        else
+            touch "$MENU_INI"
+        fi
+        cat >> "$MENU_INI" << 'EOF'
+
+[Herald]
+type = single
+Announcements Settings = /asl3-herald/herald-frame-allmon3.php
+EOF
+        info "Added to the bottom of $MENU_INI — move/relabel it there if you'd like it elsewhere"
     fi
 
-    if [[ -n "$NODE_NUMBER" ]]; then
-        ALREADY_CONFIGURED=$(awk -v node="$NODE_NUMBER" '
-            BEGIN { in_section=0; found=0 }
-            {
-                if ($0 ~ "^\\[") { in_section = ($0 ~ "^\\[" node "\\]$") }
-                else if (in_section && $0 ~ "^iframepost") { found = 1 }
-            }
-            END { print found }
-        ' "$ALLMON3_INI")
-
-        if [[ "$ALREADY_CONFIGURED" == "1" ]]; then
-            info "Allmon3 iframe already configured for node $NODE_NUMBER — skipping"
-        else
-            info "Adding asl3-herald iframe to Allmon3 node [$NODE_NUMBER] ..."
-            cp "$ALLMON3_INI" "$ALLMON3_INI.bak.$(date +%Y%m%d-%H%M%S)"
-            awk -v node="$NODE_NUMBER" '
-            {
-                if (in_section && $0 ~ "^\\[") {
-                    print "iframepost=/asl3-herald/herald-frame-allmon3.php"
-                    inserted = 1
-                    in_section = 0
-                }
-                print $0
-                if ($0 ~ "^\\[" node "\\]$") { in_section = 1 }
-            }
-            END {
-                if (in_section && !inserted) {
-                    print "iframepost=/asl3-herald/herald-frame-allmon3.php"
-                }
-            }
-            ' "$ALLMON3_INI" > "$ALLMON3_INI.tmp" && mv "$ALLMON3_INI.tmp" "$ALLMON3_INI"
-            info "Allmon3 iframe added for node $NODE_NUMBER. Restart allmon3: sudo systemctl restart allmon3"
-        fi
+    # custom.css — hides the sidebar link until logged into Allmon3. Cosmetic
+    # only; herald-frame-allmon3.php still enforces the real login check
+    # regardless of whether the link is visible.
+    CUSTOM_CSS="/etc/allmon3/custom.css"
+    CSS_RULE='body.logged-out a[href*="asl3-herald"] { display: none !important; }'
+    if [[ -f "$CUSTOM_CSS" ]] && grep -qF "$CSS_RULE" "$CUSTOM_CSS"; then
+        info "Allmon3 custom.css already hides the Herald link when logged out — skipping"
     else
-        warn "Allmon3 detected, but your node number isn't set yet in $CONFIG_DIR/asl3-herald.conf"
-        warn "After editing your config, add this line under your node's section in $ALLMON3_INI:"
-        warn "  iframepost=/asl3-herald/herald-frame-allmon3.php"
+        info "Adding login-hide rule to $CUSTOM_CSS ..."
+        if [[ -f "$CUSTOM_CSS" ]]; then
+            cp "$CUSTOM_CSS" "$CUSTOM_CSS.bak.$(date +%Y%m%d-%H%M%S)"
+        else
+            touch "$CUSTOM_CSS"
+        fi
+        cat >> "$CUSTOM_CSS" << EOF
+
+/* asl3-herald: hide sidebar link until logged into Allmon3 */
+$CSS_RULE
+EOF
     fi
 fi
 
@@ -269,9 +261,10 @@ echo ""
 echo "  Manage:  herald <status|enable|disable|reload|voices|add|add-file|list|remove|play|add-schedule|add-schedule-file>"
 echo ""
 echo "  Web UI:  installed to $WEB_DIR"
-if [[ -f "$ALLMON3_INI" ]]; then
-    echo "           Allmon3 — check the node's page for the ASL3 Herald panel"
-    echo "           (restart allmon3 if it was just added: sudo systemctl restart allmon3)"
+if [[ -d /etc/allmon3 ]]; then
+    echo "           Allmon3 — look for the \"Announcements Settings\" link in the sidebar"
+    echo "           (added to the bottom of $MENU_INI; restart allmon3 if it was just added:"
+    echo "            sudo systemctl restart allmon3)"
 fi
 if [[ -f "$SUPERMON_FOOTER" ]]; then
     echo "           Supermon — look for the \"ASL3 Herald\" link at the bottom after logging in"

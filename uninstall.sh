@@ -14,7 +14,8 @@ SERVICE_FILE="/etc/systemd/system/asl3-herald.service"
 HERALD_BIN="/usr/local/bin/herald"
 WEB_DIR="/var/www/html/asl3-herald"
 SUDOERS_WEB="/etc/sudoers.d/asl3-herald-web"
-ALLMON3_INI="/etc/allmon3/allmon3.ini"
+MENU_INI="/etc/allmon3/menu.ini"
+ALLMON3_CUSTOM_CSS="/etc/allmon3/custom.css"
 SUPERMON_FOOTER="/var/www/html/supermon/footer.inc"
 PIPER_DIR="/opt/piper"
 
@@ -43,7 +44,7 @@ echo "  asl3-herald uninstaller"
 echo "  https://github.com/N6LKA/asl3-herald"
 echo ""
 
-# ── Service ──────────────────────────────────────────────────────────────────
+# ── Service ───────────────────────────────────────────────────────────────
 
 if [[ -f "$SERVICE_FILE" ]]; then
     info "Stopping and disabling asl3-herald service..."
@@ -53,7 +54,7 @@ if [[ -f "$SERVICE_FILE" ]]; then
     systemctl daemon-reload 2>/dev/null || true
 fi
 
-# ── Daemon + CLI ───────────────────────────────────────────────────────────────
+# ── Daemon + CLI ─────────────────────────────────────────────────────────────
 
 info "Removing daemon and herald command..."
 rm -rf "$INSTALL_DIR"
@@ -72,15 +73,27 @@ if [[ -f "$SUDOERS_WEB" ]]; then
 fi
 
 # ── Allmon3 / Supermon integration ────────────────────────────────────────────
-# Surgical removal: only strips the single line asl3-herald's installer added,
-# leaving the rest of each file (and any other customizations) untouched.
+# Surgical removal: only strips what asl3-herald's installer added, leaving
+# the rest of each file (and any other customizations) untouched.
 
-if [[ -f "$ALLMON3_INI" ]] && grep -q "asl3-herald/herald-frame-allmon3.php" "$ALLMON3_INI"; then
-    info "Removing asl3-herald iframe line from allmon3.ini..."
-    cp "$ALLMON3_INI" "$ALLMON3_INI.bak.$(date +%Y%m%d-%H%M%S)"
-    grep -v "iframepost=/asl3-herald/herald-frame-allmon3.php" "$ALLMON3_INI" > "$ALLMON3_INI.tmp" \
-        && mv "$ALLMON3_INI.tmp" "$ALLMON3_INI"
+if [[ -f "$MENU_INI" ]] && grep -q "^\[Herald\]" "$MENU_INI"; then
+    info "Removing [Herald] section from menu.ini..."
+    cp "$MENU_INI" "$MENU_INI.bak.$(date +%Y%m%d-%H%M%S)"
+    awk '
+    BEGIN { skip = 0 }
+    /^\[Herald\]$/ { skip = 1; next }
+    skip && /^\[/ { skip = 0 }
+    !skip { print }
+    ' "$MENU_INI" > "$MENU_INI.tmp" && mv "$MENU_INI.tmp" "$MENU_INI"
     warn "Restart allmon3 to apply: sudo systemctl restart allmon3"
+fi
+
+if [[ -f "$ALLMON3_CUSTOM_CSS" ]] && grep -qF 'a[href*="asl3-herald"]' "$ALLMON3_CUSTOM_CSS"; then
+    info "Removing asl3-herald login-hide rule from Allmon3 custom.css..."
+    cp "$ALLMON3_CUSTOM_CSS" "$ALLMON3_CUSTOM_CSS.bak.$(date +%Y%m%d-%H%M%S)"
+    grep -vF '/* asl3-herald: hide sidebar link until logged into Allmon3 */' "$ALLMON3_CUSTOM_CSS" | \
+        grep -vF 'body.logged-out a[href*="asl3-herald"] { display: none !important; }' \
+        > "$ALLMON3_CUSTOM_CSS.tmp" && mv "$ALLMON3_CUSTOM_CSS.tmp" "$ALLMON3_CUSTOM_CSS"
 fi
 
 if [[ -f "$SUPERMON_FOOTER" ]] && grep -q "asl3-herald/herald-frame-supermon.php" "$SUPERMON_FOOTER"; then
