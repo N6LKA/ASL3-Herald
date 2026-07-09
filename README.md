@@ -54,6 +54,22 @@ The installer will:
 
 ---
 
+## Uninstalling
+
+```bash
+curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/uninstall.sh | sudo bash
+```
+
+By default this removes the daemon, `herald` CLI, systemd service, web UI, sudoers rule, and the Allmon3/Supermon integration lines it added — while **preserving** your config, announcements, state, and Piper TTS install so a future reinstall picks up where you left off. To also remove those:
+
+```bash
+curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/uninstall.sh | sudo bash -s -- --purge-all
+```
+
+(`--purge-config` and `--purge-piper` are available individually too.)
+
+---
+
 ## Configuration
 
 Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
@@ -207,6 +223,7 @@ journalctl -u asl3-herald -f          # Follow live log output
 | `/etc/asterisk/scripts/asl3-herald/announcements/` | Announcement WAV files |
 | `/etc/systemd/system/asl3-herald.service` | systemd service unit |
 | `/var/www/html/asl3-herald/` | Web UI (PHP) — shared UI, Allmon3/Supermon entry points, JSON API |
+| `install.sh` / `uninstall.sh` (repo root) | Installer / uninstaller — not installed on the node itself |
 | `/etc/sudoers.d/asl3-herald-web` | Narrow passwordless sudo rule for `www-data` to run `herald` |
 | `/opt/piper/` | Piper TTS binary and voice models |
 
