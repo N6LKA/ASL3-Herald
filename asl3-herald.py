@@ -40,7 +40,7 @@ except FileNotFoundError:
 
 DEBUG = False
 
-# ── Logging ────────────────────────────────────────────────────────────────────
+# ── Logging ───────────────────────────────────────────────────────────────────
 
 def log(level, msg):
     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} [{level}] {msg}", flush=True)
@@ -119,12 +119,19 @@ def get_kerchunk_count(node):
                 pass
     return None
 
-def play_file(node, filepath):
+def play_file(node, filepath, play_mode="local"):
     path_no_ext = str(Path(filepath).with_suffix(""))
-    log_info(f"Playing: {Path(filepath).name} on node {node}")
-    asterisk_cmd(f"rpt localplay {node} {path_no_ext}")
+    cmd = "rpt playback" if play_mode == "global" else "rpt localplay"
+    log_info(f"Playing ({play_mode}): {Path(filepath).name} on node {node}")
+    asterisk_cmd(f"{cmd} {node} {path_no_ext}")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def rotation_entry_file(entry):
+    # Rotation entries were originally plain filepath strings; entries added
+    # or edited since also carry Text/Voice metadata (for re-editing TTS
+    # announcements) as a dict. Both forms can coexist in one config.
+    return entry if isinstance(entry, str) else entry.get("File", "")
 
 def wx_is_active(wx_file, threshold):
     if not wx_file or not os.path.exists(wx_file):
@@ -198,6 +205,15 @@ def extract_config(config):
 
 # ── CLI subcommands (used by the `herald` bash CLI and the web UI) ────────────
 
+def normalize_rotation(rotation):
+    out = []
+    for e in rotation:
+        if isinstance(e, str):
+            out.append({"File": e, "Text": None, "Voice": None})
+        else:
+            out.append({"File": e.get("File", ""), "Text": e.get("Text"), "Voice": e.get("Voice")})
+    return out
+
 def cmd_list_json(config):
     (node, poll, debug, tm_on, min_int, rotation,
      swp_on, swp_file, swp_thr, scheduled) = extract_config(config)
@@ -209,7 +225,7 @@ def cmd_list_json(config):
         "tail_message": {
             "enable": tm_on,
             "min_interval": min_int,
-            "rotation": rotation,
+            "rotation": normalize_rotation(rotation),
             "skywarnplus": {
                 "enable": swp_on,
                 "wx_tail_file": swp_file,
@@ -220,15 +236,46 @@ def cmd_list_json(config):
     }
     print(json.dumps(out, indent=2))
 
-def cmd_add_rotation(config, filepath):
+def cmd_add_rotation(config, args):
+    filepath = args.filepath
     tm = config.setdefault("TailMessage", {})
     rotation = tm.setdefault("Rotation", [])
-    if filepath in rotation:
+    if any(rotation_entry_file(e) == filepath for e in rotation):
         print(json.dumps({"success": False, "message": f"Already in rotation: {filepath}"}))
         return
-    rotation.append(filepath)
+    rotation.append({"File": filepath, "Text": args.text, "Voice": args.voice})
     save_config(config)
     print(json.dumps({"success": True, "message": f"Added to rotation: {filepath}"}))
+
+def cmd_edit_rotation(config, args):
+    tm = config.setdefault("TailMessage", {})
+    rotation = tm.setdefault("Rotation", [])
+
+    target = os.path.basename(args.old_name)
+    target_noext = os.path.splitext(target)[0]
+    idx = None
+    for i, e in enumerate(rotation):
+        base = os.path.basename(rotation_entry_file(e))
+        base_noext = os.path.splitext(base)[0]
+        if base == target or base_noext == target_noext:
+            idx = i
+            break
+
+    if idx is None:
+        print(json.dumps({"success": False, "message": f"No rotation entry found for: {args.old_name}"}))
+        return
+
+    old = rotation[idx]
+    old_text = old.get("Text") if isinstance(old, dict) else None
+    old_voice = old.get("Voice") if isinstance(old, dict) else None
+
+    rotation[idx] = {
+        "File": args.file if args.file is not None else rotation_entry_file(old),
+        "Text": args.text if args.text is not None else old_text,
+        "Voice": args.voice if args.voice is not None else old_voice,
+    }
+    save_config(config)
+    print(json.dumps({"success": True, "message": f"Updated rotation entry: {os.path.basename(rotation[idx]['File'])}"}))
 
 def cmd_add_scheduled(config, args):
     scheduled = config.setdefault("Scheduled", [])
@@ -241,13 +288,60 @@ def cmd_add_scheduled(config, args):
         "Time": args.time,
         "Days": "daily" if args.days == "daily" else [d.strip().lower() for d in args.days.split(",")],
         "File": args.file,
+        "PlayMode": args.play_mode or "local",
     }
     if args.week:
         entry["Week"] = int(args.week)
+    if args.text:
+        entry["Text"] = args.text
+    if args.voice:
+        entry["Voice"] = args.voice
 
     scheduled.append(entry)
     save_config(config)
     print(json.dumps({"success": True, "message": f"Added scheduled announcement: {args.name}"}))
+
+def cmd_edit_scheduled(config, args):
+    scheduled = config.setdefault("Scheduled", [])
+    idx = None
+    for i, s in enumerate(scheduled):
+        if s.get("Name") == args.old_name:
+            idx = i
+            break
+
+    if idx is None:
+        print(json.dumps({"success": False, "message": f"No scheduled entry found for: {args.old_name}"}))
+        return
+
+    old = scheduled[idx]
+    new_name = args.new_name or old.get("Name")
+    if new_name != old.get("Name") and any(s.get("Name") == new_name for s in scheduled):
+        print(json.dumps({"success": False, "message": f"Scheduled entry already exists: {new_name}"}))
+        return
+
+    entry = dict(old)
+    entry["Name"] = new_name
+    if args.time is not None:
+        entry["Time"] = args.time
+    if args.days is not None:
+        entry["Days"] = "daily" if args.days == "daily" else [d.strip().lower() for d in args.days.split(",")]
+    if args.week is not None:
+        if args.week:
+            entry["Week"] = int(args.week)
+        else:
+            entry.pop("Week", None)
+    if args.play_mode is not None:
+        entry["PlayMode"] = args.play_mode
+    if args.file is not None:
+        entry["File"] = args.file
+    if args.text is not None:
+        entry["Text"] = args.text
+    if args.voice is not None:
+        entry["Voice"] = args.voice
+
+    scheduled[idx] = entry
+    save_config(config)
+    print(json.dumps({"success": True, "message": f"Updated scheduled announcement: {new_name}"}))
 
 def cmd_remove(config, identifier):
     tm = config.get("TailMessage", {}) or {}
@@ -264,14 +358,15 @@ def cmd_remove(config, identifier):
 
     target = os.path.basename(identifier)
     target_noext = os.path.splitext(target)[0]
-    for i, filepath in enumerate(rotation):
+    for i, entry in enumerate(rotation):
+        filepath = rotation_entry_file(entry)
         base = os.path.basename(filepath)
         base_noext = os.path.splitext(base)[0]
         if base == target or base_noext == target_noext:
-            removed = rotation.pop(i)
+            rotation.pop(i)
             save_config(config)
             print(json.dumps({"success": True, "type": "rotation",
-                               "message": f"Removed from rotation: {removed}"}))
+                               "message": f"Removed from rotation: {filepath}"}))
             return
 
     print(json.dumps({"success": False, "message": f"No match found for: {identifier}"}))
@@ -307,6 +402,15 @@ def build_arg_parser():
 
     p_add_rot = sub.add_parser("add-rotation", help="Add a WAV file to the tail message rotation")
     p_add_rot.add_argument("filepath")
+    p_add_rot.add_argument("--text", default=None)
+    p_add_rot.add_argument("--voice", default=None)
+
+    p_edit_rot = sub.add_parser("edit-rotation", help="Edit an existing tail message rotation entry")
+    p_edit_rot.add_argument("old_name")
+    p_edit_rot.add_argument("--new-name", dest="new_name", default=None)
+    p_edit_rot.add_argument("--text", default=None)
+    p_edit_rot.add_argument("--voice", default=None)
+    p_edit_rot.add_argument("--file", default=None)
 
     p_add_sched = sub.add_parser("add-scheduled", help="Add a scheduled announcement")
     p_add_sched.add_argument("--name", required=True)
@@ -314,6 +418,20 @@ def build_arg_parser():
     p_add_sched.add_argument("--days", default="daily", help='"daily" or comma-separated day names')
     p_add_sched.add_argument("--week", default=None, help="1-5 (5 = last week of month)")
     p_add_sched.add_argument("--file", required=True)
+    p_add_sched.add_argument("--play-mode", dest="play_mode", choices=["local", "global"], default="local")
+    p_add_sched.add_argument("--text", default=None)
+    p_add_sched.add_argument("--voice", default=None)
+
+    p_edit_sched = sub.add_parser("edit-scheduled", help="Edit an existing scheduled announcement")
+    p_edit_sched.add_argument("old_name")
+    p_edit_sched.add_argument("--new-name", dest="new_name", default=None)
+    p_edit_sched.add_argument("--time", default=None)
+    p_edit_sched.add_argument("--days", default=None)
+    p_edit_sched.add_argument("--week", default=None, help="1-5 (5 = last week of month), empty string clears it")
+    p_edit_sched.add_argument("--play-mode", dest="play_mode", choices=["local", "global"], default=None)
+    p_edit_sched.add_argument("--text", default=None)
+    p_edit_sched.add_argument("--voice", default=None)
+    p_edit_sched.add_argument("--file", default=None)
 
     p_remove = sub.add_parser("remove", help="Remove a rotation file or scheduled announcement by name")
     p_remove.add_argument("identifier")
@@ -342,9 +460,13 @@ def cli_main():
     if args.command == "list-json":
         cmd_list_json(config)
     elif args.command == "add-rotation":
-        cmd_add_rotation(config, args.filepath)
+        cmd_add_rotation(config, args)
+    elif args.command == "edit-rotation":
+        cmd_edit_rotation(config, args)
     elif args.command == "add-scheduled":
         cmd_add_scheduled(config, args)
+    elif args.command == "edit-scheduled":
+        cmd_edit_scheduled(config, args)
     elif args.command == "remove":
         cmd_remove(config, args.identifier)
     elif args.command == "update-settings":
@@ -419,7 +541,7 @@ def main():
             for sched in scheduled:
                 if should_play_scheduled(sched, state):
                     log_info(f"Scheduled announcement: {sched.get('Name', sched.get('File', ''))}")
-                    play_file(node, sched["File"])
+                    play_file(node, sched["File"], sched.get("PlayMode", "local"))
                     key = sched.get("Name", "")
                     dt  = datetime.now()
                     state["scheduled_played"][key] = f"{dt.strftime('%Y-%m-%d')} {dt.strftime('%H:%M')}"
@@ -474,7 +596,7 @@ def main():
                                 # Same alert as before - alternate with the rotation
                                 # instead of playing the WX tail on every unkey.
                                 idx      = state["rotation_index"] % len(rotation)
-                                filepath = rotation[idx]
+                                filepath = rotation_entry_file(rotation[idx])
                                 if os.path.exists(filepath):
                                     log_info(f"Playing rotation [{idx + 1}/{len(rotation)}] (alternating with active WX alert): {Path(filepath).name}")
                                     play_file(node, filepath)
@@ -497,7 +619,7 @@ def main():
 
                         elif rotation:
                             idx      = state["rotation_index"] % len(rotation)
-                            filepath = rotation[idx]
+                            filepath = rotation_entry_file(rotation[idx])
                             if os.path.exists(filepath):
                                 log_info(f"Playing rotation [{idx + 1}/{len(rotation)}]: {Path(filepath).name}")
                                 play_file(node, filepath)

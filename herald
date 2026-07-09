@@ -28,15 +28,22 @@ Tail Messages (unkey-triggered rotation):
   add "<text>" [--name <name>] [--voice <voice>]
                                            Generate TTS announcement and add to rotation
   add-file <path> [--name <name>]         Copy an existing WAV file into rotation
+  edit-rotation <name> [--new-name <n>] [--text "<text>"] [--voice <v>] [--file <path>]
+                                           Edit an existing rotation entry
   list                                    List rotation + scheduled announcements
   remove <name>                           Remove a rotation file or scheduled announcement
   play <name>                             Play an announcement immediately on the node
 
 Scheduled Announcements (clock-triggered):
-  add-schedule "<text>" --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5] [--voice <voice>]
+  add-schedule "<text>" --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5]
+               [--voice <voice>] [--play-mode local|global]
                                            Generate TTS announcement and schedule it
   add-schedule-file <path> --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5]
+                     [--play-mode local|global]
                                            Schedule an existing WAV file
+  edit-schedule <name> [--new-name <n>] [--time HH:MM] [--days ...] [--week 1-5]
+                [--play-mode local|global] [--text "<text>"] [--voice <v>] [--file <path>]
+                                           Edit an existing scheduled announcement
 
 Settings:
   update-settings [--node <n>] [--poll-interval <n>] [--debug true|false]
@@ -73,7 +80,7 @@ get_node() {
     daemon_list_json | json_get "d['node']"
 }
 
-# ── TTS generation (shared by add and add-schedule) ───────────────────────────────────────
+# ── TTS generation (shared by add and add-schedule) ───────────────────────────
 # Writes text to $ANNOUNCE_DIR/<name>.wav using Piper (preferred), falling back
 # to festival or espeak-ng. Prints the resulting file path on success.
 generate_tts_file() {
@@ -131,7 +138,7 @@ slugify() {
     echo "$1" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | cut -c1-40
 }
 
-# ── General commands ────────────────────────────────────────────────────
+# ── General commands ───────────────────────────────────────────────────────────
 
 cmd_status() {
     if systemctl is-active --quiet "$SERVICE"; then
@@ -241,7 +248,7 @@ cmd_voices() {
     fi
 }
 
-# ── Tail message (rotation) commands ────────────────────────────────────
+# ── Tail message (rotation) commands ──────────────────────────────────────────
 
 cmd_add() {
     need_root "$@"
@@ -263,7 +270,9 @@ cmd_add() {
     local outfile
     outfile="$(generate_tts_file "$text" "$name" "$voice")" || exit 1
 
-    python3 "$DAEMON_PY" add-rotation "$outfile"
+    local args=(add-rotation "$outfile" --text "$text")
+    [[ -n "$voice" ]] && args+=(--voice "$voice")
+    python3 "$DAEMON_PY" "${args[@]}"
     cmd_reload 2>/dev/null || true
 }
 
@@ -293,6 +302,47 @@ cmd_add_file() {
     echo "Copied to: $dest"
 
     python3 "$DAEMON_PY" add-rotation "$dest"
+    cmd_reload 2>/dev/null || true
+}
+
+cmd_edit_rotation() {
+    need_root "$@"
+    local old_name="" new_name="" text="" voice="" file="" has_text=false has_file=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --new-name) new_name="$2"; shift 2 ;;
+            --text)     text="$2"; has_text=true; shift 2 ;;
+            --voice)    voice="$2"; shift 2 ;;
+            --file)     file="$2"; has_file=true; shift 2 ;;
+            *) old_name="$1"; shift ;;
+        esac
+    done
+
+    if [[ -z "$old_name" ]]; then
+        echo 'Usage: herald edit-rotation <name> [--new-name <n>] [--text "<text>"] [--voice <v>] [--file <path>]'
+        exit 1
+    fi
+    [[ -z "$new_name" ]] && new_name="$old_name"
+
+    local old_wav="$ANNOUNCE_DIR/${old_name}.wav"
+    local new_wav="$ANNOUNCE_DIR/${new_name}.wav"
+
+    if $has_text; then
+        generate_tts_file "$text" "$new_name" "$voice" >/dev/null || exit 1
+        [[ "$old_name" != "$new_name" && -f "$old_wav" ]] && rm -f "$old_wav"
+    elif $has_file; then
+        mkdir -p "$ANNOUNCE_DIR"
+        cp "$file" "$new_wav"
+        [[ "$old_name" != "$new_name" && -f "$old_wav" ]] && rm -f "$old_wav"
+    elif [[ "$old_name" != "$new_name" && -f "$old_wav" ]]; then
+        # Rename only - no new text/audio, keep the existing file content.
+        mv "$old_wav" "$new_wav"
+    fi
+
+    local args=(edit-rotation "$old_name" --new-name "$new_name" --file "$new_wav")
+    $has_text && args+=(--text "$text")
+    [[ -n "$voice" ]] && args+=(--voice "$voice")
+    python3 "$DAEMON_PY" "${args[@]}"
     cmd_reload 2>/dev/null || true
 }
 
@@ -376,25 +426,35 @@ cmd_play() {
         exit 1
     fi
 
+    # Rotation entries always play locally; a scheduled announcement may be
+    # configured for global (network-wide) playback instead.
+    local play_mode
+    play_mode="$(daemon_list_json | json_get "next((s.get('PlayMode','local') for s in d['scheduled'] if s.get('Name')=='$name'), 'local')")"
+    [[ -z "$play_mode" ]] && play_mode="local"
+
+    local rpt_cmd="rpt localplay"
+    [[ "$play_mode" == "global" ]] && rpt_cmd="rpt playback"
+
     local path_no_ext="${wavfile%.wav}"
-    echo "Playing $name on node $node ..."
-    asterisk -rx "rpt localplay $node $path_no_ext"
+    echo "Playing $name on node $node (mode: $play_mode) ..."
+    asterisk -rx "$rpt_cmd $node $path_no_ext"
 }
 
-# ── Scheduled announcement commands ────────────────────────────────────
+# ── Scheduled announcement commands ───────────────────────────────────────────
 
 parse_schedule_opts() {
-    # Parses --name --time --days --week from "$@", leaving the remainder
-    # (text or filepath) in REMAINDER.
-    name="" time="" days="daily" week=""
+    # Parses --name --time --days --week --play-mode from "$@", leaving the
+    # remainder (text or filepath) in REMAINDER.
+    name="" time="" days="daily" week="" play_mode=""
     REMAINDER=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --name)  name="$2";  shift 2 ;;
-            --time)  time="$2";  shift 2 ;;
-            --days)  days="$2";  shift 2 ;;
-            --week)  week="$2";  shift 2 ;;
-            --voice) voice="$2"; shift 2 ;;
+            --name)      name="$2";  shift 2 ;;
+            --time)      time="$2";  shift 2 ;;
+            --days)      days="$2";  shift 2 ;;
+            --week)      week="$2";  shift 2 ;;
+            --voice)     voice="$2"; shift 2 ;;
+            --play-mode) play_mode="$2"; shift 2 ;;
             *) REMAINDER+=("$1"); shift ;;
         esac
     done
@@ -402,32 +462,34 @@ parse_schedule_opts() {
 
 cmd_add_schedule() {
     need_root "$@"
-    local name time days week voice
+    local name time days week voice play_mode
     parse_schedule_opts "$@"
     local text="${REMAINDER[*]}"
 
     if [[ -z "$text" || -z "$name" || -z "$time" ]]; then
-        echo 'Usage: herald add-schedule "<text>" --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5] [--voice <voice>]'
+        echo 'Usage: herald add-schedule "<text>" --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5] [--voice <voice>] [--play-mode local|global]'
         exit 1
     fi
 
     local outfile
     outfile="$(generate_tts_file "$text" "$name" "$voice")" || exit 1
 
-    local args=(add-scheduled --name "$name" --time "$time" --days "$days" --file "$outfile")
+    local args=(add-scheduled --name "$name" --time "$time" --days "$days" --file "$outfile" --text "$text")
     [[ -n "$week" ]] && args+=(--week "$week")
+    [[ -n "$voice" ]] && args+=(--voice "$voice")
+    [[ -n "$play_mode" ]] && args+=(--play-mode "$play_mode")
     python3 "$DAEMON_PY" "${args[@]}"
     cmd_reload 2>/dev/null || true
 }
 
 cmd_add_schedule_file() {
     need_root "$@"
-    local name time days week voice
+    local name time days week voice play_mode
     parse_schedule_opts "$@"
     local src="${REMAINDER[0]:-}"
 
     if [[ -z "$src" || -z "$name" || -z "$time" ]]; then
-        echo "Usage: herald add-schedule-file <path> --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5]"
+        echo "Usage: herald add-schedule-file <path> --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5] [--play-mode local|global]"
         exit 1
     fi
     if [[ ! -f "$src" ]]; then
@@ -442,11 +504,68 @@ cmd_add_schedule_file() {
 
     local args=(add-scheduled --name "$name" --time "$time" --days "$days" --file "$dest")
     [[ -n "$week" ]] && args+=(--week "$week")
+    [[ -n "$play_mode" ]] && args+=(--play-mode "$play_mode")
     python3 "$DAEMON_PY" "${args[@]}"
     cmd_reload 2>/dev/null || true
 }
 
-# ── Dispatch ──────────────────────────────────────────────────────────────
+cmd_edit_schedule() {
+    need_root "$@"
+    local old_name="" new_name="" time="" days="" week="" play_mode="" text="" voice="" file=""
+    local has_text=false has_file=false has_time=false has_days=false has_week=false has_playmode=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --new-name)  new_name="$2"; shift 2 ;;
+            --time)      time="$2"; has_time=true; shift 2 ;;
+            --days)      days="$2"; has_days=true; shift 2 ;;
+            --week)      week="$2"; has_week=true; shift 2 ;;
+            --play-mode) play_mode="$2"; has_playmode=true; shift 2 ;;
+            --text)      text="$2"; has_text=true; shift 2 ;;
+            --voice)     voice="$2"; shift 2 ;;
+            --file)      file="$2"; has_file=true; shift 2 ;;
+            *) old_name="$1"; shift ;;
+        esac
+    done
+
+    if [[ -z "$old_name" ]]; then
+        echo 'Usage: herald edit-schedule <name> [--new-name <n>] [--time HH:MM] [--days ...] [--week 1-5] [--play-mode local|global] [--text "<text>"] [--voice <v>] [--file <path>]'
+        exit 1
+    fi
+    [[ -z "$new_name" ]] && new_name="$old_name"
+
+    local old_wav="$ANNOUNCE_DIR/${old_name}.wav"
+    local new_wav="$ANNOUNCE_DIR/${new_name}.wav"
+    local final_file=""
+
+    if $has_text; then
+        generate_tts_file "$text" "$new_name" "$voice" >/dev/null || exit 1
+        final_file="$new_wav"
+        [[ "$old_name" != "$new_name" && -f "$old_wav" ]] && rm -f "$old_wav"
+    elif $has_file; then
+        mkdir -p "$ANNOUNCE_DIR"
+        cp "$file" "$new_wav"
+        final_file="$new_wav"
+        [[ "$old_name" != "$new_name" && -f "$old_wav" ]] && rm -f "$old_wav"
+    elif [[ "$old_name" != "$new_name" && -f "$old_wav" ]]; then
+        # Rename only - no new text/audio, keep the existing file content.
+        mv "$old_wav" "$new_wav"
+        final_file="$new_wav"
+    fi
+
+    local args=(edit-scheduled "$old_name" --new-name "$new_name")
+    $has_time     && args+=(--time "$time")
+    $has_days     && args+=(--days "$days")
+    $has_week     && args+=(--week "$week")
+    $has_playmode && args+=(--play-mode "$play_mode")
+    $has_text     && args+=(--text "$text")
+    [[ -n "$voice" ]] && args+=(--voice "$voice")
+    [[ -n "$final_file" ]] && args+=(--file "$final_file")
+
+    python3 "$DAEMON_PY" "${args[@]}"
+    cmd_reload 2>/dev/null || true
+}
+
+# ── Dispatch ───────────────────────────────────────────────────────────────────
 
 CMD="${1:-help}"
 shift || true
@@ -461,11 +580,13 @@ case "$CMD" in
     voices)              cmd_voices             "$@" ;;
     add)                  cmd_add                "$@" ;;
     add-file)             cmd_add_file           "$@" ;;
+    edit-rotation)        cmd_edit_rotation      "$@" ;;
     list)                 cmd_list               "$@" ;;
     remove)               cmd_remove             "$@" ;;
     play)                 cmd_play               "$@" ;;
     add-schedule)         cmd_add_schedule       "$@" ;;
     add-schedule-file)    cmd_add_schedule_file  "$@" ;;
+    edit-schedule)        cmd_edit_schedule      "$@" ;;
     update-settings)      cmd_update_settings    "$@" ;;
     help|--help|-h) usage ;;
     *)

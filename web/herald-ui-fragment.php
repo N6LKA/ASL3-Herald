@@ -16,11 +16,15 @@
   #herald-ui {
     font-family: Arial, sans-serif;
     font-size: 16px;
-    max-width: 900px;
+    max-width: 1400px;
     color: #222;
   }
   #herald-ui h3 { margin-bottom: 8px; }
   #herald-ui .card {
+    display: block; /* some host pages (Allmon3) load Bootstrap, whose .card
+                        sets display:flex - that stretches our buttons to
+                        full width via default flex align-items:stretch even
+                        though the buttons themselves are width:auto */
     background: #fff;
     border: 1px solid #ccc;
     border-radius: 8px;
@@ -51,13 +55,15 @@
   #herald-ui .tab-btn.active { background: #fff; font-weight: bold; }
   #herald-ui .tab-panel { display: none; }
   #herald-ui .tab-panel.active { display: block; }
-  #herald-ui table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  #herald-ui table { width: 100%; border-collapse: collapse; margin-bottom: 12px; table-layout: auto; }
   #herald-ui th, #herald-ui td {
     text-align: left;
     padding: 6px 8px;
     border-bottom: 1px solid #ddd;
     font-size: 1em;
+    white-space: nowrap;
   }
+  #herald-ui .col-wrap { white-space: normal; }
   #herald-ui button {
     cursor: pointer;
     padding: 4px 10px;
@@ -107,7 +113,7 @@
     </table>
 
     <div class="add-form">
-      <h3>Add a Tail Message</h3>
+      <h3 id="tail-form-heading">Add a Tail Message</h3>
       <div class="source-toggle">
         <label><input type="radio" name="tail-source" value="tts" checked> Text-to-Speech</label>
         <label><input type="radio" name="tail-source" value="file"> Upload File</label>
@@ -122,6 +128,7 @@
       <div id="tail-file-fields" style="display:none;">
         <label>Audio file (.wav or .mp3)</label>
         <input type="file" id="tail-file" accept=".wav,.mp3">
+        <span class="muted" id="tail-file-keep-note" style="display:none;">Leave blank to keep the existing audio.</span>
       </div>
 
       <label>Name (letters, numbers, hyphens only)</label>
@@ -129,6 +136,7 @@
 
       <br><br>
       <button class="btn-primary" id="btn-add-tail">Add to Rotation</button>
+      <button id="tail-edit-cancel" style="display:none;">Cancel Edit</button>
       <div class="msg" id="tail-msg"></div>
     </div>
   </div>
@@ -140,12 +148,12 @@
     <h3>Scheduled Announcements</h3>
     <p class="muted">Plays at a specific time of day, independent of repeater activity or MinInterval.</p>
     <table id="sched-table">
-      <thead><tr><th>Name</th><th>Time</th><th>Days</th><th>Week</th><th>File</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Time</th><th>Days</th><th>Week</th><th>Play Mode</th><th>File</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
 
     <div class="add-form">
-      <h3>Add a Scheduled Announcement</h3>
+      <h3 id="sched-form-heading">Add a Scheduled Announcement</h3>
       <div class="source-toggle">
         <label><input type="radio" name="sched-source" value="tts" checked> Text-to-Speech</label>
         <label><input type="radio" name="sched-source" value="file"> Upload File</label>
@@ -160,6 +168,7 @@
       <div id="sched-file-fields" style="display:none;">
         <label>Audio file (.wav or .mp3)</label>
         <input type="file" id="sched-file" accept=".wav,.mp3">
+        <span class="muted" id="sched-file-keep-note" style="display:none;">Leave blank to keep the existing audio.</span>
       </div>
 
       <label>Name</label>
@@ -190,8 +199,15 @@
         <option value="5">Last week</option>
       </select>
 
+      <label>Play Mode</label>
+      <select id="sched-playmode">
+        <option value="local" selected>Local (this node only)</option>
+        <option value="global">Global (all connected/linked nodes)</option>
+      </select>
+
       <br><br>
       <button class="btn-primary" id="btn-add-sched">Add Scheduled Announcement</button>
+      <button id="sched-edit-cancel" style="display:none;">Cancel Edit</button>
       <div class="msg" id="sched-msg"></div>
     </div>
   </div>

@@ -1,6 +1,6 @@
 # asl3-herald
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![Release Date](https://img.shields.io/badge/released-2026--07--09-green)
 ![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
 
@@ -22,6 +22,9 @@
 - **Scheduled Announcements** — clock-triggered, independent of repeater activity:
   - Plays a specific file at a configured time of day, on selected days of the week
   - Optional nth-week-of-month scheduling (e.g. "2nd Saturday of the month")
+  - **Local or global playback** — each scheduled announcement can play locally on this node only (`rpt localplay`, the default) or globally to all connected/linked nodes (`rpt playback`)
+
+Both Tail Messages and Scheduled Announcements can be edited in place (name, text, voice, schedule, play mode) via `herald edit-rotation` / `herald edit-schedule` or the web UI, instead of removing and re-adding.
 
 Plus:
 - **Piper neural TTS** — generate announcements from text with natural-sounding voices (6 included), with festival/espeak-ng as a fallback
@@ -92,6 +95,7 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 | `Scheduled[].Days` | `daily` | `daily` or a list: `[saturday, sunday]` |
 | `Scheduled[].Week` | _(none)_ | Optional: 1-5 (5 = last week of month); omit for every matching day |
 | `Scheduled[].File` | _(required)_ | Path to WAV file to play |
+| `Scheduled[].PlayMode` | `local` | `local` (this node only) or `global` (all connected/linked nodes) |
 
 **Example config:**
 
@@ -145,6 +149,7 @@ Scheduled:
 |---|---|
 | `sudo herald add "<text>" [--name <name>] [--voice <voice>]` | Generate TTS WAV and add to rotation |
 | `sudo herald add-file <path> [--name <name>]` | Copy an existing WAV into rotation |
+| `sudo herald edit-rotation <name> [--new-name <n>] [--text "<text>"] [--voice <v>] [--file <path>]` | Edit an existing rotation entry in place |
 | `herald list` | List rotation + scheduled announcements |
 | `sudo herald remove <name>` | Remove a rotation file or scheduled announcement |
 | `sudo herald play <name>` | Play an announcement on the node immediately |
@@ -153,8 +158,9 @@ Scheduled:
 
 | Command | Description |
 |---|---|
-| `sudo herald add-schedule "<text>" --name <name> --time HH:MM [--days daily\|d1,d2] [--week 1-5] [--voice <voice>]` | Generate TTS WAV and schedule it |
-| `sudo herald add-schedule-file <path> --name <name> --time HH:MM [--days daily\|d1,d2] [--week 1-5]` | Schedule an existing WAV file |
+| `sudo herald add-schedule "<text>" --name <name> --time HH:MM [--days daily\|d1,d2] [--week 1-5] [--voice <voice>] [--play-mode local\|global]` | Generate TTS WAV and schedule it |
+| `sudo herald add-schedule-file <path> --name <name> --time HH:MM [--days daily\|d1,d2] [--week 1-5] [--play-mode local\|global]` | Schedule an existing WAV file |
+| `sudo herald edit-schedule <name> [--new-name <n>] [--time HH:MM] [--days ...] [--week 1-5] [--play-mode local\|global] [--text "<text>"] [--voice <v>] [--file <path>]` | Edit an existing scheduled announcement in place |
 
 ---
 

@@ -13,6 +13,16 @@
     el.className = 'msg ' + (ok ? 'ok' : 'err');
   }
 
+  function escapeAttr(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function basename(path) {
+    return String(path || '').split('/').pop();
+  }
+
   async function api(path, options) {
     const res = await fetch(API + path, options || {});
     let data;
@@ -99,11 +109,16 @@
 
     const tbody = document.querySelector('#tail-table tbody');
     tbody.innerHTML = '';
-    (data.tail_message.rotation || []).forEach((file, i) => {
-      const name = file.split('/').pop().replace(/\.wav$/, '');
+    (data.tail_message.rotation || []).forEach((entry, i) => {
+      const isObj = entry && typeof entry === 'object';
+      const file = isObj ? (entry.File || '') : entry;
+      const text = isObj ? entry.Text : null;
+      const voice = isObj ? entry.Voice : null;
+      const name = basename(file).replace(/\.wav$/, '');
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + (i + 1) + '</td><td>' + file + '</td><td>' +
+      tr.innerHTML = '<td>' + (i + 1) + '</td><td>' + basename(file) + '</td><td>' +
         '<button class="btn-play" data-name="' + name + '">Play</button>' +
+        '<button class="btn-edit" data-type="tail" data-name="' + name + '" data-text="' + escapeAttr(text) + '" data-voice="' + escapeAttr(voice) + '">Edit</button>' +
         '<button class="btn-danger" data-name="' + name + '">Remove</button></td>';
       tbody.appendChild(tr);
     });
@@ -111,11 +126,15 @@
     const stbody = document.querySelector('#sched-table tbody');
     stbody.innerHTML = '';
     (data.scheduled || []).forEach(s => {
-      const days = Array.isArray(s.Days) ? s.Days.join(', ') : s.Days;
+      const daysAttr = Array.isArray(s.Days) ? s.Days.join(',') : (s.Days || 'daily');
+      const daysDisplay = Array.isArray(s.Days) ? s.Days.join(', ') : s.Days;
+      const playMode = s.PlayMode === 'global' ? 'global' : 'local';
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + s.Name + '</td><td>' + s.Time + '</td><td>' + days + '</td>' +
-        '<td>' + (s.Week || '—') + '</td><td>' + s.File + '</td><td>' +
+      tr.innerHTML = '<td>' + s.Name + '</td><td>' + s.Time + '</td><td>' + daysDisplay + '</td>' +
+        '<td>' + (s.Week || '—') + '</td><td>' + (playMode === 'global' ? 'Global' : 'Local') + '</td>' +
+        '<td>' + basename(s.File) + '</td><td>' +
         '<button class="btn-play" data-name="' + s.Name + '">Play</button>' +
+        '<button class="btn-edit" data-type="sched" data-name="' + s.Name + '" data-time="' + s.Time + '" data-days="' + daysAttr + '" data-week="' + (s.Week || '') + '" data-playmode="' + playMode + '" data-text="' + escapeAttr(s.Text) + '" data-voice="' + escapeAttr(s.Voice) + '">Edit</button>' +
         '<button class="btn-danger" data-name="' + s.Name + '">Remove</button></td>';
       stbody.appendChild(tr);
     });
@@ -138,7 +157,100 @@
         loadAll();
       };
     });
+    document.querySelectorAll('.btn-edit').forEach(btn => {
+      btn.onclick = () => {
+        if (btn.dataset.type === 'tail') startEditTail(btn.dataset);
+        else startEditSched(btn.dataset);
+      };
+    });
   }
+
+  // ── Edit tail message ────────────────────────────────────────────────
+  let editingTailName = null;
+
+  function startEditTail(d) {
+    editingTailName = d.name;
+    document.getElementById('tail-name').value = d.name;
+    const hasText = !!d.text;
+    document.querySelector('input[name="tail-source"][value="' + (hasText ? 'tts' : 'file') + '"]').checked = true;
+    document.getElementById('tail-tts-fields').style.display = hasText ? '' : 'none';
+    document.getElementById('tail-file-fields').style.display = hasText ? 'none' : '';
+    document.getElementById('tail-text').value = hasText ? d.text : '';
+    document.getElementById('tail-voice').value = hasText ? (d.voice || '') : '';
+    document.getElementById('tail-file').value = '';
+    document.getElementById('tail-file-keep-note').style.display = hasText ? 'none' : '';
+    document.getElementById('tail-form-heading').textContent = 'Edit Tail Message';
+    document.getElementById('btn-add-tail').textContent = 'Save Changes';
+    document.getElementById('tail-edit-cancel').style.display = '';
+    document.getElementById('tail-msg').textContent = '';
+    document.getElementById('tail-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function cancelEditTail() {
+    editingTailName = null;
+    document.getElementById('tail-name').value = '';
+    document.getElementById('tail-text').value = '';
+    document.getElementById('tail-file').value = '';
+    document.getElementById('tail-file-keep-note').style.display = 'none';
+    document.getElementById('tail-form-heading').textContent = 'Add a Tail Message';
+    document.getElementById('btn-add-tail').textContent = 'Add to Rotation';
+    document.getElementById('tail-edit-cancel').style.display = 'none';
+    document.getElementById('tail-msg').textContent = '';
+  }
+  document.getElementById('tail-edit-cancel').addEventListener('click', cancelEditTail);
+
+  // ── Edit scheduled announcement ──────────────────────────────────────
+  let editingSchedName = null;
+
+  function startEditSched(d) {
+    editingSchedName = d.name;
+    document.getElementById('sched-name').value = d.name;
+    document.getElementById('sched-time').value = d.time || '';
+    document.getElementById('sched-week').value = d.week || '';
+    document.getElementById('sched-playmode').value = d.playmode || 'local';
+
+    const days = d.days || 'daily';
+    const isDaily = days === 'daily';
+    document.getElementById('sched-day-daily').checked = isDaily;
+    const dayList = days.split(',');
+    document.querySelectorAll('#sched-days input[type=checkbox]:not(#sched-day-daily)').forEach(cb => {
+      cb.disabled = isDaily;
+      cb.checked = !isDaily && dayList.includes(cb.value);
+    });
+
+    const hasText = !!d.text;
+    document.querySelector('input[name="sched-source"][value="' + (hasText ? 'tts' : 'file') + '"]').checked = true;
+    document.getElementById('sched-tts-fields').style.display = hasText ? '' : 'none';
+    document.getElementById('sched-file-fields').style.display = hasText ? 'none' : '';
+    document.getElementById('sched-text').value = hasText ? d.text : '';
+    document.getElementById('sched-voice').value = hasText ? (d.voice || '') : '';
+    document.getElementById('sched-file').value = '';
+    document.getElementById('sched-file-keep-note').style.display = hasText ? 'none' : '';
+
+    document.getElementById('sched-form-heading').textContent = 'Edit Scheduled Announcement';
+    document.getElementById('btn-add-sched').textContent = 'Save Changes';
+    document.getElementById('sched-edit-cancel').style.display = '';
+    document.getElementById('sched-msg').textContent = '';
+    document.getElementById('sched-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function cancelEditSched() {
+    editingSchedName = null;
+    document.getElementById('sched-name').value = '';
+    document.getElementById('sched-time').value = '';
+    document.getElementById('sched-text').value = '';
+    document.getElementById('sched-file').value = '';
+    document.getElementById('sched-file-keep-note').style.display = 'none';
+    document.getElementById('sched-week').value = '';
+    document.getElementById('sched-playmode').value = 'local';
+    document.getElementById('sched-day-daily').checked = true;
+    document.querySelectorAll('#sched-days input[type=checkbox]:not(#sched-day-daily)').forEach(cb => { cb.disabled = true; cb.checked = false; });
+    document.getElementById('sched-form-heading').textContent = 'Add a Scheduled Announcement';
+    document.getElementById('btn-add-sched').textContent = 'Add Scheduled Announcement';
+    document.getElementById('sched-edit-cancel').style.display = 'none';
+    document.getElementById('sched-msg').textContent = '';
+  }
+  document.getElementById('sched-edit-cancel').addEventListener('click', cancelEditSched);
 
   // ── Enable/disable + reload ──────────────────────────────────────────
   document.getElementById('btn-toggle-enable').addEventListener('click', async () => {
@@ -173,7 +285,7 @@
     if (data.success) loadAll();
   });
 
-  // ── Add tail message ─────────────────────────────────────────────────
+  // ── Add / edit tail message ──────────────────────────────────────────
   document.getElementById('btn-add-tail').addEventListener('click', async () => {
     const msgEl = document.getElementById('tail-msg');
     const name = document.getElementById('tail-name').value.trim();
@@ -188,22 +300,36 @@
     } else {
       form.append('mode', 'file');
       const f = document.getElementById('tail-file').files[0];
-      if (!f) { showMsg(msgEl, 'Choose a file first', false); return; }
-      form.append('file', f);
+      if (f) {
+        form.append('file', f);
+      } else if (!editingTailName) {
+        showMsg(msgEl, 'Choose a file first', false);
+        return;
+      }
     }
 
-    const res = await fetch(API + 'add_rotation.php', { method: 'POST', body: form });
+    let endpoint = 'add_rotation.php';
+    if (editingTailName) {
+      form.append('old_name', editingTailName);
+      endpoint = 'edit_rotation.php';
+    }
+
+    const res = await fetch(API + endpoint, { method: 'POST', body: form });
     const data = await res.json().catch(() => ({ success: false, message: 'Invalid server response' }));
-    showMsg(msgEl, data.message || (data.success ? 'Added' : 'Failed'), data.success);
-    if (data.success) loadAll();
+    showMsg(msgEl, data.message || (data.success ? (editingTailName ? 'Updated' : 'Added') : 'Failed'), data.success);
+    if (data.success) {
+      cancelEditTail();
+      loadAll();
+    }
   });
 
-  // ── Add scheduled announcement ───────────────────────────────────────
+  // ── Add / edit scheduled announcement ────────────────────────────────
   document.getElementById('btn-add-sched').addEventListener('click', async () => {
     const msgEl = document.getElementById('sched-msg');
     const name = document.getElementById('sched-name').value.trim();
     const time = document.getElementById('sched-time').value;
     const week = document.getElementById('sched-week').value;
+    const playMode = document.getElementById('sched-playmode').value;
     const isTts = document.querySelector('input[name="sched-source"]:checked').value === 'tts';
 
     let days = 'daily';
@@ -217,6 +343,7 @@
     form.append('name', name);
     form.append('time', time);
     form.append('days', days);
+    form.append('play_mode', playMode);
     if (week) form.append('week', week);
     if (isTts) {
       form.append('mode', 'tts');
@@ -225,14 +352,27 @@
     } else {
       form.append('mode', 'file');
       const f = document.getElementById('sched-file').files[0];
-      if (!f) { showMsg(msgEl, 'Choose a file first', false); return; }
-      form.append('file', f);
+      if (f) {
+        form.append('file', f);
+      } else if (!editingSchedName) {
+        showMsg(msgEl, 'Choose a file first', false);
+        return;
+      }
     }
 
-    const res = await fetch(API + 'add_scheduled.php', { method: 'POST', body: form });
+    let endpoint = 'add_scheduled.php';
+    if (editingSchedName) {
+      form.append('old_name', editingSchedName);
+      endpoint = 'edit_scheduled.php';
+    }
+
+    const res = await fetch(API + endpoint, { method: 'POST', body: form });
     const data = await res.json().catch(() => ({ success: false, message: 'Invalid server response' }));
-    showMsg(msgEl, data.message || (data.success ? 'Added' : 'Failed'), data.success);
-    if (data.success) loadAll();
+    showMsg(msgEl, data.message || (data.success ? (editingSchedName ? 'Updated' : 'Added') : 'Failed'), data.success);
+    if (data.success) {
+      cancelEditSched();
+      loadAll();
+    }
   });
 
   loadVoices();

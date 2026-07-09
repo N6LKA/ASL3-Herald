@@ -22,9 +22,16 @@ TailMessage:
   # Rotating tail message files (played in order, then repeats). Empty by
   # default — add your own via `herald add`/`herald add-file` or the web UI,
   # or uncomment/edit an example below once the file actually exists.
+  # TTS-generated entries also store Text/Voice so they can be edited later
+  # (via `herald edit-rotation` or the web UI) without retyping the text;
+  # file-uploaded entries just have File and can still be renamed.
   Rotation: []
-    # - /etc/asterisk/scripts/asl3-herald/announcements/tail1.wav
-    # - /etc/asterisk/scripts/asl3-herald/announcements/tail2.wav
+    # - File: /etc/asterisk/scripts/asl3-herald/announcements/tail1.wav
+    #   Text: "This station is running asl3-herald"
+    #   Voice: en_US-lessac-medium
+    # - File: /etc/asterisk/scripts/asl3-herald/announcements/tail2.wav
+    #   Text: null
+    #   Voice: null
 
   SkywarnPlus:
     # Play the SkywarnPlus wx-tail.wav instead of rotation when WX alerts are active.
@@ -39,6 +46,10 @@ TailMessage:
 # Days: "daily" or a list: ["saturday", "sunday"]  (case-insensitive)
 # Week (optional): 1-5, restricts to the nth week of the month (5 = last week).
 #   Omit Week to play on every matching day.
+# PlayMode (optional): "local" (default, this node only via `rpt localplay`) or
+#   "global" (all connected/linked nodes via `rpt playback`).
+# Text/Voice (optional): stored for TTS-generated entries so they can be
+#   edited later (via `herald edit-schedule` or the web UI) without retyping.
 # Empty by default — add your own via `herald add-schedule`/`herald add-schedule-file`
 # or the web UI, or uncomment/edit an example below once the file actually exists.
 Scheduled: []
@@ -46,14 +57,19 @@ Scheduled: []
   #   Time: "07:30"
   #   Days: ["saturday"]
   #   File: /etc/asterisk/scripts/asl3-herald/announcements/arrl-news.wav
+  #   PlayMode: local
 
   # - Name: "Weekly Net Announcement"
   #   Time: "19:45"
   #   Days: ["thursday"]
   #   File: /etc/asterisk/scripts/asl3-herald/announcements/net-announcement.wav
+  #   PlayMode: global
+  #   Text: "Weekly net announcement text follows"
+  #   Voice: en_US-lessac-medium
 
   # - Name: "Second Saturday Breakfast Net"
   #   Time: "08:00"
   #   Days: ["saturday"]
   #   Week: 2
   #   File: /etc/asterisk/scripts/asl3-herald/announcements/breakfast-net.wav
+  #   PlayMode: local
