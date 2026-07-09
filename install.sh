@@ -150,6 +150,15 @@ if [[ ! -d /etc/allmon3 && ! -d /var/www/html/supermon ]]; then
     systemctl enable --now apache2
 fi
 
+# Allmon3 does NOT bundle PHP the way Supermon does, so its presence alone
+# doesn't guarantee php-curl is installed (needed for the Allmon3 auth check
+# in herald-frame-allmon3.php). Ensure it unconditionally.
+if ! php -r 'exit(function_exists("curl_init") ? 0 : 1);' 2>/dev/null; then
+    info "Installing php-curl (required for the Allmon3 auth check)..."
+    apt-get install -y -qq php-curl
+    systemctl restart apache2 2>/dev/null || true
+fi
+
 info "Installing web UI to $WEB_DIR ..."
 mkdir -p "$WEB_DIR/api"
 for f in herald-ui.inc herald-common.php herald-frame-allmon3.php herald-frame-supermon.php; do
