@@ -192,11 +192,16 @@ if [[ -d /etc/allmon3 ]]; then
         else
             touch "$MENU_INI"
         fi
+        if [[ -s "$MENU_INI" ]]; then
+            # Ensure the file ends with a newline, then add a blank line as a
+            # separator, so the new section doesn't run up against the last line.
+            [[ -n "$(tail -c1 "$MENU_INI")" ]] && echo >> "$MENU_INI"
+            echo >> "$MENU_INI"
+        fi
         cat >> "$MENU_INI" << 'EOF'
-
 [Herald]
 type = single
-Announcements Settings = /asl3-herald/herald-frame-allmon3.php
+Announcement Settings = /asl3-herald/herald-frame-allmon3.php
 EOF
         info "Added to the bottom of $MENU_INI — move/relabel it there if you'd like it elsewhere"
     fi
@@ -215,8 +220,11 @@ EOF
         else
             touch "$CUSTOM_CSS"
         fi
+        if [[ -s "$CUSTOM_CSS" ]]; then
+            [[ -n "$(tail -c1 "$CUSTOM_CSS")" ]] && echo >> "$CUSTOM_CSS"
+            echo >> "$CUSTOM_CSS"
+        fi
         cat >> "$CUSTOM_CSS" << EOF
-
 /* asl3-herald: hide sidebar link until logged into Allmon3 */
 $CSS_RULE
 EOF
@@ -264,7 +272,7 @@ echo "  Manage:  herald <status|enable|disable|reload|voices|add|add-file|list|r
 echo ""
 echo "  Web UI:  installed to $WEB_DIR"
 if [[ -d /etc/allmon3 ]]; then
-    echo "           Allmon3 — look for the \"Announcements Settings\" link in the sidebar"
+    echo "           Allmon3 — look for the \"Announcement Settings\" link in the sidebar"
     echo "           (added to the bottom of $MENU_INI; restart allmon3 if it was just added:"
     echo "            sudo systemctl restart allmon3)"
 fi
