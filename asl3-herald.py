@@ -270,18 +270,23 @@ def main():
                         last_kerchunks = cur
                         log_debug(f"Unkey detected (kerchunks now {cur})")
 
-                        if in_blackout(bk_start, bk_end):
+                        if swp_on and wx_is_active(swp_file, swp_thr):
+                            # WX alerts override blackout — safety messages always play
+                            if (now - state["last_tail_played"]) < min_int:
+                                remaining = int(min_int - (now - state["last_tail_played"]))
+                                log_debug(f"Min interval not reached - {remaining}s remaining")
+                            else:
+                                log_info("Playing SkywarnPlus WX tail message (priority, overrides blackout)")
+                                play_file(node, swp_file)
+                                state["last_tail_played"] = now
+                                save_state(state)
+
+                        elif in_blackout(bk_start, bk_end):
                             log_debug("Blackout window active - skipping tail message")
 
                         elif (now - state["last_tail_played"]) < min_int:
                             remaining = int(min_int - (now - state["last_tail_played"]))
                             log_debug(f"Min interval not reached - {remaining}s remaining")
-
-                        elif swp_on and wx_is_active(swp_file, swp_thr):
-                            log_info("Playing SkywarnPlus WX tail message (priority)")
-                            play_file(node, swp_file)
-                            state["last_tail_played"] = now
-                            save_state(state)
 
                         elif rotation:
                             idx      = state["rotation_index"] % len(rotation)
