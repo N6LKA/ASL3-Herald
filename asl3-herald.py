@@ -40,7 +40,7 @@ except FileNotFoundError:
 
 DEBUG = False
 
-# ── Logging ───────────────────────────────────────────────────────────────────
+# ── Logging ────────────────────────────────────────────────────────────────────
 
 def log(level, msg):
     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} [{level}] {msg}", flush=True)
@@ -124,6 +124,9 @@ def play_file(node, filepath):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def in_blackout(start, end):
+    pass
+
 def wx_is_active(wx_file, threshold):
     if not wx_file or not os.path.exists(wx_file):
         return False
@@ -176,7 +179,7 @@ def should_play_scheduled(sched, state):
 
 def extract_config(config):
     node = str(config.get("Node", "")).strip()
-    poll = config.get("PollInterval", 2)
+    poll = config.get("PollInterval", 1)
     debug = config.get("Debug", False)
 
     tm       = config.get("TailMessage", {}) or {}
