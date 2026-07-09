@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # asl3-herald install script
-# Usage: bash <(curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/install.sh)
+# Usage: curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/install.sh | sudo bash
+#   (the "sudo bash <(curl ...)" process-substitution form fails with
+#    /dev/fd/63: No such file or directory on some systems — pipe instead)
 
 set -euo pipefail
 
@@ -17,7 +19,7 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
 if [[ $EUID -ne 0 ]]; then
-    error "This installer must be run as root. Use: sudo bash <(curl ...)"
+    error "This installer must be run as root. Use: curl -fsSL ... | sudo bash"
 fi
 
 echo ""
@@ -128,14 +130,14 @@ else
     warn "Edit your config before starting: $CONFIG_DIR/asl3-herald.conf"
 fi
 
-# ── systemd service ───────────────────────────────────────────────────────────
+# ── systemd service ────────────────────────────────────────────────────────────
 
 info "Installing systemd service ..."
 curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/asl3-herald.service" -o "$SERVICE_FILE"
 systemctl daemon-reload
 systemctl enable asl3-herald
 
-# ── Web UI ────────────────────────────────────────────────────────────────
+# ── Web UI ─────────────────────────────────────────────────────────────────────
 
 WEB_DIR="/var/www/html/asl3-herald"
 SUDOERS_WEB="/etc/sudoers.d/asl3-herald-web"

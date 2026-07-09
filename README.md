@@ -15,7 +15,7 @@
 `asl3-herald` covers two distinct functions:
 
 - **Tail Messages** — unkey-triggered, reactive to repeater activity:
-  - **Reliable unkey detection** — polls the `rpt stats` kerchunk counter every 2 seconds to detect transmissions; not dependent on the inconsistent native tail message trigger
+  - **Reliable unkey detection** — polls the `rpt stats` kerchunk counter every second (configurable via `PollInterval`) to detect transmissions; not dependent on the inconsistent native tail message trigger
   - **Rotating messages** — cycles through a list of announcement files in order with a configurable minimum interval between plays
   - **SkywarnPlus WX integration** — when weather alerts are active, plays the SkywarnPlus `wx-tail.wav` file instead of the normal rotation (WX always takes priority)
 
@@ -34,8 +34,10 @@ Plus:
 ## Installation
 
 ```bash
-sudo bash <(curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/install.sh)
+curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/install.sh | sudo bash
 ```
+
+(The `sudo bash <(curl ...)` process-substitution form is equivalent but fails with `/dev/fd/63: No such file or directory` on some systems, depending on shell/PAM config — the piped form above avoids that entirely.)
 
 The installer will:
 1. Install `python3-yaml`, `sox`, and `libsox-fmt-mp3` if not already present
@@ -77,7 +79,7 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 | Setting | Default | Description |
 |---|---|---|
 | `Node` | _(required)_ | Your ASL3 node number |
-| `PollInterval` | `2` | Seconds between kerchunk counter polls |
+| `PollInterval` | `1` | Seconds between kerchunk counter polls |
 | `Debug` | `false` | Enable verbose debug logging |
 | `TailMessage.Enable` | `true` | Enable/disable tail message function |
 | `TailMessage.MinInterval` | `300` | Minimum seconds between tail messages |
@@ -95,7 +97,7 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 
 ```yaml
 Node: "501260"
-PollInterval: 2
+PollInterval: 1
 Debug: false
 
 TailMessage:
@@ -232,7 +234,7 @@ journalctl -u asl3-herald -f          # Follow live log output
 
 ## How It Works
 
-`asl3-herald` polls `asterisk -rx "rpt stats <node>"` every 2 seconds and watches the **Kerchunks today** counter. Each time a transmission ends (unkey), the counter increments by one. This is the same reliable method used by other ASL3 monitoring tools such as `asl3-link-activity-monitor`.
+`asl3-herald` polls `asterisk -rx "rpt stats <node>"` every second (configurable via `PollInterval`) and watches the **Kerchunks today** counter. Each time a transmission ends (unkey), the counter increments by one. This is the same reliable method used by other ASL3 monitoring tools such as `asl3-link-activity-monitor`.
 
 When an unkey is detected, the daemon checks in priority order:
 1. **Minimum interval** — if not enough time has passed since the last tail message, skip

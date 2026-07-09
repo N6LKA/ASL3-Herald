@@ -5,7 +5,7 @@
 Node: "501260"
 
 # Poll interval in seconds (how often to check for unkeys)
-PollInterval: 2
+PollInterval: 1
 
 # Enable debug logging (set true only for troubleshooting)
 Debug: false

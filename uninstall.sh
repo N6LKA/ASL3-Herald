@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # asl3-herald uninstall script
-# Usage: sudo bash <(curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/uninstall.sh)
-#    or: curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/uninstall.sh | sudo bash
+# Usage: curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/uninstall.sh | sudo bash
+#   (the "sudo bash <(curl ...)" process-substitution form fails with
+#    /dev/fd/63: No such file or directory on some systems — pipe instead)
 #
 # Options (pass after "--" when piping): --purge-config  --purge-piper  --purge-all
 #   e.g. curl -fsSL ... | sudo bash -s -- --purge-all
@@ -25,7 +26,7 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
 if [[ $EUID -ne 0 ]]; then
-    error "This script must be run as root. Use: sudo bash <(curl ...)"
+    error "This script must be run as root. Use: curl -fsSL ... | sudo bash"
 fi
 
 PURGE_CONFIG=false
@@ -44,7 +45,7 @@ echo "  asl3-herald uninstaller"
 echo "  https://github.com/N6LKA/asl3-herald"
 echo ""
 
-# ── Service ───────────────────────────────────────────────────────────────
+# ── Service ────────────────────────────────────────────────────────────────────
 
 if [[ -f "$SERVICE_FILE" ]]; then
     info "Stopping and disabling asl3-herald service..."
@@ -54,13 +55,13 @@ if [[ -f "$SERVICE_FILE" ]]; then
     systemctl daemon-reload 2>/dev/null || true
 fi
 
-# ── Daemon + CLI ─────────────────────────────────────────────────────────────
+# ── Daemon + CLI ───────────────────────────────────────────────────────────────
 
 info "Removing daemon and herald command..."
 rm -rf "$INSTALL_DIR"
 rm -f "$HERALD_BIN"
 
-# ── Web UI + sudoers ─────────────────────────────────────────────────────────────
+# ── Web UI + sudoers ───────────────────────────────────────────────────────────
 
 if [[ -d "$WEB_DIR" ]]; then
     info "Removing web UI ($WEB_DIR)..."
@@ -72,7 +73,7 @@ if [[ -f "$SUDOERS_WEB" ]]; then
     rm -f "$SUDOERS_WEB"
 fi
 
-# ── Allmon3 / Supermon integration ────────────────────────────────────────────
+# ── Allmon3 / Supermon integration ─────────────────────────────────────────────
 # Surgical removal: only strips what asl3-herald's installer added, leaving
 # the rest of each file (and any other customizations) untouched.
 
@@ -104,7 +105,7 @@ if [[ -f "$SUPERMON_FOOTER" ]] && grep -q "asl3-herald/herald-frame-supermon.php
     chown www-data:www-data "$SUPERMON_FOOTER" 2>/dev/null || true
 fi
 
-# ── Config / announcements / state (preserved by default) ─────────────────
+# ── Config / announcements / state (preserved by default) ─────────────────────
 
 if [[ "$PURGE_CONFIG" == "true" ]]; then
     if [[ -d "$CONFIG_DIR" ]]; then
@@ -117,7 +118,7 @@ elif [[ -d "$CONFIG_DIR" ]]; then
     info "  Remove manually with: sudo rm -rf $CONFIG_DIR"
 fi
 
-# ── Piper TTS (preserved by default — large download) ──────────────────────────
+# ── Piper TTS (preserved by default — large download) ─────────────────────────
 
 if [[ "$PURGE_PIPER" == "true" ]]; then
     if [[ -d "$PIPER_DIR" ]]; then
