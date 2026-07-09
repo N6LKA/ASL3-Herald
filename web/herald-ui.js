@@ -77,6 +77,14 @@
     document.getElementById('hs-mininterval').textContent = data.tail_message.min_interval;
     document.getElementById('hs-swp').textContent = data.tail_message.skywarnplus.enable ? 'enabled' : 'disabled';
 
+    document.getElementById('set-node').value = data.node || '';
+    document.getElementById('set-poll-interval').value = data.poll_interval;
+    document.getElementById('set-min-interval').value = data.tail_message.min_interval;
+    document.getElementById('set-debug').checked = !!data.debug;
+    document.getElementById('set-swp-enable').checked = !!data.tail_message.skywarnplus.enable;
+    document.getElementById('set-swp-wxfile').value = data.tail_message.skywarnplus.wx_tail_file || '';
+    document.getElementById('set-swp-threshold').value = data.tail_message.skywarnplus.silence_threshold;
+
     const tbody = document.querySelector('#tail-table tbody');
     tbody.innerHTML = '';
     (data.tail_message.rotation || []).forEach((file, i) => {
@@ -128,6 +136,25 @@
   document.getElementById('btn-reload').addEventListener('click', async () => {
     await api('reload.php', { method: 'POST' });
     loadAll();
+  });
+
+  // ── Settings ─────────────────────────────────────────────────────
+  document.getElementById('btn-save-settings').addEventListener('click', async () => {
+    const msgEl = document.getElementById('settings-msg');
+    const data = await api('settings.php', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        node: document.getElementById('set-node').value.trim(),
+        poll_interval: document.getElementById('set-poll-interval').value,
+        min_interval: document.getElementById('set-min-interval').value,
+        debug: document.getElementById('set-debug').checked,
+        swp_enable: document.getElementById('set-swp-enable').checked,
+        swp_wxfile: document.getElementById('set-swp-wxfile').value.trim(),
+        swp_threshold: document.getElementById('set-swp-threshold').value,
+      }),
+    });
+    showMsg(msgEl, data.message || (data.success ? 'Settings saved and reloaded' : 'Failed'), data.success);
+    if (data.success) loadAll();
   });
 
   // ── Add tail message ─────────────────────────────────────────────────────

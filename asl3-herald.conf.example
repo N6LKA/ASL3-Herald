@@ -19,9 +19,11 @@ TailMessage:
   # Examples: 5 min = 300 | 10 min = 600 | 15 min = 900
   MinInterval: 300
 
-  # Rotating tail message files (played in order, then repeats)
-  Rotation:
-    - /etc/asterisk/scripts/asl3-herald/announcements/tail1.wav
+  # Rotating tail message files (played in order, then repeats). Empty by
+  # default — add your own via `herald add`/`herald add-file` or the web UI,
+  # or uncomment/edit an example below once the file actually exists.
+  Rotation: []
+    # - /etc/asterisk/scripts/asl3-herald/announcements/tail1.wav
     # - /etc/asterisk/scripts/asl3-herald/announcements/tail2.wav
 
   SkywarnPlus:
@@ -37,11 +39,13 @@ TailMessage:
 # Days: "daily" or a list: ["saturday", "sunday"]  (case-insensitive)
 # Week (optional): 1-5, restricts to the nth week of the month (5 = last week).
 #   Omit Week to play on every matching day.
-Scheduled:
-  - Name: "ARRL Audio News"
-    Time: "07:30"
-    Days: ["saturday"]
-    File: /etc/asterisk/scripts/asl3-herald/announcements/arrl-news.wav
+# Empty by default — add your own via `herald add-schedule`/`herald add-schedule-file`
+# or the web UI, or uncomment/edit an example below once the file actually exists.
+Scheduled: []
+  # - Name: "ARRL Audio News"
+  #   Time: "07:30"
+  #   Days: ["saturday"]
+  #   File: /etc/asterisk/scripts/asl3-herald/announcements/arrl-news.wav
 
   # - Name: "Weekly Net Announcement"
   #   Time: "19:45"

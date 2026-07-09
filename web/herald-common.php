@@ -11,8 +11,12 @@ function herald_json_response($data, int $code = 200): void {
     exit;
 }
 
+// Scheduled announcement names may contain spaces (e.g. "ARRL Audio News");
+// tail rotation names are restricted to filename-safe characters by the UI
+// itself but are validated with the same rule here. Excludes characters
+// that would be unsafe in a shell argument or generated filename.
 function herald_valid_name(string $name): bool {
-    return (bool) preg_match('/^[a-zA-Z0-9_-]{1,60}$/', $name);
+    return (bool) preg_match('/^[a-zA-Z0-9 _-]{1,60}$/', $name);
 }
 
 function herald_exec_cmd(array $argv): array {

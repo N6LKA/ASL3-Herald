@@ -124,9 +124,6 @@ def play_file(node, filepath):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def in_blackout(start, end):
-    pass
-
 def wx_is_active(wx_file, threshold):
     if not wx_file or not os.path.exists(wx_file):
         return False
@@ -276,6 +273,29 @@ def cmd_remove(config, identifier):
 
     print(json.dumps({"success": False, "message": f"No match found for: {identifier}"}))
 
+def cmd_update_settings(config, args):
+    if args.node is not None:
+        config["Node"] = args.node
+    if args.poll_interval is not None:
+        config["PollInterval"] = args.poll_interval
+    if args.debug is not None:
+        config["Debug"] = (args.debug == "true")
+
+    tm = config.setdefault("TailMessage", {})
+    if args.min_interval is not None:
+        tm["MinInterval"] = args.min_interval
+
+    swp = tm.setdefault("SkywarnPlus", {})
+    if args.swp_enable is not None:
+        swp["Enable"] = (args.swp_enable == "true")
+    if args.swp_wxfile is not None:
+        swp["WxTailFile"] = args.swp_wxfile
+    if args.swp_threshold is not None:
+        swp["SilenceThreshold"] = args.swp_threshold
+
+    save_config(config)
+    print(json.dumps({"success": True, "message": "Settings updated"}))
+
 def build_arg_parser():
     parser = argparse.ArgumentParser(prog="asl3-herald.py")
     sub = parser.add_subparsers(dest="command")
@@ -294,6 +314,15 @@ def build_arg_parser():
 
     p_remove = sub.add_parser("remove", help="Remove a rotation file or scheduled announcement by name")
     p_remove.add_argument("identifier")
+
+    p_settings = sub.add_parser("update-settings", help="Update general daemon settings")
+    p_settings.add_argument("--node")
+    p_settings.add_argument("--poll-interval", type=int)
+    p_settings.add_argument("--debug", choices=["true", "false"])
+    p_settings.add_argument("--min-interval", type=int)
+    p_settings.add_argument("--swp-enable", choices=["true", "false"])
+    p_settings.add_argument("--swp-wxfile")
+    p_settings.add_argument("--swp-threshold", type=int)
 
     return parser
 
@@ -315,6 +344,8 @@ def cli_main():
         cmd_add_scheduled(config, args)
     elif args.command == "remove":
         cmd_remove(config, args.identifier)
+    elif args.command == "update-settings":
+        cmd_update_settings(config, args)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 

@@ -37,6 +37,12 @@ Scheduled Announcements (clock-triggered):
                                            Generate TTS announcement and schedule it
   add-schedule-file <path> --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5]
                                            Schedule an existing WAV file
+
+Settings:
+  update-settings [--node <n>] [--poll-interval <n>] [--debug true|false]
+                  [--min-interval <n>] [--swp-enable true|false]
+                  [--swp-wxfile <path>] [--swp-threshold <n>]
+                                           Update general daemon settings
 EOF
 }
 
@@ -67,7 +73,7 @@ get_node() {
     daemon_list_json | json_get "d['node']"
 }
 
-# ── TTS generation (shared by add and add-schedule) ───────────────────────────
+# ── TTS generation (shared by add and add-schedule) ───────────────────────────────────────
 # Writes text to $ANNOUNCE_DIR/<name>.wav using Piper (preferred), falling back
 # to festival or espeak-ng. Prints the resulting file path on success.
 generate_tts_file() {
@@ -120,7 +126,7 @@ slugify() {
     echo "$1" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | cut -c1-40
 }
 
-# ── General commands ───────────────────────────────────────────────────────────
+# ── General commands ───────────────────────────────────────────────────────
 
 cmd_status() {
     if systemctl is-active --quiet "$SERVICE"; then
@@ -230,7 +236,7 @@ cmd_voices() {
     fi
 }
 
-# ── Tail message (rotation) commands ──────────────────────────────────────────
+# ── Tail message (rotation) commands ────────────────────────────────────
 
 cmd_add() {
     need_root "$@"
@@ -338,6 +344,12 @@ cmd_remove() {
     fi
 }
 
+cmd_update_settings() {
+    need_root "$@"
+    python3 "$DAEMON_PY" update-settings "$@"
+    cmd_reload 2>/dev/null || true
+}
+
 cmd_play() {
     need_root "$@"
     local name="$1"
@@ -364,7 +376,7 @@ cmd_play() {
     asterisk -rx "rpt localplay $node $path_no_ext"
 }
 
-# ── Scheduled announcement commands ───────────────────────────────────────────
+# ── Scheduled announcement commands ────────────────────────────────────
 
 parse_schedule_opts() {
     # Parses --name --time --days --week from "$@", leaving the remainder
@@ -429,7 +441,7 @@ cmd_add_schedule_file() {
     cmd_reload 2>/dev/null || true
 }
 
-# ── Dispatch ───────────────────────────────────────────────────────────────────
+# ── Dispatch ──────────────────────────────────────────────────────────────
 
 CMD="${1:-help}"
 shift || true
@@ -449,6 +461,7 @@ case "$CMD" in
     play)                 cmd_play               "$@" ;;
     add-schedule)         cmd_add_schedule       "$@" ;;
     add-schedule-file)    cmd_add_schedule_file  "$@" ;;
+    update-settings)      cmd_update_settings    "$@" ;;
     help|--help|-h) usage ;;
     *)
         echo "Unknown command: $CMD"

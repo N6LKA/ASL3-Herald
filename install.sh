@@ -154,7 +154,7 @@ mkdir -p "$WEB_DIR/api"
 for f in herald-common.php herald-ui-fragment.php herald-ui.js; do
     curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/$f" -o "$WEB_DIR/$f"
 done
-for f in list.php voices.php play.php reload.php toggle.php remove.php add_rotation.php add_scheduled.php; do
+for f in list.php voices.php play.php reload.php toggle.php remove.php add_rotation.php add_scheduled.php settings.php; do
     curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/api/$f" -o "$WEB_DIR/api/$f"
 done
 chown -R www-data:www-data "$WEB_DIR"
@@ -267,7 +267,7 @@ if [[ -f "$SUPERMON_FOOTER" ]]; then
         /if \(\$_SESSION\['"'"'sm61loggedin'"'"'\] === true\) \{/ { print; inblock = 1; next }
         inblock && /^\s*\?>\s*$/ {
             print
-            print "<a href=\"/supermon/asl3-herald.php\" target=\"_blank\">ASL3 Herald</a><br><br>"
+            print "<a href=\"/supermon/asl3-herald.php\">ASL3 Herald</a><br><br>"
             inblock = 0
             next
         }

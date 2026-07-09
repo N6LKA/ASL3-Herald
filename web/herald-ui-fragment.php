@@ -15,6 +15,7 @@
 <style>
   #herald-ui {
     font-family: Arial, sans-serif;
+    font-size: 16px;
     max-width: 900px;
     margin: 0 auto;
     color: #222;
@@ -39,7 +40,7 @@
     padding: 12px 16px;
     margin-bottom: 16px;
   }
-  #herald-ui .status-bar span { font-size: 0.9em; }
+  #herald-ui .status-bar span { font-size: 1em; }
   #herald-ui .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
   #herald-ui .tab-btn {
     padding: 8px 16px;
@@ -57,7 +58,7 @@
     text-align: left;
     padding: 6px 8px;
     border-bottom: 1px solid #ddd;
-    font-size: 0.9em;
+    font-size: 1em;
   }
   #herald-ui button { cursor: pointer; padding: 4px 10px; margin-right: 4px; }
   #herald-ui .btn-danger { background: #e74c3c; color: #fff; border: none; border-radius: 4px; }
@@ -68,13 +69,13 @@
     padding: 6px; margin: 4px 6px 4px 0;
   }
   #herald-ui .add-form { border-top: 2px solid #eee; margin-top: 12px; padding-top: 12px; }
-  #herald-ui .add-form label { display: block; font-size: 0.85em; margin-top: 8px; }
+  #herald-ui .add-form label { display: block; font-size: 0.95em; margin-top: 8px; }
   #herald-ui .days-picker label { display: inline-block; margin-right: 10px; font-weight: normal; }
   #herald-ui .source-toggle { margin: 8px 0; }
   #herald-ui .msg { font-weight: bold; margin-top: 8px; min-height: 1.2em; }
   #herald-ui .msg.ok { color: #27ae60; }
   #herald-ui .msg.err { color: #e74c3c; }
-  #herald-ui .muted { color: #777; font-size: 0.85em; }
+  #herald-ui .muted { color: #777; font-size: 0.95em; }
 </style>
 
 <h2>ASL3 Herald</h2>
@@ -92,6 +93,7 @@
 <div class="tabs">
   <button class="tab-btn active" data-tab="tail">Tail Messages</button>
   <button class="tab-btn" data-tab="scheduled">Scheduled Announcements</button>
+  <button class="tab-btn" data-tab="settings">Settings</button>
 </div>
 
 <!-- ════════════════════════ TAIL MESSAGES (unkey-triggered) ════════════════════════ -->
@@ -192,6 +194,36 @@
       <button class="btn-primary" id="btn-add-sched">Add Scheduled Announcement</button>
       <div class="msg" id="sched-msg"></div>
     </div>
+  </div>
+</div>
+
+<!-- ════════════════════════ SETTINGS ════════════════════════ -->
+<div class="tab-panel" id="tab-settings">
+  <div class="card">
+    <h3>General Settings</h3>
+    <label>Node</label>
+    <input type="text" id="set-node" style="width: 200px;">
+
+    <label>Poll Interval (seconds)</label>
+    <input type="text" id="set-poll-interval" style="width: 100px;">
+
+    <label>Min Interval Between Tail Messages (seconds)</label>
+    <input type="text" id="set-min-interval" style="width: 100px;">
+
+    <label><input type="checkbox" id="set-debug"> Enable debug logging</label>
+
+    <h3 style="margin-top: 20px;">SkywarnPlus</h3>
+    <label><input type="checkbox" id="set-swp-enable"> Enable SkywarnPlus WX tail integration</label>
+
+    <label>WX Tail File Path</label>
+    <input type="text" id="set-swp-wxfile" style="width: 100%;">
+
+    <label>Silence Threshold (bytes)</label>
+    <input type="text" id="set-swp-threshold" style="width: 100px;">
+
+    <br><br>
+    <button class="btn-primary" id="btn-save-settings">Save &amp; Reload</button>
+    <div class="msg" id="settings-msg"></div>
   </div>
 </div>
 </div>
