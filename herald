@@ -1,0 +1,278 @@
+#!/usr/bin/env bash
+# herald — management command for asl3-herald
+
+INSTALL_DIR="/etc/asterisk/scripts/asl3-herald"
+CONF_FILE="$INSTALL_DIR/asl3-herald.conf"
+SERVICE="asl3-herald"
+ANNOUNCE_DIR="$INSTALL_DIR/announcements"
+DISABLE_FLAG="$INSTALL_DIR/asl3-herald-disabled"
+PID_FILE="/run/asl3-herald.pid"
+
+usage() {
+    cat <<EOF
+Usage: herald <command> [options]
+
+Commands:
+  status                Show daemon status and current config summary
+  enable                Remove disable flag and start daemon
+  disable               Stop daemon and set disable flag
+  reload                Reload config without restarting (SIGHUP)
+  add "<text>" [--name <name>]
+                        Generate TTS announcement WAV and add to config
+  add-file <path> [--name <name>]
+                        Copy existing WAV file and add to rotation
+  list                  List all rotation entries and scheduled announcements
+  remove <name>         Remove an announcement from rotation/config
+  play <name>           Play an announcement immediately on the node
+  help                  Show this message
+EOF
+}
+
+need_root() {
+    if [[ $EUID -ne 0 ]]; then
+        echo "This command requires root. Use: sudo herald $*"
+        exit 1
+    fi
+}
+
+get_node() {
+    if [[ ! -f "$CONF_FILE" ]]; then
+        echo ""
+        return
+    fi
+    grep -E '^Node:' "$CONF_FILE" | awk '{print $2}' | tr -d '"'
+}
+
+cmd_status() {
+    echo "=== asl3-herald status ==="
+    if systemctl is-active --quiet "$SERVICE"; then
+        echo "Service:   running"
+    else
+        echo "Service:   stopped"
+    fi
+
+    if [[ -f "$DISABLE_FLAG" ]]; then
+        echo "Herald:    DISABLED (disable flag present)"
+    else
+        echo "Herald:    enabled"
+    fi
+
+    NODE=$(get_node)
+    echo "Node:      ${NODE:-<not configured>}"
+
+    if [[ -f "$CONF_FILE" ]]; then
+        MIN=$(grep -E 'MinInterval:' "$CONF_FILE" | awk '{print $2}')
+        SWP=$(grep -E 'Enable:' "$CONF_FILE" | tail -1 | awk '{print $2}')
+        echo "MinInterval: ${MIN:-?}s"
+        echo "SkywarnPlus: ${SWP:-?}"
+    fi
+
+    ROT_COUNT=$(grep -cE '^\s+- .*\.wav' "$CONF_FILE" 2>/dev/null || echo 0)
+    echo "Rotation entries: $ROT_COUNT"
+
+    echo ""
+    systemctl status "$SERVICE" --no-pager -l 2>&1 | tail -20
+}
+
+cmd_enable() {
+    need_root "$@"
+    if [[ -f "$DISABLE_FLAG" ]]; then
+        rm -f "$DISABLE_FLAG"
+        echo "Disable flag removed."
+    fi
+    systemctl start "$SERVICE" 2>/dev/null || true
+    systemctl enable "$SERVICE" 2>/dev/null || true
+    echo "asl3-herald enabled and started."
+}
+
+cmd_disable() {
+    need_root "$@"
+    touch "$DISABLE_FLAG"
+    echo "Disable flag set. Herald will suppress tail messages."
+    echo "To also stop the service: sudo systemctl stop $SERVICE"
+}
+
+cmd_reload() {
+    need_root "$@"
+    if systemctl is-active --quiet "$SERVICE"; then
+        systemctl kill -s HUP "$SERVICE"
+        echo "SIGHUP sent — config reloaded."
+    else
+        echo "Service is not running. Start it first: sudo systemctl start $SERVICE"
+    fi
+}
+
+cmd_add() {
+    need_root "$@"
+    TEXT=""
+    NAME=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --name) NAME="$2"; shift 2 ;;
+            *) TEXT="$1"; shift ;;
+        esac
+    done
+
+    if [[ -z "$TEXT" ]]; then
+        echo "Usage: herald add \"<text>\" [--name <name>]"
+        exit 1
+    fi
+
+    if [[ -z "$NAME" ]]; then
+        NAME=$(echo "$TEXT" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | cut -c1-40)
+    fi
+
+    mkdir -p "$ANNOUNCE_DIR"
+    OUTFILE="$ANNOUNCE_DIR/${NAME}.wav"
+
+    if command -v text2wave &>/dev/null && command -v sox &>/dev/null; then
+        echo "$TEXT" | text2wave -o /tmp/herald_tts_tmp.wav
+        sox /tmp/herald_tts_tmp.wav -r 8000 -c 1 -b 16 -t wav "$OUTFILE"
+        rm -f /tmp/herald_tts_tmp.wav
+        echo "Generated with festival TTS: $OUTFILE"
+    elif command -v espeak-ng &>/dev/null && command -v sox &>/dev/null; then
+        espeak-ng -s 140 -a 150 --stdout "$TEXT" | sox -t wav - -r 8000 -c 1 -b 16 -t wav "$OUTFILE"
+        echo "Generated with espeak-ng TTS: $OUTFILE"
+    else
+        echo "ERROR: No TTS engine found. Install festival + sox or espeak-ng + sox."
+        echo "  sudo apt install festival sox  (or)  sudo apt install espeak-ng sox"
+        exit 1
+    fi
+
+    if [[ ! -s "$OUTFILE" ]]; then
+        echo "ERROR: TTS output file is empty. Check TTS installation."
+        exit 1
+    fi
+
+    if grep -qF "$OUTFILE" "$CONF_FILE" 2>/dev/null; then
+        echo "Already in rotation: $OUTFILE"
+    else
+        # Insert under Rotation: block
+        sed -i "/^  Rotation:/a\\    - $OUTFILE" "$CONF_FILE"
+        echo "Added to rotation: $OUTFILE"
+        cmd_reload 2>/dev/null || true
+    fi
+}
+
+cmd_add_file() {
+    need_root "$@"
+    SRC=""
+    NAME=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --name) NAME="$2"; shift 2 ;;
+            *) SRC="$1"; shift ;;
+        esac
+    done
+
+    if [[ -z "$SRC" ]]; then
+        echo "Usage: herald add-file <path> [--name <name>]"
+        exit 1
+    fi
+
+    if [[ ! -f "$SRC" ]]; then
+        echo "ERROR: File not found: $SRC"
+        exit 1
+    fi
+
+    if [[ -z "$NAME" ]]; then
+        NAME=$(basename "$SRC" .wav)
+    fi
+
+    mkdir -p "$ANNOUNCE_DIR"
+    DEST="$ANNOUNCE_DIR/${NAME}.wav"
+    cp "$SRC" "$DEST"
+    echo "Copied to: $DEST"
+
+    if grep -qF "$DEST" "$CONF_FILE" 2>/dev/null; then
+        echo "Already in rotation: $DEST"
+    else
+        sed -i "/^  Rotation:/a\\    - $DEST" "$CONF_FILE"
+        echo "Added to rotation: $DEST"
+        cmd_reload 2>/dev/null || true
+    fi
+}
+
+cmd_list() {
+    echo "=== Rotation ==="
+    if grep -qE '^\s+- .*\.wav' "$CONF_FILE" 2>/dev/null; then
+        grep -E '^\s+- .*\.wav' "$CONF_FILE" | sed 's/^[ \t]*- /  /'
+    else
+        echo "  (none)"
+    fi
+
+    echo ""
+    echo "=== Scheduled ==="
+    if grep -qE 'Name:' "$CONF_FILE" 2>/dev/null; then
+        grep -A3 'Name:' "$CONF_FILE" 2>/dev/null | grep -E 'Name:|Time:|Days:|File:' | \
+            sed 's/^[ \t]*/  /'
+    else
+        echo "  (none)"
+    fi
+}
+
+cmd_remove() {
+    need_root "$@"
+    NAME="$1"
+    if [[ -z "$NAME" ]]; then
+        echo "Usage: herald remove <name>"
+        exit 1
+    fi
+
+    if sed -i "/${NAME}/d" "$CONF_FILE"; then
+        echo "Removed entries matching '$NAME' from config."
+        cmd_reload 2>/dev/null || true
+    fi
+
+    WAVFILE="$ANNOUNCE_DIR/${NAME}.wav"
+    if [[ -f "$WAVFILE" ]]; then
+        rm -f "$WAVFILE"
+        echo "Deleted: $WAVFILE"
+    fi
+}
+
+cmd_play() {
+    need_root "$@"
+    NAME="$1"
+    if [[ -z "$NAME" ]]; then
+        echo "Usage: herald play <name>"
+        exit 1
+    fi
+
+    WAVFILE="$ANNOUNCE_DIR/${NAME}.wav"
+    if [[ ! -f "$WAVFILE" ]]; then
+        echo "ERROR: File not found: $WAVFILE"
+        exit 1
+    fi
+
+    NODE=$(get_node)
+    if [[ -z "$NODE" ]]; then
+        echo "ERROR: Node not set in config."
+        exit 1
+    fi
+
+    PATH_NO_EXT="${WAVFILE%.wav}"
+    echo "Playing $NAME on node $NODE ..."
+    asterisk -rx "rpt localplay $NODE $PATH_NO_EXT"
+}
+
+CMD="${1:-help}"
+shift || true
+
+case "$CMD" in
+    status)    cmd_status    "$@" ;;
+    enable)    cmd_enable    "$@" ;;
+    disable)   cmd_disable   "$@" ;;
+    reload)    cmd_reload    "$@" ;;
+    add)       cmd_add       "$@" ;;
+    add-file)  cmd_add_file  "$@" ;;
+    list)      cmd_list      "$@" ;;
+    remove)    cmd_remove    "$@" ;;
+    play)      cmd_play      "$@" ;;
+    help|--help|-h) usage ;;
+    *)
+        echo "Unknown command: $CMD"
+        usage
+        exit 1
+        ;;
+esac

@@ -1,0 +1,49 @@
+# asl3-herald.conf — Enhanced Tail Message & Announcement Daemon
+# Copy to /etc/asterisk/scripts/asl3-herald/asl3-herald.conf and edit.
+
+# Your ASL3 node number
+Node: "501260"
+
+# Poll interval in seconds (how often to check for unkeys)
+PollInterval: 2
+
+# Enable debug logging (set true only for troubleshooting)
+Debug: false
+
+TailMessage:
+  # Enable/disable the tail message function entirely
+  Enable: true
+
+  # Minimum seconds between tail messages (prevents rapid replay)
+  MinInterval: 300
+
+  # Blackout window — no tail messages between these times (24-hour HH:MM format)
+  # Leave both empty to disable blackout
+  BlackoutStart: "22:00"
+  BlackoutEnd:   "07:00"
+
+  # Rotating tail message files (played in order, then repeats)
+  Rotation:
+    - /etc/asterisk/scripts/asl3-herald/announcements/tail1.wav
+    # - /etc/asterisk/scripts/asl3-herald/announcements/tail2.wav
+
+  SkywarnPlus:
+    # Play the SkywarnPlus wx-tail.wav instead of rotation when WX alerts are active
+    # wx-tail.wav is a large file (>5000 bytes) when alerts are present, silent when not
+    Enable: true
+    WxTailFile: /tmp/SkywarnPlus/wx-tail.wav
+    # File size threshold to distinguish an active alert file from the silent placeholder
+    SilenceThreshold: 5000
+
+# Scheduled announcements — play at specific times, regardless of tail message interval
+# Days: "daily" or a list: ["saturday", "sunday"]  (case-insensitive)
+Scheduled:
+  - Name: "ARRL Audio News"
+    Time: "07:30"
+    Days: ["saturday"]
+    File: /etc/asterisk/scripts/asl3-herald/announcements/arrl-news.wav
+
+  # - Name: "Weekly Net Announcement"
+  #   Time: "19:45"
+  #   Days: ["thursday"]
+  #   File: /etc/asterisk/scripts/asl3-herald/announcements/net-announcement.wav
