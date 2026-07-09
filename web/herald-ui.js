@@ -77,6 +77,18 @@
     document.getElementById('hs-mininterval').textContent = data.tail_message.min_interval;
     document.getElementById('hs-swp').textContent = data.tail_message.skywarnplus.enable ? 'enabled' : 'disabled';
 
+    const heraldEnabled = !!data.herald_enabled;
+    const heraldStatusText = heraldEnabled ? 'enabled' : 'DISABLED';
+    const heraldStatusColor = heraldEnabled ? '#27ae60' : '#e74c3c';
+    const hsEnabled = document.getElementById('hs-enabled');
+    hsEnabled.textContent = heraldStatusText;
+    hsEnabled.style.color = heraldStatusColor;
+    hsEnabled.style.fontWeight = 'bold';
+    const setHeraldStatus = document.getElementById('set-herald-status');
+    setHeraldStatus.textContent = heraldStatusText;
+    setHeraldStatus.style.color = heraldStatusColor;
+    setHeraldStatus.style.fontWeight = 'bold';
+
     document.getElementById('set-node').value = data.node || '';
     document.getElementById('set-poll-interval').value = data.poll_interval;
     document.getElementById('set-min-interval').value = data.tail_message.min_interval;

@@ -17,10 +17,8 @@
     font-family: Arial, sans-serif;
     font-size: 16px;
     max-width: 900px;
-    margin: 0 auto;
     color: #222;
   }
-  #herald-ui h2 { margin-top: 0; }
   #herald-ui h3 { margin-bottom: 8px; }
   #herald-ui .card {
     background: #fff;
@@ -78,16 +76,11 @@
   #herald-ui .muted { color: #777; font-size: 0.95em; }
 </style>
 
-<h2>ASL3 Herald</h2>
-
 <div class="status-bar" id="herald-status-bar">
   <span><strong>Node:</strong> <span id="hs-node">—</span></span>
   <span><strong>MinInterval:</strong> <span id="hs-mininterval">—</span>s</span>
   <span><strong>SkywarnPlus:</strong> <span id="hs-swp">—</span></span>
-  <span>
-    <button class="btn-toggle" id="btn-toggle-enable">Enable/Disable</button>
-    <button id="btn-reload">Reload Config</button>
-  </span>
+  <span><strong>Herald:</strong> <span id="hs-enabled">—</span></span>
 </div>
 
 <div class="tabs">
@@ -199,6 +192,13 @@
 
 <!-- ════════════════════════ SETTINGS ════════════════════════ -->
 <div class="tab-panel" id="tab-settings">
+  <div class="card">
+    <h3>Herald Daemon</h3>
+    <p class="muted">Status: <span id="set-herald-status">—</span></p>
+    <button class="btn-toggle" id="btn-toggle-enable">Enable/Disable Herald</button>
+    <button id="btn-reload">Reload Config</button>
+  </div>
+
   <div class="card">
     <h3>General Settings</h3>
     <label>Node</label>

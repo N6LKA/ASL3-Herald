@@ -205,6 +205,7 @@ def cmd_list_json(config):
         "node": node,
         "poll_interval": poll,
         "debug": debug,
+        "herald_enabled": not os.path.exists(DISABLE_FLAG),
         "tail_message": {
             "enable": tm_on,
             "min_interval": min_int,

@@ -95,19 +95,24 @@ generate_tts_file() {
         local tmp_wav
         tmp_wav="$(mktemp --suffix=.wav)"
         export LD_LIBRARY_PATH="/opt/piper/bin:${LD_LIBRARY_PATH:-}"
-        echo "$text" | "$PIPER_BIN" --model "$model" --output_file "$tmp_wav" 2>/dev/null
-        sox "$tmp_wav" -r 8000 -c 1 -b 16 -t wav "$outfile"
+        # Piper prints its own status (including the --output_file path) to
+        # stdout, which would otherwise get captured by the "outfile=$(...)"
+        # call site along with our own final echo below - corrupting the
+        # returned path. Suppress it entirely; our own >&2 lines are the
+        # only intended diagnostic output.
+        echo "$text" | "$PIPER_BIN" --model "$model" --output_file "$tmp_wav" >/dev/null 2>&1
+        sox "$tmp_wav" -r 8000 -c 1 -b 16 -t wav "$outfile" >/dev/null 2>&1
         rm -f "$tmp_wav"
         echo "Generated with Piper TTS ($(basename "$model" .onnx)): $outfile" >&2
     elif command -v text2wave &>/dev/null && command -v sox &>/dev/null; then
         local tmp_wav
         tmp_wav="$(mktemp --suffix=.wav)"
-        echo "$text" | text2wave -o "$tmp_wav"
-        sox "$tmp_wav" -r 8000 -c 1 -b 16 -t wav "$outfile"
+        echo "$text" | text2wave -o "$tmp_wav" >/dev/null 2>&1
+        sox "$tmp_wav" -r 8000 -c 1 -b 16 -t wav "$outfile" >/dev/null 2>&1
         rm -f "$tmp_wav"
         echo "Generated with festival TTS: $outfile" >&2
     elif command -v espeak-ng &>/dev/null && command -v sox &>/dev/null; then
-        espeak-ng -s 140 -a 150 --stdout "$text" | sox -t wav - -r 8000 -c 1 -b 16 -t wav "$outfile"
+        espeak-ng -s 140 -a 150 --stdout "$text" 2>/dev/null | sox -t wav - -r 8000 -c 1 -b 16 -t wav "$outfile" >/dev/null 2>&1
         echo "Generated with espeak-ng TTS: $outfile" >&2
     else
         echo "ERROR: No TTS engine found. Install Piper (see install.sh), festival + sox, or espeak-ng + sox." >&2
@@ -126,7 +131,7 @@ slugify() {
     echo "$1" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | cut -c1-40
 }
 
-# ── General commands ───────────────────────────────────────────────────────
+# ── General commands ────────────────────────────────────────────────────
 
 cmd_status() {
     if systemctl is-active --quiet "$SERVICE"; then

@@ -16,6 +16,8 @@ include("session.inc");
 include("header.inc");
 ?>
 
+<h2 style="margin: 12px 16px 0;">ASL3 Herald &mdash; Announcement Settings</h2>
+
 <?php if (isset($_SESSION['sm61loggedin']) && $_SESSION['sm61loggedin'] === true): ?>
     <?php include __DIR__ . '/../asl3-herald/herald-ui-fragment.php'; ?>
     <script src="/asl3-herald/herald-ui.js"></script>
