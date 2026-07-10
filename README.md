@@ -1,4 +1,4 @@
-# asl3-herald
+![asl3-herald](web/img/asl3-herald-banner.svg)
 
 ![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![Release Date](https://img.shields.io/badge/released-2026--07--09-green)
@@ -255,6 +255,7 @@ journalctl -u asl3-herald -f          # Follow live log output
 | `/etc/asterisk/scripts/asl3-herald/announcements/` | Announcement WAV files |
 | `/etc/systemd/system/asl3-herald.service` | systemd service unit |
 | `/var/www/html/asl3-herald/` | Shared UI fragment/JS and JSON API (PHP) |
+| `/var/www/html/asl3-herald/img/` | Logo assets (icon + banner), used by the Allmon3/Supermon page headers |
 | `/usr/share/allmon3/asl3-herald.html` | Allmon3 entry point (installed alongside Allmon3's own `index.html`) |
 | `/var/www/html/supermon/asl3-herald.php` | Supermon entry point (installed alongside Supermon's own `index.php`) |
 | `install.sh` / `uninstall.sh` (repo root) | Installer / uninstaller — not installed on the node itself |

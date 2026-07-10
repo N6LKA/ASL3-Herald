@@ -165,15 +165,18 @@ if [[ ! -d /etc/allmon3 && ! -d /var/www/html/supermon ]]; then
 fi
 
 info "Installing web UI to $WEB_DIR ..."
-mkdir -p "$WEB_DIR/api"
+mkdir -p "$WEB_DIR/api" "$WEB_DIR/img"
 for f in herald-common.php herald-ui-fragment.php herald-ui.js; do
     curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/$f" -o "$WEB_DIR/$f"
 done
-for f in list.php voices.php play.php reload.php toggle.php remove.php add_rotation.php add_scheduled.php settings.php; do
+for f in list.php voices.php play.php reload.php toggle.php remove.php add_rotation.php add_scheduled.php edit_rotation.php edit_scheduled.php settings.php; do
     curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/api/$f" -o "$WEB_DIR/api/$f"
 done
+for f in asl3-herald-icon.svg asl3-herald-banner.svg; do
+    curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/img/$f" -o "$WEB_DIR/img/$f"
+done
 chown -R www-data:www-data "$WEB_DIR"
-find "$WEB_DIR" -type f \( -name "*.php" -o -name "*.inc" -o -name "*.js" \) -exec chmod 644 {} \;
+find "$WEB_DIR" -type f \( -name "*.php" -o -name "*.inc" -o -name "*.js" -o -name "*.svg" \) -exec chmod 644 {} \;
 
 info "Writing sudoers rule for www-data (herald command only) ..."
 cat > "$SUDOERS_WEB" << EOF
