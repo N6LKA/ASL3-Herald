@@ -201,15 +201,19 @@ def entry_time_window_ok(entry, now):
         return hhmm >= start
     return hhmm <= end
 
-def rotation_entry_eligible(entry, now, node):
+def rotation_entry_eligible(entry, now):
+    # Node is a playback-target override (see rotation_entry_node()), not an
+    # eligibility gate - an entry with Node set still plays on its normal
+    # schedule, just directed at a different node number.
     if not entry_days_ok(entry, now):
         return False
     if not entry_time_window_ok(entry, now):
         return False
-    entry_node = entry.get("Node") if isinstance(entry, dict) else None
-    if entry_node and str(entry_node) != str(node):
-        return False
     return True
+
+def rotation_entry_node(entry, node):
+    entry_node = entry.get("Node") if isinstance(entry, dict) else None
+    return str(entry_node) if entry_node else node
 
 def scheduled_time_matches(sched, now):
     if now.strftime("%H:%M") != sched.get("Time", ""):
@@ -763,13 +767,14 @@ def main():
                             elif rotation and state.get("swp_next_is_rotation"):
                                 # Same alert as before - alternate with the rotation
                                 # instead of playing the WX tail on every unkey.
-                                eligible = [e for e in rotation if rotation_entry_eligible(e, now_dt, node)]
+                                eligible = [e for e in rotation if rotation_entry_eligible(e, now_dt)]
                                 if eligible:
                                     idx      = state["rotation_index"] % len(eligible)
-                                    filepath = rotation_entry_file(eligible[idx])
+                                    entry    = eligible[idx]
+                                    filepath = rotation_entry_file(entry)
                                     if os.path.exists(filepath):
                                         log_info(f"Playing rotation [{idx + 1}/{len(eligible)}] (alternating with active WX alert): {Path(filepath).name}")
-                                        play_file(node, filepath)
+                                        play_file(rotation_entry_node(entry, node), filepath)
                                         state["rotation_index"]       = (idx + 1) % len(eligible)
                                         state["swp_next_is_rotation"] = False
                                         state["last_tail_played"]     = now
@@ -793,13 +798,14 @@ def main():
                                 save_state(state)
 
                         elif rotation:
-                            eligible = [e for e in rotation if rotation_entry_eligible(e, now_dt, node)]
+                            eligible = [e for e in rotation if rotation_entry_eligible(e, now_dt)]
                             if eligible:
                                 idx      = state["rotation_index"] % len(eligible)
-                                filepath = rotation_entry_file(eligible[idx])
+                                entry    = eligible[idx]
+                                filepath = rotation_entry_file(entry)
                                 if os.path.exists(filepath):
                                     log_info(f"Playing rotation [{idx + 1}/{len(eligible)}]: {Path(filepath).name}")
-                                    play_file(node, filepath)
+                                    play_file(rotation_entry_node(entry, node), filepath)
                                     state["rotation_index"]   = (idx + 1) % len(eligible)
                                     state["last_tail_played"] = now
                                     save_state(state)
