@@ -18,13 +18,18 @@
   - **Reliable unkey detection** — polls the `rpt stats` kerchunk counter every second (configurable via `PollInterval`) to detect transmissions; not dependent on the inconsistent native tail message trigger
   - **Rotating messages** — cycles through a list of announcement files in order with a configurable minimum interval between plays
   - **SkywarnPlus WX integration** — when weather alerts are active, plays the SkywarnPlus `wx-tail.wav` file instead of the normal rotation (WX always takes priority)
+  - **Optional day/time-window gating per entry** — a rotation entry can be restricted to specific days of the week and/or a time-of-day window (e.g. a net-announcement tail message that's only eligible Tuesday evenings); entries without gating stay eligible all the time, same as before
 
 - **Scheduled Announcements** — clock-triggered, independent of repeater activity:
   - Plays a specific file at a configured time of day, on selected days of the week
   - Optional nth-week-of-month scheduling (e.g. "2nd Saturday of the month")
   - **Local or global playback** — each scheduled announcement can play locally on this node only (`rpt localplay`, the default) or globally to all connected/linked nodes (`rpt playback`)
+  - **Waits for unkey** — if the node is currently keyed when a scheduled announcement is due, it holds off rather than playing over live traffic, and keeps checking every poll until the node unkeys
+  - **Takes precedence over tail messages** — if a scheduled announcement and a tail message would both fire at the same moment, the scheduled announcement always plays; the tail message simply retries on its next unkey once the announcement has finished, with no penalty against `MinInterval`
 
 Both Tail Messages and Scheduled Announcements can be edited in place (name, text, voice, schedule, play mode) via `herald edit-rotation` / `herald edit-schedule` or the web UI, instead of removing and re-adding.
+
+**Node targeting for `multinodes=` setups:** any rotation or scheduled entry can optionally carry a `Node` override, targeting a specific node number for playback instead of the daemon's own configured `Node` — useful when one AMI connection serves several node numbers (Allmon3's `multinodes=`) and you want a given announcement to go out on a particular one.
 
 Plus:
 - **Piper neural TTS** — generate announcements from text with natural-sounding voices (6 included), with festival/espeak-ng as a fallback
@@ -41,6 +46,12 @@ curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/
 ```
 
 (The `sudo bash <(curl ...)` process-substitution form is equivalent but fails with `/dev/fd/63: No such file or directory` on some systems, depending on shell/PAM config — the piped form above avoids that entirely.)
+
+**Testing unreleased changes from `develop`:** pass `--branch develop` as a script argument (not an environment variable — those don't reliably survive the `sudo` call on a piped command):
+
+```bash
+curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/develop/install.sh | sudo bash -s -- --branch develop
+```
 
 The installer will:
 1. Install `python3-yaml`, `sox`, and `libsox-fmt-mp3` if not already present
@@ -86,7 +97,10 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 | `Debug` | `false` | Enable verbose debug logging |
 | `TailMessage.Enable` | `true` | Enable/disable tail message function |
 | `TailMessage.MinInterval` | `300` | Minimum seconds between tail messages |
-| `TailMessage.Rotation` | _(empty)_ | List of WAV file paths to rotate through |
+| `TailMessage.Rotation` | _(empty)_ | List of rotation entries (WAV file paths, or dicts with `File` plus optional `Days`/`TimeStart`/`TimeEnd`/`Node`) |
+| `TailMessage.Rotation[].Days` | _(always eligible)_ | Optional: `daily` (default) or a list, e.g. `[tuesday]` — restricts this entry to those days |
+| `TailMessage.Rotation[].TimeStart` / `TimeEnd` | _(none)_ | Optional: `HH:MM` window this entry is eligible in; omit either side for open-ended |
+| `TailMessage.Rotation[].Node` | _(daemon's `Node`)_ | Optional: target a specific node number for this entry (multinodes= setups) |
 | `TailMessage.SkywarnPlus.Enable` | `true` | Enable SkywarnPlus WX tail integration |
 | `TailMessage.SkywarnPlus.WxTailFile` | `/tmp/SkywarnPlus/wx-tail.wav` | Path to SkywarnPlus wx-tail.wav |
 | `TailMessage.SkywarnPlus.SilenceThreshold` | `5000` | File size (bytes) to distinguish active alerts from silence |
@@ -96,6 +110,7 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 | `Scheduled[].Week` | _(none)_ | Optional: 1-5 (5 = last week of month); omit for every matching day |
 | `Scheduled[].File` | _(required)_ | Path to WAV file to play |
 | `Scheduled[].PlayMode` | `local` | `local` (this node only) or `global` (all connected/linked nodes) |
+| `Scheduled[].Node` | _(daemon's `Node`)_ | Optional: target a specific node number for this entry (multinodes= setups) |
 
 **Example config:**
 
@@ -147,20 +162,24 @@ Scheduled:
 
 | Command | Description |
 |---|---|
-| `sudo herald add "<text>" [--name <name>] [--voice <voice>]` | Generate TTS WAV and add to rotation |
-| `sudo herald add-file <path> [--name <name>]` | Copy an existing WAV into rotation |
-| `sudo herald edit-rotation <name> [--new-name <n>] [--text "<text>"] [--voice <v>] [--file <path>]` | Edit an existing rotation entry in place |
+| `sudo herald add "<text>" [--name <name>] [--voice <voice>] [--days daily\|d1,d2] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]` | Generate TTS WAV and add to rotation |
+| `sudo herald add-file <path> [--name <name>] [--days daily\|d1,d2] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]` | Copy an existing WAV into rotation |
+| `sudo herald edit-rotation <name> [--new-name <n>] [--text "<text>"] [--voice <v>] [--file <path>] [--days ...] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]` | Edit an existing rotation entry in place |
 | `herald list` | List rotation + scheduled announcements |
 | `sudo herald remove <name>` | Remove a rotation file or scheduled announcement |
 | `sudo herald play <name>` | Play an announcement on the node immediately |
+
+`--days`/`--time-start`/`--time-end` restrict a rotation entry to specific days-of-week and/or a time-of-day window; leave unset for an entry that's always eligible. `--node` targets a specific node number instead of the daemon's configured `Node`.
 
 **Scheduled Announcements:**
 
 | Command | Description |
 |---|---|
-| `sudo herald add-schedule "<text>" --name <name> --time HH:MM [--days daily\|d1,d2] [--week 1-5] [--voice <voice>] [--play-mode local\|global]` | Generate TTS WAV and schedule it |
-| `sudo herald add-schedule-file <path> --name <name> --time HH:MM [--days daily\|d1,d2] [--week 1-5] [--play-mode local\|global]` | Schedule an existing WAV file |
-| `sudo herald edit-schedule <name> [--new-name <n>] [--time HH:MM] [--days ...] [--week 1-5] [--play-mode local\|global] [--text "<text>"] [--voice <v>] [--file <path>]` | Edit an existing scheduled announcement in place |
+| `sudo herald add-schedule "<text>" --name <name> --time HH:MM [--days daily\|d1,d2] [--week 1-5] [--voice <voice>] [--play-mode local\|global] [--node <n>]` | Generate TTS WAV and schedule it |
+| `sudo herald add-schedule-file <path> --name <name> --time HH:MM [--days daily\|d1,d2] [--week 1-5] [--play-mode local\|global] [--node <n>]` | Schedule an existing WAV file |
+| `sudo herald edit-schedule <name> [--new-name <n>] [--time HH:MM] [--days ...] [--week 1-5] [--play-mode local\|global] [--text "<text>"] [--voice <v>] [--file <path>] [--node <n>]` | Edit an existing scheduled announcement in place |
+
+A scheduled announcement waits for the node to unkey before playing (rather than interrupting live traffic) and always takes precedence over a tail message due at the same moment.
 
 ---
 
@@ -244,16 +263,17 @@ journalctl -u asl3-herald -f          # Follow live log output
 
 `asl3-herald` polls `asterisk -rx "rpt stats <node>"` every second (configurable via `PollInterval`) and watches the **Kerchunks today** counter. Each time a transmission ends (unkey), the counter increments by one. This is the same reliable method used by other ASL3 monitoring tools such as `asl3-link-activity-monitor`.
 
-When an unkey is detected, the daemon checks in priority order:
+Every poll, **scheduled announcements are checked first**, before the unkey/tail-message logic. When an unkey is detected, the daemon then checks in priority order:
 1. **Minimum interval** — if not enough time has passed since the last tail message, skip
-2. **SkywarnPlus WX alert** — if the `wx-tail.wav` file is larger than `SilenceThreshold` bytes, an alert is active
-3. **Rotation** — otherwise, play the next file in the rotation list and advance the index
+2. **Scheduled announcement in progress** — if one just started playing (see below), skip this unkey; it isn't counted against `MinInterval`, so the tail message simply retries on the next unkey
+3. **SkywarnPlus WX alert** — if the `wx-tail.wav` file is larger than `SilenceThreshold` bytes, an alert is active
+4. **Rotation** — otherwise, play the next *eligible* file in the rotation list (skipping any with `Days`/`TimeStart`/`TimeEnd` gating that doesn't currently match) and advance the index
 
 A newly-appeared or changed WX alert always plays immediately, taking priority over the rotation. But a **persistent** alert (unchanged since it last played — detected via `wx-tail.wav`'s own modification time, not a separate/optional SkywarnPlus feed) alternates with the rotation on each unkey instead of playing every single time, so a long-running alert (common in some areas, e.g. summer heat warnings) doesn't shut the rotation out entirely. As soon as the alert changes or a new one appears, it immediately jumps back to the front of the line.
 
-**Scheduled announcements** run on a separate time-based path, unaffected by the tail message interval or repeater activity. They fire once per configured `HH:MM` per day, optionally restricted to a specific week of the month via `Week`.
+**Scheduled announcements** run on a separate time-based path, unaffected by the tail message interval or repeater activity. They fire once per configured `HH:MM` per day, optionally restricted to a specific week of the month via `Week`. If the node is currently keyed when a scheduled announcement is due (checked via `rpt stats`'s "Signal on input" field), it holds off and keeps re-checking every poll — even after the matching minute has passed — until the node unkeys, rather than missing the announcement or talking over live traffic. Once a scheduled announcement plays, its estimated audio duration (via `soxi`, or an 8-second fallback estimate) holds off any tail message for that long, so the two never overlap — this is also how a scheduled announcement takes precedence when both would fire at the same moment.
 
-State (rotation index, WX alternation, and last played time) is saved to a JSON file so it survives service restarts.
+State (rotation index, WX alternation, scheduled "waiting for unkey" status, and last played times) is saved to a JSON file so it survives service restarts.
 
 ---
 

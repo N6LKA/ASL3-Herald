@@ -7,6 +7,7 @@ $days      = $_POST['days'] ?? 'daily';
 $week      = $_POST['week'] ?? '';
 $play_mode = $_POST['play_mode'] ?? 'local';
 $mode      = $_POST['mode'] ?? '';
+$node      = trim($_POST['node'] ?? '');
 
 if (!herald_valid_name($name)) {
     herald_json_response(['success' => false, 'message' => 'Invalid or missing name'], 400);
@@ -25,6 +26,9 @@ if (!preg_match('/^[a-z,]+$/', $days)) {
 if (!in_array($play_mode, ['local', 'global'], true)) {
     herald_json_response(['success' => false, 'message' => 'Invalid play mode'], 400);
 }
+if ($node !== '' && !preg_match('/^[0-9]+$/', $node)) {
+    herald_json_response(['success' => false, 'message' => 'Invalid node number'], 400);
+}
 
 if ($mode === 'tts') {
     $text  = trim($_POST['text'] ?? '');
@@ -35,6 +39,7 @@ if ($mode === 'tts') {
     $args = ['add-schedule', $text, '--name', $name, '--time', $time, '--days', $days, '--play-mode', $play_mode];
     if ($week !== '') { $args[] = '--week'; $args[] = $week; }
     if ($voice !== '') { $args[] = '--voice'; $args[] = $voice; }
+    if ($node !== '') { $args[] = '--node'; $args[] = $node; }
     herald_respond_from_cli(herald_run_sudo($args));
 
 } elseif ($mode === 'file') {
@@ -47,6 +52,7 @@ if ($mode === 'tts') {
     }
     $args = ['add-schedule-file', $converted, '--name', $name, '--time', $time, '--days', $days, '--play-mode', $play_mode];
     if ($week !== '') { $args[] = '--week'; $args[] = $week; }
+    if ($node !== '') { $args[] = '--node'; $args[] = $node; }
     $result = herald_run_sudo($args);
     @unlink($converted);
     herald_respond_from_cli($result);

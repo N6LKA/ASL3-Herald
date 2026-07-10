@@ -25,25 +25,41 @@ General:
   help                                    Show this message
 
 Tail Messages (unkey-triggered rotation):
-  add "<text>" [--name <name>] [--voice <voice>]
+  add "<text>" [--name <name>] [--voice <voice>] [--days daily|d1,d2]
+      [--time-start HH:MM] [--time-end HH:MM] [--node <n>]
                                            Generate TTS announcement and add to rotation
-  add-file <path> [--name <name>]         Copy an existing WAV file into rotation
+  add-file <path> [--name <name>] [--days daily|d1,d2] [--time-start HH:MM]
+           [--time-end HH:MM] [--node <n>]
+                                           Copy an existing WAV file into rotation
   edit-rotation <name> [--new-name <n>] [--text "<text>"] [--voice <v>] [--file <path>]
+                [--days daily|d1,d2] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]
                                            Edit an existing rotation entry
   list                                    List rotation + scheduled announcements
   remove <name>                           Remove a rotation file or scheduled announcement
   play <name>                             Play an announcement immediately on the node
 
+  --days/--time-start/--time-end optionally restrict a rotation entry to only
+  be eligible during specific days-of-week and/or a time-of-day window (e.g. a
+  net-announcement tail message only eligible on Tuesday evenings). Leave unset
+  for a message that's always eligible, like before. --node targets a specific
+  node number instead of the daemon's configured Node (for multinodes= setups
+  where one AMI connection serves several node numbers).
+
 Scheduled Announcements (clock-triggered):
   add-schedule "<text>" --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5]
-               [--voice <voice>] [--play-mode local|global]
+               [--voice <voice>] [--play-mode local|global] [--node <n>]
                                            Generate TTS announcement and schedule it
   add-schedule-file <path> --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5]
-                     [--play-mode local|global]
+                     [--play-mode local|global] [--node <n>]
                                            Schedule an existing WAV file
   edit-schedule <name> [--new-name <n>] [--time HH:MM] [--days ...] [--week 1-5]
                 [--play-mode local|global] [--text "<text>"] [--voice <v>] [--file <path>]
+                [--node <n>]
                                            Edit an existing scheduled announcement
+
+  A scheduled announcement waits for the node to unkey before playing if it's
+  currently keyed (rather than playing over live traffic), and always takes
+  precedence over a tail message due at the same moment.
 
 Settings:
   update-settings [--node <n>] [--poll-interval <n>] [--debug true|false]
@@ -252,17 +268,21 @@ cmd_voices() {
 
 cmd_add() {
     need_root "$@"
-    local text="" name="" voice=""
+    local text="" name="" voice="" days="daily" time_start="" time_end="" node=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --name)  name="$2";  shift 2 ;;
-            --voice) voice="$2"; shift 2 ;;
+            --name)       name="$2";  shift 2 ;;
+            --voice)      voice="$2"; shift 2 ;;
+            --days)       days="$2";  shift 2 ;;
+            --time-start) time_start="$2"; shift 2 ;;
+            --time-end)   time_end="$2";   shift 2 ;;
+            --node)       node="$2";  shift 2 ;;
             *) text="$1"; shift ;;
         esac
     done
 
     if [[ -z "$text" ]]; then
-        echo "Usage: herald add \"<text>\" [--name <name>] [--voice <voice>]"
+        echo "Usage: herald add \"<text>\" [--name <name>] [--voice <voice>] [--days daily|d1,d2] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]"
         exit 1
     fi
     [[ -z "$name" ]] && name="$(slugify "$text")"
@@ -270,24 +290,31 @@ cmd_add() {
     local outfile
     outfile="$(generate_tts_file "$text" "$name" "$voice")" || exit 1
 
-    local args=(add-rotation "$outfile" --text "$text")
+    local args=(add-rotation "$outfile" --text "$text" --days "$days")
     [[ -n "$voice" ]] && args+=(--voice "$voice")
+    [[ -n "$time_start" ]] && args+=(--time-start "$time_start")
+    [[ -n "$time_end" ]] && args+=(--time-end "$time_end")
+    [[ -n "$node" ]] && args+=(--node "$node")
     python3 "$DAEMON_PY" "${args[@]}"
     cmd_reload 2>/dev/null || true
 }
 
 cmd_add_file() {
     need_root "$@"
-    local src="" name=""
+    local src="" name="" days="daily" time_start="" time_end="" node=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --name) name="$2"; shift 2 ;;
+            --name)       name="$2"; shift 2 ;;
+            --days)       days="$2"; shift 2 ;;
+            --time-start) time_start="$2"; shift 2 ;;
+            --time-end)   time_end="$2";   shift 2 ;;
+            --node)       node="$2"; shift 2 ;;
             *) src="$1"; shift ;;
         esac
     done
 
     if [[ -z "$src" ]]; then
-        echo "Usage: herald add-file <path> [--name <name>]"
+        echo "Usage: herald add-file <path> [--name <name>] [--days daily|d1,d2] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]"
         exit 1
     fi
     if [[ ! -f "$src" ]]; then
@@ -301,25 +328,35 @@ cmd_add_file() {
     cp "$src" "$dest"
     echo "Copied to: $dest"
 
-    python3 "$DAEMON_PY" add-rotation "$dest"
+    local args=(add-rotation "$dest" --days "$days")
+    [[ -n "$time_start" ]] && args+=(--time-start "$time_start")
+    [[ -n "$time_end" ]] && args+=(--time-end "$time_end")
+    [[ -n "$node" ]] && args+=(--node "$node")
+    python3 "$DAEMON_PY" "${args[@]}"
     cmd_reload 2>/dev/null || true
 }
 
 cmd_edit_rotation() {
     need_root "$@"
     local old_name="" new_name="" text="" voice="" file="" has_text=false has_file=false
+    local days="" time_start="" time_end="" node=""
+    local has_days=false has_time_start=false has_time_end=false has_node=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --new-name) new_name="$2"; shift 2 ;;
-            --text)     text="$2"; has_text=true; shift 2 ;;
-            --voice)    voice="$2"; shift 2 ;;
-            --file)     file="$2"; has_file=true; shift 2 ;;
+            --new-name)   new_name="$2"; shift 2 ;;
+            --text)       text="$2"; has_text=true; shift 2 ;;
+            --voice)      voice="$2"; shift 2 ;;
+            --file)       file="$2"; has_file=true; shift 2 ;;
+            --days)       days="$2"; has_days=true; shift 2 ;;
+            --time-start) time_start="$2"; has_time_start=true; shift 2 ;;
+            --time-end)   time_end="$2"; has_time_end=true; shift 2 ;;
+            --node)       node="$2"; has_node=true; shift 2 ;;
             *) old_name="$1"; shift ;;
         esac
     done
 
     if [[ -z "$old_name" ]]; then
-        echo 'Usage: herald edit-rotation <name> [--new-name <n>] [--text "<text>"] [--voice <v>] [--file <path>]'
+        echo 'Usage: herald edit-rotation <name> [--new-name <n>] [--text "<text>"] [--voice <v>] [--file <path>] [--days daily|d1,d2] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]'
         exit 1
     fi
     [[ -z "$new_name" ]] && new_name="$old_name"
@@ -342,6 +379,10 @@ cmd_edit_rotation() {
     local args=(edit-rotation "$old_name" --new-name "$new_name" --file "$new_wav")
     $has_text && args+=(--text "$text")
     [[ -n "$voice" ]] && args+=(--voice "$voice")
+    $has_days       && args+=(--days "$days")
+    $has_time_start && args+=(--time-start "$time_start")
+    $has_time_end   && args+=(--time-end "$time_end")
+    $has_node       && args+=(--node "$node")
     python3 "$DAEMON_PY" "${args[@]}"
     cmd_reload 2>/dev/null || true
 }
@@ -361,8 +402,21 @@ d = json.load(sys.stdin)
 rot = d['tail_message']['rotation']
 if not rot:
     print('  (none)')
-for i, f in enumerate(rot, 1):
-    print(f'  {i}. {f}')
+for i, e in enumerate(rot, 1):
+    f = e.get('File', '') if isinstance(e, dict) else e
+    tags = []
+    days = e.get('Days') if isinstance(e, dict) else None
+    if days and days != 'daily':
+        tags.append(','.join(days) if isinstance(days, list) else days)
+    start = e.get('TimeStart') if isinstance(e, dict) else None
+    end = e.get('TimeEnd') if isinstance(e, dict) else None
+    if start or end:
+        tags.append(f\"{start or '00:00'}-{end or '23:59'}\")
+    node = e.get('Node') if isinstance(e, dict) else None
+    if node:
+        tags.append(f'node {node}')
+    suffix = f\" ({'; '.join(tags)})\" if tags else ''
+    print(f'  {i}. {f}{suffix}')
 "
 
     echo ""
@@ -377,7 +431,8 @@ for s in sched:
     days = s.get('Days', 'daily')
     days = days if isinstance(days, str) else ','.join(days)
     week = f\" (week {s['Week']})\" if s.get('Week') else ''
-    print(f\"  {s.get('Name','?')} — {s.get('Time','?')} {days}{week} — {s.get('File','?')}\")
+    node = f\" [node {s['Node']}]\" if s.get('Node') else ''
+    print(f\"  {s.get('Name','?')} — {s.get('Time','?')} {days}{week}{node} — {s.get('File','?')}\")
 "
 }
 
@@ -419,18 +474,26 @@ cmd_play() {
         exit 1
     fi
 
+    local info
+    info="$(daemon_list_json)"
     local node
-    node="$(get_node)"
+    node="$(echo "$info" | json_get "d['node']")"
     if [[ -z "$node" ]]; then
         echo "ERROR: Node not set in config."
         exit 1
     fi
 
     # Rotation entries always play locally; a scheduled announcement may be
-    # configured for global (network-wide) playback instead.
+    # configured for global (network-wide) playback instead. Either kind of
+    # entry may also carry a Node override (targets a specific node number
+    # instead of the daemon's default, for multinodes= setups).
     local play_mode
-    play_mode="$(daemon_list_json | json_get "next((s.get('PlayMode','local') for s in d['scheduled'] if s.get('Name')=='$name'), 'local')")"
+    play_mode="$(echo "$info" | json_get "next((s.get('PlayMode','local') for s in d['scheduled'] if s.get('Name')=='$name'), 'local')")"
     [[ -z "$play_mode" ]] && play_mode="local"
+
+    local entry_node
+    entry_node="$(echo "$info" | json_get "next((s.get('Node') for s in d['scheduled'] if s.get('Name')=='$name' and s.get('Node')), next((r.get('Node') for r in d['tail_message']['rotation'] if isinstance(r, dict) and r.get('File')=='$wavfile' and r.get('Node')), ''))")"
+    [[ -n "$entry_node" ]] && node="$entry_node"
 
     local rpt_cmd="rpt localplay"
     [[ "$play_mode" == "global" ]] && rpt_cmd="rpt playback"
@@ -443,9 +506,9 @@ cmd_play() {
 # ── Scheduled announcement commands ───────────────────────────────────────────
 
 parse_schedule_opts() {
-    # Parses --name --time --days --week --play-mode from "$@", leaving the
-    # remainder (text or filepath) in REMAINDER.
-    name="" time="" days="daily" week="" play_mode=""
+    # Parses --name --time --days --week --play-mode --node from "$@",
+    # leaving the remainder (text or filepath) in REMAINDER.
+    name="" time="" days="daily" week="" play_mode="" node=""
     REMAINDER=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -455,6 +518,7 @@ parse_schedule_opts() {
             --week)      week="$2";  shift 2 ;;
             --voice)     voice="$2"; shift 2 ;;
             --play-mode) play_mode="$2"; shift 2 ;;
+            --node)      node="$2"; shift 2 ;;
             *) REMAINDER+=("$1"); shift ;;
         esac
     done
@@ -462,12 +526,12 @@ parse_schedule_opts() {
 
 cmd_add_schedule() {
     need_root "$@"
-    local name time days week voice play_mode
+    local name time days week voice play_mode node
     parse_schedule_opts "$@"
     local text="${REMAINDER[*]}"
 
     if [[ -z "$text" || -z "$name" || -z "$time" ]]; then
-        echo 'Usage: herald add-schedule "<text>" --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5] [--voice <voice>] [--play-mode local|global]'
+        echo 'Usage: herald add-schedule "<text>" --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5] [--voice <voice>] [--play-mode local|global] [--node <n>]'
         exit 1
     fi
 
@@ -478,18 +542,19 @@ cmd_add_schedule() {
     [[ -n "$week" ]] && args+=(--week "$week")
     [[ -n "$voice" ]] && args+=(--voice "$voice")
     [[ -n "$play_mode" ]] && args+=(--play-mode "$play_mode")
+    [[ -n "$node" ]] && args+=(--node "$node")
     python3 "$DAEMON_PY" "${args[@]}"
     cmd_reload 2>/dev/null || true
 }
 
 cmd_add_schedule_file() {
     need_root "$@"
-    local name time days week voice play_mode
+    local name time days week voice play_mode node
     parse_schedule_opts "$@"
     local src="${REMAINDER[0]:-}"
 
     if [[ -z "$src" || -z "$name" || -z "$time" ]]; then
-        echo "Usage: herald add-schedule-file <path> --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5] [--play-mode local|global]"
+        echo "Usage: herald add-schedule-file <path> --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5] [--play-mode local|global] [--node <n>]"
         exit 1
     fi
     if [[ ! -f "$src" ]]; then
@@ -505,14 +570,15 @@ cmd_add_schedule_file() {
     local args=(add-scheduled --name "$name" --time "$time" --days "$days" --file "$dest")
     [[ -n "$week" ]] && args+=(--week "$week")
     [[ -n "$play_mode" ]] && args+=(--play-mode "$play_mode")
+    [[ -n "$node" ]] && args+=(--node "$node")
     python3 "$DAEMON_PY" "${args[@]}"
     cmd_reload 2>/dev/null || true
 }
 
 cmd_edit_schedule() {
     need_root "$@"
-    local old_name="" new_name="" time="" days="" week="" play_mode="" text="" voice="" file=""
-    local has_text=false has_file=false has_time=false has_days=false has_week=false has_playmode=false
+    local old_name="" new_name="" time="" days="" week="" play_mode="" text="" voice="" file="" node=""
+    local has_text=false has_file=false has_time=false has_days=false has_week=false has_playmode=false has_node=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --new-name)  new_name="$2"; shift 2 ;;
@@ -523,12 +589,13 @@ cmd_edit_schedule() {
             --text)      text="$2"; has_text=true; shift 2 ;;
             --voice)     voice="$2"; shift 2 ;;
             --file)      file="$2"; has_file=true; shift 2 ;;
+            --node)      node="$2"; has_node=true; shift 2 ;;
             *) old_name="$1"; shift ;;
         esac
     done
 
     if [[ -z "$old_name" ]]; then
-        echo 'Usage: herald edit-schedule <name> [--new-name <n>] [--time HH:MM] [--days ...] [--week 1-5] [--play-mode local|global] [--text "<text>"] [--voice <v>] [--file <path>]'
+        echo 'Usage: herald edit-schedule <name> [--new-name <n>] [--time HH:MM] [--days ...] [--week 1-5] [--play-mode local|global] [--text "<text>"] [--voice <v>] [--file <path>] [--node <n>]'
         exit 1
     fi
     [[ -z "$new_name" ]] && new_name="$old_name"
@@ -560,6 +627,7 @@ cmd_edit_schedule() {
     $has_text     && args+=(--text "$text")
     [[ -n "$voice" ]] && args+=(--voice "$voice")
     [[ -n "$final_file" ]] && args+=(--file "$final_file")
+    $has_node     && args+=(--node "$node")
 
     python3 "$DAEMON_PY" "${args[@]}"
     cmd_reload 2>/dev/null || true

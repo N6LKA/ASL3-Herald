@@ -8,6 +8,7 @@ $days      = $_POST['days'] ?? 'daily';
 $week      = $_POST['week'] ?? '';
 $play_mode = $_POST['play_mode'] ?? 'local';
 $mode      = $_POST['mode'] ?? '';
+$node      = trim($_POST['node'] ?? '');
 
 if (!herald_valid_name($old_name) || !herald_valid_name($name)) {
     herald_json_response(['success' => false, 'message' => 'Invalid or missing name'], 400);
@@ -24,11 +25,14 @@ if (!preg_match('/^[a-z,]+$/', $days)) {
 if (!in_array($play_mode, ['local', 'global'], true)) {
     herald_json_response(['success' => false, 'message' => 'Invalid play mode'], 400);
 }
+if ($node !== '' && !preg_match('/^[0-9]+$/', $node)) {
+    herald_json_response(['success' => false, 'message' => 'Invalid node number'], 400);
+}
 
-// --week is always passed (even empty) so an edit can explicitly clear a
-// previously-set week-of-month back to "every week" - add_scheduled.php
-// only omits it when empty because there's nothing to clear on a new entry.
-$base_args = ['edit-schedule', $old_name, '--new-name', $name, '--time', $time, '--days', $days, '--play-mode', $play_mode, '--week', $week];
+// --week and --node are always passed (even empty) so an edit can explicitly
+// clear a previously-set value back to the default - add_scheduled.php only
+// omits them when empty because there's nothing to clear on a new entry.
+$base_args = ['edit-schedule', $old_name, '--new-name', $name, '--time', $time, '--days', $days, '--play-mode', $play_mode, '--week', $week, '--node', $node];
 
 if ($mode === 'tts') {
     $text  = trim($_POST['text'] ?? '');

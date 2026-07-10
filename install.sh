@@ -3,10 +3,24 @@
 # Usage: curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/install.sh | sudo bash
 #   (the "sudo bash <(curl ...)" process-substitution form fails with
 #    /dev/fd/63: No such file or directory on some systems — pipe instead)
+#
+# To test unreleased changes from the develop branch instead of main:
+#   curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/develop/install.sh | sudo bash -s -- --branch develop
+#   (pass --branch as a script argument, not an env var - env vars set before
+#    "sudo" on a piped command don't reliably survive the sudo call on every
+#    system, but args after "bash -s --" always do)
 
 set -euo pipefail
 
-REPO_RAW="https://raw.githubusercontent.com/N6LKA/asl3-herald/main"
+BRANCH="main"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --branch) BRANCH="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+
+REPO_RAW="https://raw.githubusercontent.com/N6LKA/asl3-herald/${BRANCH}"
 INSTALL_DIR="/usr/local/bin/asl3-herald"
 CONFIG_DIR="/etc/asterisk/scripts/asl3-herald"
 ANNOUNCE_DIR="$CONFIG_DIR/announcements"
@@ -25,6 +39,7 @@ fi
 echo ""
 echo "  asl3-herald — Enhanced Tail Message & Announcement Daemon"
 echo "  https://github.com/N6LKA/asl3-herald"
+[[ "$BRANCH" != "main" ]] && warn "Installing from branch: $BRANCH (not main)"
 echo ""
 
 # ── Dependencies ───────────────────────────────────────────────────────────────

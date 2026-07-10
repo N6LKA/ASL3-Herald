@@ -40,6 +40,13 @@ except FileNotFoundError:
 
 DEBUG = False
 
+# Fallback estimate (seconds) for how long a scheduled announcement's audio
+# takes to play, used only if `soxi` can't determine the real duration -
+# governs how long tail messages are held off after a scheduled announcement
+# starts (see scheduled_busy_until in state).
+DEFAULT_ANNOUNCEMENT_DURATION = 8.0
+BUSY_GRACE_SECONDS = 1.5
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 
 def log(level, msg):
@@ -75,6 +82,8 @@ def load_state():
         "rotation_index": 0,
         "last_tail_played": 0.0,
         "scheduled_played": {},
+        "scheduled_pending": {},
+        "scheduled_busy_until": 0.0,
         "swp_last_mtime": None,
         "swp_next_is_rotation": False,
     }
@@ -119,6 +128,28 @@ def get_kerchunk_count(node):
                 pass
     return None
 
+def node_is_keyed(node):
+    # Best-effort real-time carrier/keyed detection via `rpt stats`'s
+    # "Signal on input" field (reflects live COS/carrier state, distinct from
+    # the Kerchunks counter which only increments after an unkey completes).
+    # Returns True/False, or None if the field can't be found (parsing
+    # failure, unexpected app_rpt version, etc.) - callers should treat None
+    # as "unknown, don't block" so a missing field fails open rather than
+    # wedging scheduled playback indefinitely.
+    out = asterisk_cmd(f"rpt stats {node}")
+    for line in out.splitlines():
+        if "Signal on input" in line:
+            value = line.split(":")[-1].strip().upper()
+            return value.startswith("YES")
+    return None
+
+def audio_duration(filepath):
+    try:
+        r = subprocess.run(["soxi", "-D", filepath], capture_output=True, text=True, timeout=5)
+        return float(r.stdout.strip())
+    except Exception:
+        return None
+
 def play_file(node, filepath, play_mode="local"):
     path_no_ext = str(Path(filepath).with_suffix(""))
     cmd = "rpt playback" if play_mode == "global" else "rpt localplay"
@@ -144,19 +175,50 @@ def week_of_month_range(week):
     high = 31 if week == 5 else low + 6
     return low, high
 
-def should_play_scheduled(sched, state):
-    now   = datetime.now()
-    hhmm  = now.strftime("%H:%M")
-    today = now.strftime("%A").lower()
-    date  = now.strftime("%Y-%m-%d")
+def entry_days_ok(entry, now):
+    days = entry.get("Days") if isinstance(entry, dict) else None
+    if not days or days == "daily":
+        return True
+    day_list = [d.lower() for d in (days if isinstance(days, list) else [days])]
+    return now.strftime("%A").lower() in day_list
 
-    if hhmm != sched.get("Time", ""):
+def entry_time_window_ok(entry, now):
+    # Optional HH:MM-HH:MM eligibility window for rotation entries (Days is
+    # the same idea but for day-of-week rather than time-of-day). Absent
+    # Start/End means "always eligible", matching plain legacy string entries.
+    if not isinstance(entry, dict):
+        return True
+    start = entry.get("TimeStart")
+    end = entry.get("TimeEnd")
+    if not start and not end:
+        return True
+    hhmm = now.strftime("%H:%M")
+    if start and end:
+        if start <= end:
+            return start <= hhmm <= end
+        return hhmm >= start or hhmm <= end  # window wraps past midnight
+    if start:
+        return hhmm >= start
+    return hhmm <= end
+
+def rotation_entry_eligible(entry, now, node):
+    if not entry_days_ok(entry, now):
+        return False
+    if not entry_time_window_ok(entry, now):
+        return False
+    entry_node = entry.get("Node") if isinstance(entry, dict) else None
+    if entry_node and str(entry_node) != str(node):
+        return False
+    return True
+
+def scheduled_time_matches(sched, now):
+    if now.strftime("%H:%M") != sched.get("Time", ""):
         return False
 
     days = sched.get("Days", "daily")
     if days != "daily":
         day_list = [d.lower() for d in (days if isinstance(days, list) else [days])]
-        if today not in day_list:
+        if now.strftime("%A").lower() not in day_list:
             return False
 
     week = sched.get("Week")
@@ -170,14 +232,43 @@ def should_play_scheduled(sched, state):
             if not (low <= now.day <= high):
                 return False
 
-    filepath = sched.get("File", "")
-    if not filepath or not os.path.exists(filepath):
-        log_warn(f"Scheduled file not found: {filepath}  ({sched.get('Name', '')})")
+    return True
+
+def should_play_scheduled(sched, state, node, now):
+    # Once an entry's Time/Days/Week condition matches but the node is
+    # keyed (someone's actively transmitting), it goes "pending" instead of
+    # being skipped outright - it keeps getting re-checked every poll cycle
+    # (even after the matching minute has passed) until it can finally play,
+    # rather than silently missing the announcement for the day.
+    name = sched.get("Name", "")
+    date = now.strftime("%Y-%m-%d")
+
+    if state["scheduled_played"].get(name) == date:
         return False
 
-    key = sched.get("Name", "")
-    if state["scheduled_played"].get(key) == f"{date} {hhmm}":
+    already_pending = state["scheduled_pending"].get(name) == date
+    if not already_pending and not scheduled_time_matches(sched, now):
         return False
+
+    filepath = sched.get("File", "")
+    if not filepath or not os.path.exists(filepath):
+        log_warn(f"Scheduled file not found: {filepath}  ({name})")
+        return False
+
+    entry_node = sched.get("Node")
+    target_node = str(entry_node) if entry_node else node
+    keyed = node_is_keyed(target_node)
+
+    if keyed:
+        if not already_pending:
+            state["scheduled_pending"][name] = date
+            log_info(f"Scheduled announcement '{name}' due but node {target_node} is keyed - waiting for unkey")
+        else:
+            log_debug(f"Scheduled announcement '{name}' still waiting for unkey")
+        return False
+
+    if already_pending:
+        state["scheduled_pending"].pop(name, None)
 
     return True
 
@@ -209,9 +300,18 @@ def normalize_rotation(rotation):
     out = []
     for e in rotation:
         if isinstance(e, str):
-            out.append({"File": e, "Text": None, "Voice": None})
+            out.append({"File": e, "Text": None, "Voice": None,
+                        "Days": "daily", "TimeStart": None, "TimeEnd": None, "Node": None})
         else:
-            out.append({"File": e.get("File", ""), "Text": e.get("Text"), "Voice": e.get("Voice")})
+            out.append({
+                "File": e.get("File", ""),
+                "Text": e.get("Text"),
+                "Voice": e.get("Voice"),
+                "Days": e.get("Days", "daily"),
+                "TimeStart": e.get("TimeStart"),
+                "TimeEnd": e.get("TimeEnd"),
+                "Node": e.get("Node"),
+            })
     return out
 
 def cmd_list_json(config):
@@ -243,7 +343,16 @@ def cmd_add_rotation(config, args):
     if any(rotation_entry_file(e) == filepath for e in rotation):
         print(json.dumps({"success": False, "message": f"Already in rotation: {filepath}"}))
         return
-    rotation.append({"File": filepath, "Text": args.text, "Voice": args.voice})
+    entry = {"File": filepath, "Text": args.text, "Voice": args.voice}
+    if args.days and args.days != "daily":
+        entry["Days"] = [d.strip().lower() for d in args.days.split(",")]
+    if args.time_start:
+        entry["TimeStart"] = args.time_start
+    if args.time_end:
+        entry["TimeEnd"] = args.time_end
+    if args.node:
+        entry["Node"] = args.node
+    rotation.append(entry)
     save_config(config)
     print(json.dumps({"success": True, "message": f"Added to rotation: {filepath}"}))
 
@@ -266,16 +375,38 @@ def cmd_edit_rotation(config, args):
         return
 
     old = rotation[idx]
-    old_text = old.get("Text") if isinstance(old, dict) else None
-    old_voice = old.get("Voice") if isinstance(old, dict) else None
+    entry = dict(old) if isinstance(old, dict) else {"File": old}
 
-    rotation[idx] = {
-        "File": args.file if args.file is not None else rotation_entry_file(old),
-        "Text": args.text if args.text is not None else old_text,
-        "Voice": args.voice if args.voice is not None else old_voice,
-    }
+    if args.file is not None:
+        entry["File"] = args.file
+    if args.text is not None:
+        entry["Text"] = args.text
+    if args.voice is not None:
+        entry["Voice"] = args.voice
+    if args.days is not None:
+        if args.days == "daily" or args.days == "":
+            entry.pop("Days", None)
+        else:
+            entry["Days"] = [d.strip().lower() for d in args.days.split(",")]
+    if args.time_start is not None:
+        if args.time_start:
+            entry["TimeStart"] = args.time_start
+        else:
+            entry.pop("TimeStart", None)
+    if args.time_end is not None:
+        if args.time_end:
+            entry["TimeEnd"] = args.time_end
+        else:
+            entry.pop("TimeEnd", None)
+    if args.node is not None:
+        if args.node:
+            entry["Node"] = args.node
+        else:
+            entry.pop("Node", None)
+
+    rotation[idx] = entry
     save_config(config)
-    print(json.dumps({"success": True, "message": f"Updated rotation entry: {os.path.basename(rotation[idx]['File'])}"}))
+    print(json.dumps({"success": True, "message": f"Updated rotation entry: {os.path.basename(entry.get('File', ''))}"}))
 
 def cmd_add_scheduled(config, args):
     scheduled = config.setdefault("Scheduled", [])
@@ -296,6 +427,8 @@ def cmd_add_scheduled(config, args):
         entry["Text"] = args.text
     if args.voice:
         entry["Voice"] = args.voice
+    if args.node:
+        entry["Node"] = args.node
 
     scheduled.append(entry)
     save_config(config)
@@ -338,6 +471,11 @@ def cmd_edit_scheduled(config, args):
         entry["Text"] = args.text
     if args.voice is not None:
         entry["Voice"] = args.voice
+    if args.node is not None:
+        if args.node:
+            entry["Node"] = args.node
+        else:
+            entry.pop("Node", None)
 
     scheduled[idx] = entry
     save_config(config)
@@ -404,6 +542,10 @@ def build_arg_parser():
     p_add_rot.add_argument("filepath")
     p_add_rot.add_argument("--text", default=None)
     p_add_rot.add_argument("--voice", default=None)
+    p_add_rot.add_argument("--days", default="daily", help='"daily" or comma-separated day names')
+    p_add_rot.add_argument("--time-start", dest="time_start", default=None, help="HH:MM - only eligible at/after this time")
+    p_add_rot.add_argument("--time-end", dest="time_end", default=None, help="HH:MM - only eligible at/before this time")
+    p_add_rot.add_argument("--node", default=None, help="Target a specific node number instead of the daemon's configured Node")
 
     p_edit_rot = sub.add_parser("edit-rotation", help="Edit an existing tail message rotation entry")
     p_edit_rot.add_argument("old_name")
@@ -411,6 +553,10 @@ def build_arg_parser():
     p_edit_rot.add_argument("--text", default=None)
     p_edit_rot.add_argument("--voice", default=None)
     p_edit_rot.add_argument("--file", default=None)
+    p_edit_rot.add_argument("--days", default=None, help='"daily" (or empty) clears it, or comma-separated day names')
+    p_edit_rot.add_argument("--time-start", dest="time_start", default=None, help="HH:MM, empty string clears it")
+    p_edit_rot.add_argument("--time-end", dest="time_end", default=None, help="HH:MM, empty string clears it")
+    p_edit_rot.add_argument("--node", default=None, help="Node number override, empty string clears it")
 
     p_add_sched = sub.add_parser("add-scheduled", help="Add a scheduled announcement")
     p_add_sched.add_argument("--name", required=True)
@@ -421,6 +567,7 @@ def build_arg_parser():
     p_add_sched.add_argument("--play-mode", dest="play_mode", choices=["local", "global"], default="local")
     p_add_sched.add_argument("--text", default=None)
     p_add_sched.add_argument("--voice", default=None)
+    p_add_sched.add_argument("--node", default=None, help="Target a specific node number instead of the daemon's configured Node")
 
     p_edit_sched = sub.add_parser("edit-scheduled", help="Edit an existing scheduled announcement")
     p_edit_sched.add_argument("old_name")
@@ -432,6 +579,7 @@ def build_arg_parser():
     p_edit_sched.add_argument("--text", default=None)
     p_edit_sched.add_argument("--voice", default=None)
     p_edit_sched.add_argument("--file", default=None)
+    p_edit_sched.add_argument("--node", default=None, help="Node number override, empty string clears it")
 
     p_remove = sub.add_parser("remove", help="Remove a rotation file or scheduled announcement by name")
     p_remove.add_argument("identifier")
@@ -535,16 +683,27 @@ def main():
                 time.sleep(10)
                 continue
 
-            now = time.time()
+            now    = time.time()
+            now_dt = datetime.now()
 
             # ── Scheduled announcements (time-driven) ─────────────────────
+            # Checked before tail messages every iteration: a scheduled
+            # announcement takes precedence if both would fire at once. Once
+            # one plays, scheduled_busy_until holds off the tail-message
+            # block below for the announcement's (estimated) duration, so a
+            # simultaneous unkey doesn't overlap it - the tail message just
+            # doesn't update last_tail_played, so it naturally retries on
+            # the next unkey once MinInterval allows, with no penalty.
             for sched in scheduled:
-                if should_play_scheduled(sched, state):
-                    log_info(f"Scheduled announcement: {sched.get('Name', sched.get('File', ''))}")
-                    play_file(node, sched["File"], sched.get("PlayMode", "local"))
-                    key = sched.get("Name", "")
-                    dt  = datetime.now()
-                    state["scheduled_played"][key] = f"{dt.strftime('%Y-%m-%d')} {dt.strftime('%H:%M')}"
+                if should_play_scheduled(sched, state, node, now_dt):
+                    name = sched.get("Name", sched.get("File", ""))
+                    log_info(f"Scheduled announcement: {name}")
+                    target_node = str(sched["Node"]) if sched.get("Node") else node
+                    play_file(target_node, sched["File"], sched.get("PlayMode", "local"))
+                    state["scheduled_played"][sched.get("Name", "")] = now_dt.strftime("%Y-%m-%d")
+                    state["scheduled_pending"].pop(sched.get("Name", ""), None)
+                    duration = audio_duration(sched["File"]) or DEFAULT_ANNOUNCEMENT_DURATION
+                    state["scheduled_busy_until"] = now + duration + BUSY_GRACE_SECONDS
                     save_state(state)
 
             # ── Kerchunk / tail message (unkey-driven) ────────────────────
@@ -575,6 +734,15 @@ def main():
                             remaining = int(min_int - (now - state["last_tail_played"]))
                             log_debug(f"Min interval not reached - {remaining}s remaining")
 
+                        elif now < state.get("scheduled_busy_until", 0):
+                            # A scheduled announcement just started (or is about to,
+                            # having been checked earlier this same iteration) -
+                            # it takes precedence. Deliberately not touching
+                            # last_tail_played here, so this unkey doesn't cost
+                            # anything against MinInterval - it just tries again
+                            # on the next unkey once the announcement has finished.
+                            log_debug("Scheduled announcement in progress - delaying tail message to next unkey")
+
                         elif swp_active:
                             try:
                                 swp_mtime = os.path.getmtime(swp_file)
@@ -595,17 +763,24 @@ def main():
                             elif rotation and state.get("swp_next_is_rotation"):
                                 # Same alert as before - alternate with the rotation
                                 # instead of playing the WX tail on every unkey.
-                                idx      = state["rotation_index"] % len(rotation)
-                                filepath = rotation_entry_file(rotation[idx])
-                                if os.path.exists(filepath):
-                                    log_info(f"Playing rotation [{idx + 1}/{len(rotation)}] (alternating with active WX alert): {Path(filepath).name}")
-                                    play_file(node, filepath)
-                                    state["rotation_index"]       = (idx + 1) % len(rotation)
-                                    state["swp_next_is_rotation"] = False
-                                    state["last_tail_played"]     = now
-                                    save_state(state)
+                                eligible = [e for e in rotation if rotation_entry_eligible(e, now_dt, node)]
+                                if eligible:
+                                    idx      = state["rotation_index"] % len(eligible)
+                                    filepath = rotation_entry_file(eligible[idx])
+                                    if os.path.exists(filepath):
+                                        log_info(f"Playing rotation [{idx + 1}/{len(eligible)}] (alternating with active WX alert): {Path(filepath).name}")
+                                        play_file(node, filepath)
+                                        state["rotation_index"]       = (idx + 1) % len(eligible)
+                                        state["swp_next_is_rotation"] = False
+                                        state["last_tail_played"]     = now
+                                        save_state(state)
+                                    else:
+                                        log_warn(f"Rotation file not found: {filepath} - playing WX alert instead")
+                                        play_file(node, swp_file)
+                                        state["last_tail_played"] = now
+                                        save_state(state)
                                 else:
-                                    log_warn(f"Rotation file not found: {filepath} - playing WX alert instead")
+                                    log_debug("No rotation entries eligible right now (day/time-window gating) - playing WX alert instead")
                                     play_file(node, swp_file)
                                     state["last_tail_played"] = now
                                     save_state(state)
@@ -618,16 +793,20 @@ def main():
                                 save_state(state)
 
                         elif rotation:
-                            idx      = state["rotation_index"] % len(rotation)
-                            filepath = rotation_entry_file(rotation[idx])
-                            if os.path.exists(filepath):
-                                log_info(f"Playing rotation [{idx + 1}/{len(rotation)}]: {Path(filepath).name}")
-                                play_file(node, filepath)
-                                state["rotation_index"]   = (idx + 1) % len(rotation)
-                                state["last_tail_played"] = now
-                                save_state(state)
+                            eligible = [e for e in rotation if rotation_entry_eligible(e, now_dt, node)]
+                            if eligible:
+                                idx      = state["rotation_index"] % len(eligible)
+                                filepath = rotation_entry_file(eligible[idx])
+                                if os.path.exists(filepath):
+                                    log_info(f"Playing rotation [{idx + 1}/{len(eligible)}]: {Path(filepath).name}")
+                                    play_file(node, filepath)
+                                    state["rotation_index"]   = (idx + 1) % len(eligible)
+                                    state["last_tail_played"] = now
+                                    save_state(state)
+                                else:
+                                    log_warn(f"Rotation file not found: {filepath}")
                             else:
-                                log_warn(f"Rotation file not found: {filepath}")
+                                log_debug("No rotation entries eligible right now (day/time-window gating)")
                         else:
                             log_debug("No tail messages configured - skipping")
 
