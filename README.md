@@ -290,7 +290,7 @@ No changes to SkywarnPlus are required. `asl3-herald` reads the existing `wx-tai
 
 Set `SilenceThreshold: 5000` (the default) to reliably distinguish between the two.
 
-**Note:** the original SkywarnPlus author, Mason (Mason10198), no longer maintains the project — [the original repo](https://github.com/Mason10198/SkywarnPlus) is archived and read-only. Larry (N6LKA) maintains an active fork that keeps SkywarnPlus working and up to date (including Python 3.13 compatibility and other fixes): **[github.com/N6LKA/SkywarnPlus](https://github.com/N6LKA/SkywarnPlus)**.
+**Note:** the original SkywarnPlus author, Mason (Mason10198), no longer maintains the project — [the original repo](https://github.com/Mason10198/SkywarnPlus) is archived and read-only. Larry (N6LKA) maintains an active fork that keeps SkywarnPlus working and up to date: **[github.com/N6LKA/SkywarnPlus](https://github.com/N6LKA/SkywarnPlus)**.
 
 ---
 
