@@ -47,8 +47,6 @@ Plus:
 curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/install.sh | sudo bash
 ```
 
-(The `sudo bash <(curl ...)` process-substitution form is equivalent but fails with `/dev/fd/63: No such file or directory` on some systems, depending on shell/PAM config — the piped form above avoids that entirely.)
-
 **Development (testing only):** installs from `develop` — whatever's currently being worked on ahead of the next release.
 
 > ⚠️ **Warning:** `develop` may contain incomplete, untested, or broken features at any given time. Only use this on a system where you can tolerate things breaking (or reinstall from `main` to recover). Don't use it on a repeater you depend on for daily use.
