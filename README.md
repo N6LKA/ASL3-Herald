@@ -41,17 +41,23 @@ Plus:
 
 ## Installation
 
+**Stable (recommended):** installs from `main` — the tested, working release.
+
 ```bash
 curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/install.sh | sudo bash
 ```
 
 (The `sudo bash <(curl ...)` process-substitution form is equivalent but fails with `/dev/fd/63: No such file or directory` on some systems, depending on shell/PAM config — the piped form above avoids that entirely.)
 
-**Testing unreleased changes from `develop`:** pass `--branch develop` as a script argument (not an environment variable — those don't reliably survive the `sudo` call on a piped command):
+**Development (testing only):** installs from `develop` — whatever's currently being worked on ahead of the next release.
+
+> ⚠️ **Warning:** `develop` may contain incomplete, untested, or broken features at any given time. Only use this on a system where you can tolerate things breaking (or reinstall from `main` to recover). Don't use it on a repeater you depend on for daily use.
 
 ```bash
 curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/develop/install.sh | sudo bash -s -- --branch develop
 ```
+
+`--branch develop` must be passed as a script argument exactly as shown (not an environment variable — those don't reliably survive the `sudo` call on a piped command).
 
 The installer will:
 1. Install `python3-yaml`, `sox`, and `libsox-fmt-mp3` if not already present
