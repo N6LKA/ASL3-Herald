@@ -80,6 +80,8 @@
   }
   #herald-ui .add-form { border-top: 2px solid #eee; margin-top: 12px; padding-top: 12px; }
   #herald-ui label { display: block; font-size: 0.95em; margin-top: 8px; }
+  #herald-ui .field-row { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  #herald-ui .field-row > div { flex: 0 0 auto; }
   #herald-ui .days-picker label { display: inline-block; margin-right: 10px; font-weight: normal; }
   #herald-ui .days-picker input[type=checkbox] { margin-right: 10px; }
   #herald-ui .source-toggle { margin: 8px 0; }
@@ -108,7 +110,7 @@
     <h3>Rotation</h3>
     <p class="muted">Plays on the next transmission unkey, gated by MinInterval. A SkywarnPlus WX alert always takes priority over the rotation.</p>
     <table id="tail-table">
-      <thead><tr><th>#</th><th>File</th><th></th></tr></thead>
+      <thead><tr><th>#</th><th>File</th><th>Days</th><th>Window</th><th>Node</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
 
@@ -134,6 +136,32 @@
       <label>Name (letters, numbers, hyphens only)</label>
       <input type="text" id="tail-name" placeholder="e.g. weekend-notice">
 
+      <div class="field-row">
+        <div>
+          <label>Days (optional — leave Daily for always eligible)</label>
+          <div class="days-picker" id="tail-days">
+            <label><input type="checkbox" value="daily" id="tail-day-daily" checked> Daily</label>
+            <label><input type="checkbox" value="sunday"> Sun</label>
+            <label><input type="checkbox" value="monday"> Mon</label>
+            <label><input type="checkbox" value="tuesday"> Tue</label>
+            <label><input type="checkbox" value="wednesday"> Wed</label>
+            <label><input type="checkbox" value="thursday"> Thu</label>
+            <label><input type="checkbox" value="friday"> Fri</label>
+            <label><input type="checkbox" value="saturday"> Sat</label>
+          </div>
+        </div>
+        <div>
+          <label>Time Window (optional)</label>
+          <input type="time" id="tail-time-start" style="width: 110px;">
+          <span class="muted">to</span>
+          <input type="time" id="tail-time-end" style="width: 110px;">
+        </div>
+        <div>
+          <label>Node Override (optional)</label>
+          <input type="text" id="tail-node" style="width: 120px;" placeholder="e.g. 501261">
+        </div>
+      </div>
+
       <br><br>
       <button class="btn-primary" id="btn-add-tail">Add to Rotation</button>
       <button id="tail-edit-cancel" style="display:none;">Cancel Edit</button>
@@ -148,7 +176,7 @@
     <h3>Scheduled Announcements</h3>
     <p class="muted">Plays at a specific time of day, independent of repeater activity or MinInterval.</p>
     <table id="sched-table">
-      <thead><tr><th>Name</th><th>Time</th><th>Days</th><th>Week</th><th>Play Mode</th><th>File</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Time</th><th>Days</th><th>Week</th><th>Play Mode</th><th>Node</th><th>File</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
 
@@ -174,36 +202,50 @@
       <label>Name</label>
       <input type="text" id="sched-name" placeholder="e.g. arrl-news">
 
-      <label>Time (24-hour)</label>
-      <input type="time" id="sched-time">
-
-      <label>Days</label>
-      <div class="days-picker" id="sched-days">
-        <label><input type="checkbox" value="daily" id="sched-day-daily" checked> Daily</label>
-        <label><input type="checkbox" value="sunday"> Sun</label>
-        <label><input type="checkbox" value="monday"> Mon</label>
-        <label><input type="checkbox" value="tuesday"> Tue</label>
-        <label><input type="checkbox" value="wednesday"> Wed</label>
-        <label><input type="checkbox" value="thursday"> Thu</label>
-        <label><input type="checkbox" value="friday"> Fri</label>
-        <label><input type="checkbox" value="saturday"> Sat</label>
+      <div class="field-row">
+        <div>
+          <label>Time (24-hour)</label>
+          <input type="time" id="sched-time">
+        </div>
+        <div>
+          <label>Days</label>
+          <div class="days-picker" id="sched-days">
+            <label><input type="checkbox" value="daily" id="sched-day-daily" checked> Daily</label>
+            <label><input type="checkbox" value="sunday"> Sun</label>
+            <label><input type="checkbox" value="monday"> Mon</label>
+            <label><input type="checkbox" value="tuesday"> Tue</label>
+            <label><input type="checkbox" value="wednesday"> Wed</label>
+            <label><input type="checkbox" value="thursday"> Thu</label>
+            <label><input type="checkbox" value="friday"> Fri</label>
+            <label><input type="checkbox" value="saturday"> Sat</label>
+          </div>
+        </div>
+        <div>
+          <label>Week of month (optional)</label>
+          <select id="sched-week">
+            <option value="">Every week</option>
+            <option value="1">1st week</option>
+            <option value="2">2nd week</option>
+            <option value="3">3rd week</option>
+            <option value="4">4th week</option>
+            <option value="5">Last week</option>
+          </select>
+        </div>
       </div>
 
-      <label>Week of month (optional — leave blank for every matching day)</label>
-      <select id="sched-week">
-        <option value="">Every week</option>
-        <option value="1">1st week</option>
-        <option value="2">2nd week</option>
-        <option value="3">3rd week</option>
-        <option value="4">4th week</option>
-        <option value="5">Last week</option>
-      </select>
-
-      <label>Play Mode</label>
-      <select id="sched-playmode">
-        <option value="local" selected>Local (this node only)</option>
-        <option value="global">Global (all connected/linked nodes)</option>
-      </select>
+      <div class="field-row">
+        <div>
+          <label>Play Mode</label>
+          <select id="sched-playmode">
+            <option value="local" selected>Local (this node only)</option>
+            <option value="global">Global (all connected/linked nodes)</option>
+          </select>
+        </div>
+        <div>
+          <label>Node Override (optional)</label>
+          <input type="text" id="sched-node" style="width: 120px;" placeholder="e.g. 501261">
+        </div>
+      </div>
 
       <br><br>
       <button class="btn-primary" id="btn-add-sched">Add Scheduled Announcement</button>

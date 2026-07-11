@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 240">
+  <!-- icon -->
+  <g>
+    <line x1="92" y1="212" x2="148" y2="212" stroke="#b8834a" stroke-width="7" stroke-linecap="round"/>
+    <line x1="120" y1="212" x2="120" y2="46" stroke="#b8834a" stroke-width="8" stroke-linecap="round"/>
+    <line x1="104" y1="182" x2="136" y2="164" stroke="#96632f" stroke-width="4" stroke-linecap="round"/>
+    <line x1="104" y1="164" x2="136" y2="182" stroke="#96632f" stroke-width="4" stroke-linecap="round"/>
+    <line x1="106" y1="140" x2="134" y2="124" stroke="#96632f" stroke-width="4" stroke-linecap="round"/>
+    <line x1="106" y1="124" x2="134" y2="140" stroke="#96632f" stroke-width="4" stroke-linecap="round"/>
+    <path d="M120 92 L188 108 L166 121 L188 134 L120 148 Z" fill="#59d98c"/>
+    <circle cx="120" cy="46" r="7" fill="#59d98c"/>
+    <line x1="120" y1="40" x2="104" y2="16" stroke="#59d98c" stroke-width="6" stroke-linecap="round"/>
+    <line x1="120" y1="38" x2="122" y2="10" stroke="#59d98c" stroke-width="6" stroke-linecap="round"/>
+    <line x1="122" y1="40" x2="142" y2="18" stroke="#59d98c" stroke-width="6" stroke-linecap="round"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="270" y="104" font-family="Consolas, 'SFMono-Regular', Menlo, monospace" font-size="34" letter-spacing="3" fill="#2f9c5e">ASL3 &#183; ALLSTARLINK</text>
+  <text x="268" y="185" font-family="Arial, 'Helvetica Neue', sans-serif" font-weight="800" font-size="84" letter-spacing="1" fill="#a56a2e">HERALD</text>
+</svg>

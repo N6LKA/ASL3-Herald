@@ -54,10 +54,31 @@
   wireSourceToggle('sched-source', 'sched-tts-fields', 'sched-file-fields');
 
   // "Daily" checkbox disables the individual day checkboxes
-  document.getElementById('sched-day-daily').addEventListener('change', function () {
-    document.querySelectorAll('#sched-days input[type=checkbox]:not(#sched-day-daily)')
-      .forEach(cb => { cb.disabled = this.checked; if (this.checked) cb.checked = false; });
-  });
+  function wireDailyToggle(dailyId, containerId) {
+    document.getElementById(dailyId).addEventListener('change', function () {
+      document.querySelectorAll('#' + containerId + ' input[type=checkbox]:not(#' + dailyId + ')')
+        .forEach(cb => { cb.disabled = this.checked; if (this.checked) cb.checked = false; });
+    });
+  }
+  wireDailyToggle('sched-day-daily', 'sched-days');
+  wireDailyToggle('tail-day-daily', 'tail-days');
+
+  function pickedDays(dailyId, containerId) {
+    if (document.getElementById(dailyId).checked) return 'daily';
+    const picked = Array.from(document.querySelectorAll('#' + containerId + ' input[type=checkbox]:checked:not(#' + dailyId + ')'))
+      .map(cb => cb.value);
+    return picked.length ? picked.join(',') : 'daily';
+  }
+
+  function applyDaysToPicker(days, dailyId, containerId) {
+    const isDaily = !days || days === 'daily';
+    document.getElementById(dailyId).checked = isDaily;
+    const dayList = String(days || '').split(',');
+    document.querySelectorAll('#' + containerId + ' input[type=checkbox]:not(#' + dailyId + ')').forEach(cb => {
+      cb.disabled = isDaily;
+      cb.checked = !isDaily && dayList.includes(cb.value);
+    });
+  }
 
   // ── Load voices ──────────────────────────────────────────────────────
   async function loadVoices() {
@@ -114,11 +135,19 @@
       const file = isObj ? (entry.File || '') : entry;
       const text = isObj ? entry.Text : null;
       const voice = isObj ? entry.Voice : null;
+      const days = isObj ? entry.Days : null;
+      const timeStart = isObj ? entry.TimeStart : null;
+      const timeEnd = isObj ? entry.TimeEnd : null;
+      const node = isObj ? entry.Node : null;
+      const daysAttr = Array.isArray(days) ? days.join(',') : (days || 'daily');
+      const daysDisplay = Array.isArray(days) ? days.join(', ') : (days || 'Daily');
+      const windowDisplay = (timeStart || timeEnd) ? ((timeStart || '00:00') + '–' + (timeEnd || '23:59')) : '—';
       const name = basename(file).replace(/\.wav$/, '');
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + (i + 1) + '</td><td>' + basename(file) + '</td><td>' +
+      tr.innerHTML = '<td>' + (i + 1) + '</td><td>' + basename(file) + '</td><td>' + daysDisplay + '</td>' +
+        '<td>' + windowDisplay + '</td><td>' + (node || '—') + '</td><td>' +
         '<button class="btn-play" data-name="' + name + '">Play</button>' +
-        '<button class="btn-edit" data-type="tail" data-name="' + name + '" data-text="' + escapeAttr(text) + '" data-voice="' + escapeAttr(voice) + '">Edit</button>' +
+        '<button class="btn-edit" data-type="tail" data-name="' + name + '" data-text="' + escapeAttr(text) + '" data-voice="' + escapeAttr(voice) + '" data-days="' + escapeAttr(daysAttr) + '" data-time-start="' + escapeAttr(timeStart) + '" data-time-end="' + escapeAttr(timeEnd) + '" data-node="' + escapeAttr(node) + '">Edit</button>' +
         '<button class="btn-danger" data-name="' + name + '">Remove</button></td>';
       tbody.appendChild(tr);
     });
@@ -132,9 +161,10 @@
       const tr = document.createElement('tr');
       tr.innerHTML = '<td>' + s.Name + '</td><td>' + s.Time + '</td><td>' + daysDisplay + '</td>' +
         '<td>' + (s.Week || '—') + '</td><td>' + (playMode === 'global' ? 'Global' : 'Local') + '</td>' +
+        '<td>' + (s.Node || '—') + '</td>' +
         '<td>' + basename(s.File) + '</td><td>' +
         '<button class="btn-play" data-name="' + s.Name + '">Play</button>' +
-        '<button class="btn-edit" data-type="sched" data-name="' + s.Name + '" data-time="' + s.Time + '" data-days="' + daysAttr + '" data-week="' + (s.Week || '') + '" data-playmode="' + playMode + '" data-text="' + escapeAttr(s.Text) + '" data-voice="' + escapeAttr(s.Voice) + '">Edit</button>' +
+        '<button class="btn-edit" data-type="sched" data-name="' + s.Name + '" data-time="' + s.Time + '" data-days="' + daysAttr + '" data-week="' + (s.Week || '') + '" data-playmode="' + playMode + '" data-node="' + escapeAttr(s.Node) + '" data-text="' + escapeAttr(s.Text) + '" data-voice="' + escapeAttr(s.Voice) + '">Edit</button>' +
         '<button class="btn-danger" data-name="' + s.Name + '">Remove</button></td>';
       stbody.appendChild(tr);
     });
@@ -179,6 +209,10 @@
     document.getElementById('tail-voice').value = hasText ? (d.voice || '') : '';
     document.getElementById('tail-file').value = '';
     document.getElementById('tail-file-keep-note').style.display = hasText ? 'none' : '';
+    applyDaysToPicker(d.days, 'tail-day-daily', 'tail-days');
+    document.getElementById('tail-time-start').value = d.timeStart || '';
+    document.getElementById('tail-time-end').value = d.timeEnd || '';
+    document.getElementById('tail-node').value = d.node || '';
     document.getElementById('tail-form-heading').textContent = 'Edit Tail Message';
     document.getElementById('btn-add-tail').textContent = 'Save Changes';
     document.getElementById('tail-edit-cancel').style.display = '';
@@ -192,6 +226,10 @@
     document.getElementById('tail-text').value = '';
     document.getElementById('tail-file').value = '';
     document.getElementById('tail-file-keep-note').style.display = 'none';
+    applyDaysToPicker('daily', 'tail-day-daily', 'tail-days');
+    document.getElementById('tail-time-start').value = '';
+    document.getElementById('tail-time-end').value = '';
+    document.getElementById('tail-node').value = '';
     document.getElementById('tail-form-heading').textContent = 'Add a Tail Message';
     document.getElementById('btn-add-tail').textContent = 'Add to Rotation';
     document.getElementById('tail-edit-cancel').style.display = 'none';
@@ -208,15 +246,9 @@
     document.getElementById('sched-time').value = d.time || '';
     document.getElementById('sched-week').value = d.week || '';
     document.getElementById('sched-playmode').value = d.playmode || 'local';
+    document.getElementById('sched-node').value = d.node || '';
 
-    const days = d.days || 'daily';
-    const isDaily = days === 'daily';
-    document.getElementById('sched-day-daily').checked = isDaily;
-    const dayList = days.split(',');
-    document.querySelectorAll('#sched-days input[type=checkbox]:not(#sched-day-daily)').forEach(cb => {
-      cb.disabled = isDaily;
-      cb.checked = !isDaily && dayList.includes(cb.value);
-    });
+    applyDaysToPicker(d.days || 'daily', 'sched-day-daily', 'sched-days');
 
     const hasText = !!d.text;
     document.querySelector('input[name="sched-source"][value="' + (hasText ? 'tts' : 'file') + '"]').checked = true;
@@ -243,8 +275,8 @@
     document.getElementById('sched-file-keep-note').style.display = 'none';
     document.getElementById('sched-week').value = '';
     document.getElementById('sched-playmode').value = 'local';
-    document.getElementById('sched-day-daily').checked = true;
-    document.querySelectorAll('#sched-days input[type=checkbox]:not(#sched-day-daily)').forEach(cb => { cb.disabled = true; cb.checked = false; });
+    document.getElementById('sched-node').value = '';
+    applyDaysToPicker('daily', 'sched-day-daily', 'sched-days');
     document.getElementById('sched-form-heading').textContent = 'Add a Scheduled Announcement';
     document.getElementById('btn-add-sched').textContent = 'Add Scheduled Announcement';
     document.getElementById('sched-edit-cancel').style.display = 'none';
@@ -293,6 +325,10 @@
 
     const form = new FormData();
     form.append('name', name);
+    form.append('days', pickedDays('tail-day-daily', 'tail-days'));
+    form.append('time_start', document.getElementById('tail-time-start').value);
+    form.append('time_end', document.getElementById('tail-time-end').value);
+    form.append('node', document.getElementById('tail-node').value.trim());
     if (isTts) {
       form.append('mode', 'tts');
       form.append('text', document.getElementById('tail-text').value);
@@ -331,19 +367,14 @@
     const week = document.getElementById('sched-week').value;
     const playMode = document.getElementById('sched-playmode').value;
     const isTts = document.querySelector('input[name="sched-source"]:checked').value === 'tts';
-
-    let days = 'daily';
-    if (!document.getElementById('sched-day-daily').checked) {
-      const picked = Array.from(document.querySelectorAll('#sched-days input[type=checkbox]:checked:not(#sched-day-daily)'))
-        .map(cb => cb.value);
-      days = picked.length ? picked.join(',') : 'daily';
-    }
+    const days = pickedDays('sched-day-daily', 'sched-days');
 
     const form = new FormData();
     form.append('name', name);
     form.append('time', time);
     form.append('days', days);
     form.append('play_mode', playMode);
+    form.append('node', document.getElementById('sched-node').value.trim());
     if (week) form.append('week', week);
     if (isTts) {
       form.append('mode', 'tts');

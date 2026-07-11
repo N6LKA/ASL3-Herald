@@ -133,7 +133,10 @@
         </nav>
 
         <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
-            <h2 class="mt-3">ASL3 Herald — Announcement Settings</h2>
+            <h2 class="mt-3 d-flex align-items-center gap-2">
+                <img src="/asl3-herald/img/asl3-herald-icon.svg" alt="" width="32" height="32">
+                ASL3 Herald — Announcement Settings
+            </h2>
             <div id="herald-gate">
                 <p>Checking Allmon3 login status&hellip;</p>
             </div>
@@ -180,7 +183,7 @@ window.addEventListener('pageshow', async function() {
             gate.innerHTML = "<p style='color:#dc3545;'>Could not load ASL3 Herald. Check that the web UI is installed.</p>";
         }
     } else {
-        gate.innerHTML = "<p>Please log in to Allmon3 (top-left) to manage announcements.</p>";
+        gate.innerHTML = "<p>Please log in to Allmon3 (left menu) to manage announcements.</p>";
     }
 });
 </script>

@@ -32,6 +32,16 @@ TailMessage:
     # - File: /etc/asterisk/scripts/asl3-herald/announcements/tail2.wav
     #   Text: null
     #   Voice: null
+    # - File: /etc/asterisk/scripts/asl3-herald/announcements/tuesday-net.wav
+    #   # Optional: only eligible on the days/time-window given below (omit
+    #   # either field for "always eligible", the pre-existing behavior).
+    #   Days: ["tuesday"]
+    #   TimeStart: "18:00"
+    #   TimeEnd: "21:00"
+    #   # Optional: target a specific node number instead of this daemon's
+    #   # configured Node above (for multinodes= setups where one AMI
+    #   # connection serves several node numbers).
+    #   Node: "501261"
 
   SkywarnPlus:
     # Play the SkywarnPlus wx-tail.wav instead of rotation when WX alerts are active.
@@ -50,6 +60,12 @@ TailMessage:
 #   "global" (all connected/linked nodes via `rpt playback`).
 # Text/Voice (optional): stored for TTS-generated entries so they can be
 #   edited later (via `herald edit-schedule` or the web UI) without retyping.
+# Node (optional): target a specific node number instead of this daemon's
+#   configured Node above (for multinodes= setups).
+# A scheduled announcement waits for the node to unkey before playing if it's
+# currently keyed (rather than interrupting live traffic), and always takes
+# precedence over a tail message due at the same moment - the tail message
+# just retries on its next unkey, with no penalty against MinInterval.
 # Empty by default — add your own via `herald add-schedule`/`herald add-schedule-file`
 # or the web UI, or uncomment/edit an example below once the file actually exists.
 Scheduled: []

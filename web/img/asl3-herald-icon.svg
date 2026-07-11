@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+  <!-- asl3-herald mark: a lattice repeater mast flying a herald's pennant,
+       with a beacon and transmission burst at the tip. -->
+
+  <!-- ground anchor -->
+  <line x1="92" y1="212" x2="148" y2="212" stroke="#b8834a" stroke-width="7" stroke-linecap="round"/>
+
+  <!-- mast -->
+  <line x1="120" y1="212" x2="120" y2="46" stroke="#b8834a" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- lattice braces -->
+  <line x1="104" y1="182" x2="136" y2="164" stroke="#96632f" stroke-width="4" stroke-linecap="round"/>
+  <line x1="104" y1="164" x2="136" y2="182" stroke="#96632f" stroke-width="4" stroke-linecap="round"/>
+  <line x1="106" y1="140" x2="134" y2="124" stroke="#96632f" stroke-width="4" stroke-linecap="round"/>
+  <line x1="106" y1="124" x2="134" y2="140" stroke="#96632f" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- herald's pennant (swallowtail) -->
+  <path d="M120 92 L188 108 L166 121 L188 134 L120 148 Z" fill="#59d98c"/>
+
+  <!-- beacon -->
+  <circle cx="120" cy="46" r="7" fill="#59d98c"/>
+
+  <!-- transmission burst -->
+  <line x1="120" y1="40" x2="104" y2="16" stroke="#59d98c" stroke-width="6" stroke-linecap="round"/>
+  <line x1="120" y1="38" x2="122" y2="10" stroke="#59d98c" stroke-width="6" stroke-linecap="round"/>
+  <line x1="122" y1="40" x2="142" y2="18" stroke="#59d98c" stroke-width="6" stroke-linecap="round"/>
+</svg>

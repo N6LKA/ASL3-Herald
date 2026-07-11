@@ -3,10 +3,24 @@
 # Usage: curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/install.sh | sudo bash
 #   (the "sudo bash <(curl ...)" process-substitution form fails with
 #    /dev/fd/63: No such file or directory on some systems — pipe instead)
+#
+# To test unreleased changes from the develop branch instead of main:
+#   curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/develop/install.sh | sudo bash -s -- --branch develop
+#   (pass --branch as a script argument, not an env var - env vars set before
+#    "sudo" on a piped command don't reliably survive the sudo call on every
+#    system, but args after "bash -s --" always do)
 
 set -euo pipefail
 
-REPO_RAW="https://raw.githubusercontent.com/N6LKA/asl3-herald/main"
+BRANCH="main"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --branch) BRANCH="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+
+REPO_RAW="https://raw.githubusercontent.com/N6LKA/asl3-herald/${BRANCH}"
 INSTALL_DIR="/usr/local/bin/asl3-herald"
 CONFIG_DIR="/etc/asterisk/scripts/asl3-herald"
 ANNOUNCE_DIR="$CONFIG_DIR/announcements"
@@ -18,6 +32,15 @@ info()    { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
+# Captured before anything is touched: if the service was already running,
+# it's an update/reinstall (not a fresh install), so we restart it at the end
+# to actually load the new code - `herald reload` (SIGHUP) only re-reads the
+# YAML config into an already-running process, it can never pick up changes
+# to asl3-herald.py itself. Re-running this installer alone was never enough
+# to apply a code update; only a restart (or reboot) does.
+WAS_ACTIVE=false
+systemctl is-active --quiet asl3-herald 2>/dev/null && WAS_ACTIVE=true
+
 if [[ $EUID -ne 0 ]]; then
     error "This installer must be run as root. Use: curl -fsSL ... | sudo bash"
 fi
@@ -25,6 +48,7 @@ fi
 echo ""
 echo "  asl3-herald — Enhanced Tail Message & Announcement Daemon"
 echo "  https://github.com/N6LKA/asl3-herald"
+[[ "$BRANCH" != "main" ]] && warn "Installing from branch: $BRANCH (not main)"
 echo ""
 
 # ── Dependencies ───────────────────────────────────────────────────────────────
@@ -150,15 +174,18 @@ if [[ ! -d /etc/allmon3 && ! -d /var/www/html/supermon ]]; then
 fi
 
 info "Installing web UI to $WEB_DIR ..."
-mkdir -p "$WEB_DIR/api"
+mkdir -p "$WEB_DIR/api" "$WEB_DIR/img"
 for f in herald-common.php herald-ui-fragment.php herald-ui.js; do
     curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/$f" -o "$WEB_DIR/$f"
 done
-for f in list.php voices.php play.php reload.php toggle.php remove.php add_rotation.php add_scheduled.php settings.php; do
+for f in list.php voices.php play.php reload.php toggle.php remove.php add_rotation.php add_scheduled.php edit_rotation.php edit_scheduled.php settings.php; do
     curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/api/$f" -o "$WEB_DIR/api/$f"
 done
+for f in asl3-herald-icon.svg asl3-herald-banner.svg; do
+    curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/img/$f" -o "$WEB_DIR/img/$f"
+done
 chown -R www-data:www-data "$WEB_DIR"
-find "$WEB_DIR" -type f \( -name "*.php" -o -name "*.inc" -o -name "*.js" \) -exec chmod 644 {} \;
+find "$WEB_DIR" -type f \( -name "*.php" -o -name "*.inc" -o -name "*.js" -o -name "*.svg" \) -exec chmod 644 {} \;
 
 info "Writing sudoers rule for www-data (herald command only) ..."
 cat > "$SUDOERS_WEB" << EOF
@@ -278,18 +305,34 @@ if [[ -f "$SUPERMON_FOOTER" ]]; then
     fi
 fi
 
+# ── Restart if this was an update to an already-running install ────────────────
+# `herald reload` (SIGHUP) only re-reads the YAML config, never the daemon's
+# own code - a code update (like this one) needs an actual process restart to
+# take effect. Only done when the service was already active before this run,
+# so a genuinely fresh install still starts with an unedited example config
+# only once the user is ready (per "Next steps" below).
+if $WAS_ACTIVE; then
+    info "asl3-herald was already running — restarting to load the updated code ..."
+    systemctl restart asl3-herald
+fi
+
 # ── Summary ────────────────────────────────────────────────────────────────────
 
 VERSION=$(cat "$INSTALL_DIR/version.txt" 2>/dev/null || echo "unknown")
 echo ""
 echo -e "  ${GREEN}asl3-herald v${VERSION} installed successfully.${NC}"
 echo ""
-echo "  Next steps:"
-echo "  1. Edit config:   nano $CONFIG_DIR/asl3-herald.conf"
-echo "  2. Start service: sudo systemctl start asl3-herald"
-echo "  3. Check status:  herald status"
-echo "  4. Add a message: sudo herald add \"This is W1ABC, repeater ID.\" --name id"
-echo "  5. List voices:   herald voices"
+if $WAS_ACTIVE; then
+    echo "  Service was already running and has been restarted to pick up this update."
+    echo "  Check status:  herald status"
+else
+    echo "  Next steps:"
+    echo "  1. Edit config:   nano $CONFIG_DIR/asl3-herald.conf"
+    echo "  2. Start service: sudo systemctl start asl3-herald"
+    echo "  3. Check status:  herald status"
+    echo "  4. Add a message: sudo herald add \"This is W1ABC, repeater ID.\" --name id"
+    echo "  5. List voices:   herald voices"
+fi
 echo ""
 echo "  Manage:  herald <status|enable|disable|reload|voices|add|add-file|list|remove|play|add-schedule|add-schedule-file>"
 echo ""
