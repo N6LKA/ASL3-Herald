@@ -32,6 +32,15 @@ info()    { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
+# Captured before anything is touched: if the service was already running,
+# it's an update/reinstall (not a fresh install), so we restart it at the end
+# to actually load the new code - `herald reload` (SIGHUP) only re-reads the
+# YAML config into an already-running process, it can never pick up changes
+# to asl3-herald.py itself. Re-running this installer alone was never enough
+# to apply a code update; only a restart (or reboot) does.
+WAS_ACTIVE=false
+systemctl is-active --quiet asl3-herald 2>/dev/null && WAS_ACTIVE=true
+
 if [[ $EUID -ne 0 ]]; then
     error "This installer must be run as root. Use: curl -fsSL ... | sudo bash"
 fi
@@ -296,18 +305,34 @@ if [[ -f "$SUPERMON_FOOTER" ]]; then
     fi
 fi
 
+# ── Restart if this was an update to an already-running install ────────────────
+# `herald reload` (SIGHUP) only re-reads the YAML config, never the daemon's
+# own code - a code update (like this one) needs an actual process restart to
+# take effect. Only done when the service was already active before this run,
+# so a genuinely fresh install still starts with an unedited example config
+# only once the user is ready (per "Next steps" below).
+if $WAS_ACTIVE; then
+    info "asl3-herald was already running — restarting to load the updated code ..."
+    systemctl restart asl3-herald
+fi
+
 # ── Summary ────────────────────────────────────────────────────────────────────
 
 VERSION=$(cat "$INSTALL_DIR/version.txt" 2>/dev/null || echo "unknown")
 echo ""
 echo -e "  ${GREEN}asl3-herald v${VERSION} installed successfully.${NC}"
 echo ""
-echo "  Next steps:"
-echo "  1. Edit config:   nano $CONFIG_DIR/asl3-herald.conf"
-echo "  2. Start service: sudo systemctl start asl3-herald"
-echo "  3. Check status:  herald status"
-echo "  4. Add a message: sudo herald add \"This is W1ABC, repeater ID.\" --name id"
-echo "  5. List voices:   herald voices"
+if $WAS_ACTIVE; then
+    echo "  Service was already running and has been restarted to pick up this update."
+    echo "  Check status:  herald status"
+else
+    echo "  Next steps:"
+    echo "  1. Edit config:   nano $CONFIG_DIR/asl3-herald.conf"
+    echo "  2. Start service: sudo systemctl start asl3-herald"
+    echo "  3. Check status:  herald status"
+    echo "  4. Add a message: sudo herald add \"This is W1ABC, repeater ID.\" --name id"
+    echo "  5. List voices:   herald voices"
+fi
 echo ""
 echo "  Manage:  herald <status|enable|disable|reload|voices|add|add-file|list|remove|play|add-schedule|add-schedule-file>"
 echo ""

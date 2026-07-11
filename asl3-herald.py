@@ -15,6 +15,7 @@ import json
 import signal
 import argparse
 import subprocess
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -836,6 +837,8 @@ def main():
             sys.exit(0)
         except Exception as e:
             log_error(f"Unexpected error: {e}")
+            for line in traceback.format_exc().splitlines():
+                log_error(line)
             time.sleep(5)
 
 
