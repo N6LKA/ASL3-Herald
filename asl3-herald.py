@@ -46,6 +46,11 @@ DEBUG = False
 # starts (see scheduled_busy_until in state).
 DEFAULT_ANNOUNCEMENT_DURATION = 8.0
 BUSY_GRACE_SECONDS = 1.5
+# Hard ceiling on how long a single scheduled announcement can hold off tail
+# messages, regardless of its real/estimated duration - a corrupt file or a
+# bad soxi reading must never be able to wedge scheduled_busy_until far into
+# the future and silence tail messages (and SkywarnPlus) indefinitely.
+MAX_BUSY_SECONDS = 60.0
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -146,7 +151,13 @@ def node_is_keyed(node):
 def audio_duration(filepath):
     try:
         r = subprocess.run(["soxi", "-D", filepath], capture_output=True, text=True, timeout=5)
-        return float(r.stdout.strip())
+        duration = float(r.stdout.strip())
+        # A corrupt/garbage file could make soxi report 0, negative, or an
+        # absurdly large number - fall back to the default rather than
+        # trusting it, same reasoning as MAX_BUSY_SECONDS below.
+        if duration <= 0 or duration > 300:
+            return None
+        return duration
     except Exception:
         return None
 
@@ -707,7 +718,7 @@ def main():
                     state["scheduled_played"][sched.get("Name", "")] = now_dt.strftime("%Y-%m-%d")
                     state["scheduled_pending"].pop(sched.get("Name", ""), None)
                     duration = audio_duration(sched["File"]) or DEFAULT_ANNOUNCEMENT_DURATION
-                    state["scheduled_busy_until"] = now + duration + BUSY_GRACE_SECONDS
+                    state["scheduled_busy_until"] = now + min(duration, MAX_BUSY_SECONDS) + BUSY_GRACE_SECONDS
                     save_state(state)
 
             # ── Kerchunk / tail message (unkey-driven) ────────────────────
@@ -745,7 +756,9 @@ def main():
                             # last_tail_played here, so this unkey doesn't cost
                             # anything against MinInterval - it just tries again
                             # on the next unkey once the announcement has finished.
-                            log_debug("Scheduled announcement in progress - delaying tail message to next unkey")
+                            # Logged at INFO (not DEBUG) since this is a rare,
+                            # notable event worth seeing without enabling Debug.
+                            log_info("Scheduled announcement in progress - delaying tail message to next unkey")
 
                         elif swp_active:
                             try:
