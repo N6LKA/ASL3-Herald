@@ -287,17 +287,6 @@
   </div>
 
   <div class="card">
-    <h3>Backup &amp; Restore</h3>
-    <p class="muted">Export the full configuration (rotation, scheduled announcements, and settings) as a JSON file, or restore from a previously exported file. Restoring replaces the entire configuration.</p>
-    <button id="btn-export-config">Download Config Backup</button>
-    <br><br>
-    <label>Restore from backup file</label>
-    <input type="file" id="config-import-file" accept=".json">
-    <button class="btn-danger" id="btn-import-config">Restore Config</button>
-    <div class="msg" id="backup-msg"></div>
-  </div>
-
-  <div class="card">
     <h3>General Settings</h3>
     <label>Node</label>
     <input type="text" id="set-node" style="width: 200px;">
@@ -323,6 +312,17 @@
     <br><br>
     <button class="btn-primary" id="btn-save-settings">Save &amp; Reload</button>
     <div class="msg" id="settings-msg"></div>
+  </div>
+
+  <div class="card">
+    <h3>Backup &amp; Restore</h3>
+    <p class="muted">Export the full configuration (rotation, scheduled announcements, and settings) as a JSON file, or restore from a previously exported file. Restoring replaces the entire configuration.</p>
+    <button id="btn-export-config">Download Config Backup</button>
+    <br><br>
+    <label>Restore from backup file</label>
+    <input type="file" id="config-import-file" accept=".json">
+    <button class="btn-danger" id="btn-import-config">Restore Config</button>
+    <div class="msg" id="backup-msg"></div>
   </div>
 </div>
 </div>
