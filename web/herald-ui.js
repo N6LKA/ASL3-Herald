@@ -213,8 +213,11 @@
     document.querySelectorAll('.btn-reorder').forEach(btn => {
       btn.onclick = async () => {
         if (btn.disabled) return;
-        await api('reorder_rotation.php', { method: 'POST', headers: {'Content-Type':'application/json'},
+        const data = await api('reorder_rotation.php', { method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ name: btn.dataset.name, direction: btn.dataset.direction }) });
+        if (data.success === false) {
+          showMsg(document.getElementById('tail-msg'), data.message || 'Reorder failed', false);
+        }
         loadAll();
       };
     });

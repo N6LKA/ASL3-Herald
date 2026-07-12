@@ -12,4 +12,7 @@ if (!in_array($direction, ['up', 'down'], true)) {
     herald_json_response(['success' => false, 'message' => 'Invalid direction'], 400);
 }
 
-herald_respond_from_cli(herald_run_sudo(['reorder-rotation', $name, '--direction', $direction]));
+// herald reorder-rotation takes two plain positional args (<name> <up|down>),
+// not a --direction flag - herald's own cmd_reorder_rotation() does simple
+// $1/$2 positional parsing, unlike most other subcommands here.
+herald_respond_from_cli(herald_run_sudo(['reorder-rotation', $name, $direction]));
