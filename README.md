@@ -50,7 +50,7 @@ Plus:
 **Stable (recommended):** installs from `main` — the tested, working release.
 
 ```bash
-curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/install.sh | sudo bash
+curl -fsSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/N6LKA/asl3-herald/contents/install.sh?ref=main" | sudo bash
 ```
 
 **Development (testing only):** installs from `develop` — whatever's currently being worked on ahead of the next release.
@@ -58,8 +58,10 @@ curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/
 > ⚠️ **Warning:** `develop` may contain incomplete, untested, or broken features at any given time. Only use this on a system where you can tolerate things breaking (or reinstall from `main` to recover). Don't use it on a repeater you depend on for daily use.
 
 ```bash
-curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/develop/install.sh | sudo bash -s -- --branch develop
+curl -fsSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/N6LKA/asl3-herald/contents/install.sh?ref=develop" | sudo bash -s -- --branch develop
 ```
+
+Both commands fetch `install.sh` via GitHub's Contents API rather than `raw.githubusercontent.com` — the latter is fronted by a CDN that can serve a stale cached copy of a file for an extended stretch, which matters here since `install.sh` itself also fetches every other repo file the same way (see how it works, below).
 
 `--branch develop` must be passed as a script argument exactly as shown (not an environment variable — those don't reliably survive the `sudo` call on a piped command).
 
@@ -83,13 +85,13 @@ The installer will:
 ## Uninstalling
 
 ```bash
-curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/uninstall.sh | sudo bash
+curl -fsSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/N6LKA/asl3-herald/contents/uninstall.sh?ref=main" | sudo bash
 ```
 
 By default this removes the daemon, `herald` CLI, systemd service, web UI, sudoers rule, and the Allmon3/Supermon integration lines it added — while **preserving** your config, announcements, state, and Piper TTS install so a future reinstall picks up where you left off. To also remove those:
 
 ```bash
-curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/uninstall.sh | sudo bash -s -- --purge-all
+curl -fsSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/N6LKA/asl3-herald/contents/uninstall.sh?ref=main" | sudo bash -s -- --purge-all
 ```
 
 (`--purge-config` and `--purge-piper` are available individually too.)
@@ -125,7 +127,7 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 **Example config:**
 
 ```yaml
-Node: "501260"
+Node: "YOUR_NODE_NUMBER"
 PollInterval: 1
 Debug: false
 

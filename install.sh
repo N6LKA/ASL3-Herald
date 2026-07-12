@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # asl3-herald install script
-# Usage: curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/install.sh | sudo bash
+# Usage: curl -fsSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/N6LKA/asl3-herald/contents/install.sh?ref=main" | sudo bash
 #   (the "sudo bash <(curl ...)" process-substitution form fails with
-#    /dev/fd/63: No such file or directory on some systems — pipe instead)
+#    /dev/fd/63: No such file or directory on some systems — pipe instead.
+#    Fetched via GitHub's Contents API, not raw.githubusercontent.com - that
+#    CDN can serve a stale cached copy of this very file, which would then
+#    go on to fetch every other repo file the same stale way internally.)
 #
 # To test unreleased changes from the develop branch instead of main:
-#   curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/develop/install.sh | sudo bash -s -- --branch develop
+#   curl -fsSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/N6LKA/asl3-herald/contents/install.sh?ref=develop" | sudo bash -s -- --branch develop
 #   (pass --branch as a script argument, not an env var - env vars set before
 #    "sudo" on a piped command don't reliably survive the sudo call on every
 #    system, but args after "bash -s --" always do)
@@ -165,7 +168,41 @@ if [[ -f "$CONFIG_DIR/asl3-herald.conf" ]]; then
 else
     info "Installing example config ..."
     fetch_repo_file "asl3-herald.conf.example" "$CONFIG_DIR/asl3-herald.conf"
-    warn "Edit your config before starting: $CONFIG_DIR/asl3-herald.conf"
+
+    # Interactive prompts for a brand-new config only - never touches an
+    # existing one. Reads from /dev/tty rather than plain stdin, since this
+    # script's own stdin is the curl|bash pipe, not the terminal; falls back
+    # to leaving the field at its safe default/blank if no controlling
+    # terminal is available (e.g. a fully unattended/scripted run).
+    NODE_NUM=""
+    if [[ -r /dev/tty ]]; then
+        read -rp "Enter your ASL3/AllStarLink node number (required): " NODE_NUM < /dev/tty || true
+    fi
+    if [[ -n "$NODE_NUM" ]]; then
+        if [[ "$NODE_NUM" =~ ^[0-9]+$ ]]; then
+            sed -i "s/^Node: .*/Node: \"$NODE_NUM\"/" "$CONFIG_DIR/asl3-herald.conf"
+            info "Node number set to $NODE_NUM."
+        else
+            warn "'$NODE_NUM' doesn't look like a node number (digits only) — leaving Node blank."
+        fi
+    else
+        warn "No node number entered — leaving Node blank. The daemon will refuse to start until you set it."
+    fi
+
+    MIN_INTERVAL=""
+    if [[ -r /dev/tty ]]; then
+        read -rp "Minimum seconds between tail messages [default 300 = 5 min]: " MIN_INTERVAL < /dev/tty || true
+    fi
+    if [[ -n "$MIN_INTERVAL" ]]; then
+        if [[ "$MIN_INTERVAL" =~ ^[0-9]+$ ]]; then
+            sed -i "s/^  MinInterval: .*/  MinInterval: $MIN_INTERVAL/" "$CONFIG_DIR/asl3-herald.conf"
+            info "MinInterval set to ${MIN_INTERVAL}s."
+        else
+            warn "'$MIN_INTERVAL' isn't a number — leaving MinInterval at the default (300s = 5 min)."
+        fi
+    fi
+
+    warn "Review the rest of the config before starting: $CONFIG_DIR/asl3-herald.conf"
 fi
 
 # ── systemd service ────────────────────────────────────────────────────────────
