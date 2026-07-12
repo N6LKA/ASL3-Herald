@@ -20,7 +20,22 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-REPO_RAW="https://raw.githubusercontent.com/N6LKA/asl3-herald/${BRANCH}"
+GITHUB_CONTENTS_API="https://api.github.com/repos/N6LKA/asl3-herald/contents"
+
+# Fetches one repo file at the given ref via GitHub's Contents API rather
+# than raw.githubusercontent.com - that CDN (Fastly) has been confirmed
+# (more than once) to serve a stale cached copy of a file for an extended
+# stretch, even with a "Cache-Control: no-cache" *request* header and a
+# cache-busting query string. The Contents API reads straight from git
+# storage with no CDN layer in between, so a freshly-pushed commit is
+# reflected on the very next fetch - important here since this installer is
+# routinely re-run minutes apart while testing changes on develop.
+fetch_repo_file() {
+    local path="$1" dest="$2"
+    curl -fsSL -H "Accept: application/vnd.github.v3.raw" \
+        "$GITHUB_CONTENTS_API/${path}?ref=${BRANCH}" -o "$dest"
+}
+
 INSTALL_DIR="/usr/local/bin/asl3-herald"
 CONFIG_DIR="/etc/asterisk/scripts/asl3-herald"
 ANNOUNCE_DIR="$CONFIG_DIR/announcements"
@@ -131,14 +146,14 @@ fi
 info "Installing daemon to $INSTALL_DIR ..."
 mkdir -p "$INSTALL_DIR"
 
-curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/asl3-herald.py"   -o "$INSTALL_DIR/asl3-herald.py"
-curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/version.txt"      -o "$INSTALL_DIR/version.txt"
+fetch_repo_file "asl3-herald.py" "$INSTALL_DIR/asl3-herald.py"
+fetch_repo_file "version.txt"    "$INSTALL_DIR/version.txt"
 chmod +x "$INSTALL_DIR/asl3-herald.py"
 
 # ── Herald management command ──────────────────────────────────────────────────
 
 info "Installing herald command to $HERALD_BIN ..."
-curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/herald" -o "$HERALD_BIN"
+fetch_repo_file "herald" "$HERALD_BIN"
 chmod +x "$HERALD_BIN"
 
 # ── Config directory ───────────────────────────────────────────────────────────
@@ -149,15 +164,14 @@ if [[ -f "$CONFIG_DIR/asl3-herald.conf" ]]; then
     warn "Config already exists — not overwriting: $CONFIG_DIR/asl3-herald.conf"
 else
     info "Installing example config ..."
-    curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/asl3-herald.conf.example" \
-        -o "$CONFIG_DIR/asl3-herald.conf"
+    fetch_repo_file "asl3-herald.conf.example" "$CONFIG_DIR/asl3-herald.conf"
     warn "Edit your config before starting: $CONFIG_DIR/asl3-herald.conf"
 fi
 
 # ── systemd service ────────────────────────────────────────────────────────────
 
 info "Installing systemd service ..."
-curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/asl3-herald.service" -o "$SERVICE_FILE"
+fetch_repo_file "asl3-herald.service" "$SERVICE_FILE"
 systemctl daemon-reload
 systemctl enable asl3-herald
 
@@ -176,13 +190,13 @@ fi
 info "Installing web UI to $WEB_DIR ..."
 mkdir -p "$WEB_DIR/api" "$WEB_DIR/img"
 for f in herald-common.php herald-ui-fragment.php herald-ui.js; do
-    curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/$f" -o "$WEB_DIR/$f"
+    fetch_repo_file "web/$f" "$WEB_DIR/$f"
 done
 for f in list.php voices.php play.php reload.php toggle.php remove.php add_rotation.php add_scheduled.php edit_rotation.php edit_scheduled.php settings.php reorder_rotation.php playback_history.php config_export.php config_import.php version_check.php; do
-    curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/api/$f" -o "$WEB_DIR/api/$f"
+    fetch_repo_file "web/api/$f" "$WEB_DIR/api/$f"
 done
 for f in asl3-herald-icon.svg asl3-herald-banner.svg; do
-    curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/img/$f" -o "$WEB_DIR/img/$f"
+    fetch_repo_file "web/img/$f" "$WEB_DIR/img/$f"
 done
 chown -R www-data:www-data "$WEB_DIR"
 find "$WEB_DIR" -type f \( -name "*.php" -o -name "*.inc" -o -name "*.js" -o -name "*.svg" \) -exec chmod 644 {} \;
@@ -207,8 +221,7 @@ MENU_INI="/etc/allmon3/menu.ini"
 if [[ -d /etc/allmon3 ]]; then
     if [[ -d "$ALLMON3_WEB_ROOT" ]]; then
         info "Installing Allmon3 Announcement Settings page to $ALLMON3_WEB_ROOT ..."
-        curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/allmon3/asl3-herald.html" \
-            -o "$ALLMON3_WEB_ROOT/asl3-herald.html"
+        fetch_repo_file "web/allmon3/asl3-herald.html" "$ALLMON3_WEB_ROOT/asl3-herald.html"
         chown root:root "$ALLMON3_WEB_ROOT/asl3-herald.html" 2>/dev/null || true
         chmod 644 "$ALLMON3_WEB_ROOT/asl3-herald.html"
     else
@@ -276,8 +289,7 @@ fi
 SUPERMON_DIR="/var/www/html/supermon"
 if [[ -d "$SUPERMON_DIR" ]]; then
     info "Installing Supermon Announcement Settings page to $SUPERMON_DIR ..."
-    curl -fsSL -H "Cache-Control: no-cache" "$REPO_RAW/web/supermon/asl3-herald.php" \
-        -o "$SUPERMON_DIR/asl3-herald.php"
+    fetch_repo_file "web/supermon/asl3-herald.php" "$SUPERMON_DIR/asl3-herald.php"
     chown www-data:www-data "$SUPERMON_DIR/asl3-herald.php" 2>/dev/null || true
     chmod 644 "$SUPERMON_DIR/asl3-herald.php"
 fi
