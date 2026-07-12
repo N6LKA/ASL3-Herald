@@ -22,6 +22,9 @@ General:
   reload                                  Reload config without restarting (SIGHUP)
   list-json                               Print config as JSON (used by the web UI)
   voices [--json]                         List available TTS voices
+  playback-history                        Print recent playback history as JSON
+  export-config                           Print the full config as JSON (for backup)
+  import-config <path>                    Restore the full config from an exported JSON file
   help                                    Show this message
 
 Tail Messages (unkey-triggered rotation):
@@ -34,9 +37,11 @@ Tail Messages (unkey-triggered rotation):
   edit-rotation <name> [--new-name <n>] [--text "<text>"] [--voice <v>] [--file <path>]
                 [--days daily|d1,d2] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]
                                            Edit an existing rotation entry
+  reorder-rotation <name> <up|down>       Move a rotation entry earlier/later in the list
   list                                    List rotation + scheduled announcements
   remove <name>                           Remove a rotation file or scheduled announcement
-  play <name>                             Play an announcement immediately on the node
+  play <name>                             Test-play an announcement immediately on the node
+                                           (always local playback, ignores PlayMode)
 
   --days/--time-start/--time-end optionally restrict a rotation entry to only
   be eligible during specific days-of-week and/or a time-of-day window (e.g. a
@@ -172,11 +177,13 @@ cmd_status() {
     local info
     info="$(daemon_list_json)"
     if [[ -n "$info" ]]; then
+        echo "Version:   $(echo "$info" | json_get "d['version']")"
         echo "Node:      $(echo "$info" | json_get "d['node']")"
         echo "MinInterval: $(echo "$info" | json_get "d['tail_message']['min_interval']")s"
         echo "SkywarnPlus: $(echo "$info" | json_get "d['tail_message']['skywarnplus']['enable']")"
         echo "Rotation entries:  $(echo "$info" | json_get "len(d['tail_message']['rotation'])")"
         echo "Scheduled entries: $(echo "$info" | json_get "len(d['scheduled'])")"
+        echo "Missing files:     $(echo "$info" | json_get "sum(1 for e in d['tail_message']['rotation'] if e.get('FileMissing')) + sum(1 for s in d['scheduled'] if s.get('FileMissing'))")"
     else
         echo "Node:      <config unreadable>"
     fi
@@ -415,6 +422,8 @@ for i, e in enumerate(rot, 1):
     node = e.get('Node') if isinstance(e, dict) else None
     if node:
         tags.append(f'node {node}')
+    if isinstance(e, dict) and e.get('FileMissing'):
+        tags.append('MISSING FILE')
     suffix = f\" ({'; '.join(tags)})\" if tags else ''
     print(f'  {i}. {f}{suffix}')
 "
@@ -432,7 +441,8 @@ for s in sched:
     days = days if isinstance(days, str) else ','.join(days)
     week = f\" (week {s['Week']})\" if s.get('Week') else ''
     node = f\" [node {s['Node']}]\" if s.get('Node') else ''
-    print(f\"  {s.get('Name','?')} — {s.get('Time','?')} {days}{week}{node} — {s.get('File','?')}\")
+    missing = ' [MISSING FILE]' if s.get('FileMissing') else ''
+    print(f\"  {s.get('Name','?')} — {s.get('Time','?')} {days}{week}{node} — {s.get('File','?')}{missing}\")
 "
 }
 
@@ -460,6 +470,38 @@ cmd_update_settings() {
     cmd_reload 2>/dev/null || true
 }
 
+cmd_reorder_rotation() {
+    need_root "$@"
+    local name="$1" direction="$2"
+    if [[ -z "$name" || -z "$direction" ]]; then
+        echo "Usage: herald reorder-rotation <name> <up|down>"
+        exit 1
+    fi
+    python3 "$DAEMON_PY" reorder-rotation "$name" --direction "$direction"
+    cmd_reload 2>/dev/null || true
+}
+
+cmd_playback_history() {
+    # Read-only JSON passthrough for the web UI — no root required.
+    python3 "$DAEMON_PY" playback-history 2>/dev/null
+}
+
+cmd_export_config() {
+    # Read-only JSON passthrough for the web UI — no root required.
+    python3 "$DAEMON_PY" export-config 2>/dev/null
+}
+
+cmd_import_config() {
+    need_root "$@"
+    local src="$1"
+    if [[ -z "$src" || ! -f "$src" ]]; then
+        echo "Usage: herald import-config <path-to-json-file>"
+        exit 1
+    fi
+    python3 "$DAEMON_PY" import-config "$src"
+    cmd_reload 2>/dev/null || true
+}
+
 cmd_play() {
     need_root "$@"
     local name="$1"
@@ -483,24 +525,19 @@ cmd_play() {
         exit 1
     fi
 
-    # Rotation entries always play locally; a scheduled announcement may be
-    # configured for global (network-wide) playback instead. Either kind of
-    # entry may also carry a Node override (targets a specific node number
-    # instead of the daemon's default, for multinodes= setups).
-    local play_mode
-    play_mode="$(echo "$info" | json_get "next((s.get('PlayMode','local') for s in d['scheduled'] if s.get('Name')=='$name'), 'local')")"
-    [[ -z "$play_mode" ]] && play_mode="local"
-
+    # Always plays locally, regardless of a scheduled entry's configured
+    # PlayMode - this is a test/preview play, not the entry's real triggered
+    # playback (unkey or scheduled time), so it must never actually go out
+    # over the network. A Node override (multinodes= setups) is still
+    # honored, since that's a targeting concern, not a broadcast-scope one.
     local entry_node
     entry_node="$(echo "$info" | json_get "next((s.get('Node') for s in d['scheduled'] if s.get('Name')=='$name' and s.get('Node')), next((r.get('Node') for r in d['tail_message']['rotation'] if isinstance(r, dict) and r.get('File')=='$wavfile' and r.get('Node')), ''))")"
     [[ -n "$entry_node" ]] && node="$entry_node"
 
-    local rpt_cmd="rpt localplay"
-    [[ "$play_mode" == "global" ]] && rpt_cmd="rpt playback"
-
     local path_no_ext="${wavfile%.wav}"
-    echo "Playing $name on node $node (mode: $play_mode) ..."
-    asterisk -rx "$rpt_cmd $node $path_no_ext"
+    echo "Testing (local playback) $name on node $node ..."
+    asterisk -rx "rpt localplay $node $path_no_ext"
+    python3 "$DAEMON_PY" log-playback --type test --name "$name" --file "$wavfile" --node "$node" --play-mode local >/dev/null 2>&1 || true
 }
 
 # ── Scheduled announcement commands ───────────────────────────────────────────
@@ -649,6 +686,7 @@ case "$CMD" in
     add)                  cmd_add                "$@" ;;
     add-file)             cmd_add_file           "$@" ;;
     edit-rotation)        cmd_edit_rotation      "$@" ;;
+    reorder-rotation)     cmd_reorder_rotation   "$@" ;;
     list)                 cmd_list               "$@" ;;
     remove)               cmd_remove             "$@" ;;
     play)                 cmd_play               "$@" ;;
@@ -656,6 +694,9 @@ case "$CMD" in
     add-schedule-file)    cmd_add_schedule_file  "$@" ;;
     edit-schedule)        cmd_edit_schedule      "$@" ;;
     update-settings)      cmd_update_settings    "$@" ;;
+    playback-history)     cmd_playback_history   "$@" ;;
+    export-config)        cmd_export_config      "$@" ;;
+    import-config)        cmd_import_config      "$@" ;;
     help|--help|-h) usage ;;
     *)
         echo "Unknown command: $CMD"

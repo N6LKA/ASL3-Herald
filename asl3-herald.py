@@ -53,6 +53,10 @@ BUSY_GRACE_SECONDS = 1.5
 # the future and silence tail messages (and SkywarnPlus) indefinitely.
 MAX_BUSY_SECONDS = 60.0
 
+# How many playback events to keep in state["playback_history"] - old entries
+# are trimmed off the front so the state file can't grow unbounded.
+MAX_PLAYBACK_HISTORY = 200
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 
 def log(level, msg):
@@ -92,6 +96,7 @@ def load_state():
         "scheduled_busy_until": 0.0,
         "swp_last_mtime": None,
         "swp_next_is_rotation": False,
+        "playback_history": [],
     }
     try:
         if os.path.exists(STATE_FILE):
@@ -227,6 +232,21 @@ def rotation_entry_node(entry, node):
     entry_node = entry.get("Node") if isinstance(entry, dict) else None
     return str(entry_node) if entry_node else node
 
+def log_playback(state, entry_type, name, filepath, node, play_mode="local"):
+    # entry_type: "rotation" | "wx" | "scheduled" | "test" (manual play from
+    # the CLI/web UI). Kept in state (not a separate file) since writes only
+    # happen on actual play events, not every poll cycle.
+    history = state.setdefault("playback_history", [])
+    history.append({
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "type": entry_type,
+        "name": name,
+        "file": os.path.basename(filepath) if filepath else "",
+        "node": node,
+        "play_mode": play_mode,
+    })
+    state["playback_history"] = history[-MAX_PLAYBACK_HISTORY:]
+
 def scheduled_time_matches(sched, now):
     if now.strftime("%H:%M") != sched.get("Time", ""):
         return False
@@ -316,10 +336,10 @@ def normalize_rotation(rotation):
     out = []
     for e in rotation:
         if isinstance(e, str):
-            out.append({"File": e, "Text": None, "Voice": None,
-                        "Days": "daily", "TimeStart": None, "TimeEnd": None, "Node": None})
+            entry = {"File": e, "Text": None, "Voice": None,
+                      "Days": "daily", "TimeStart": None, "TimeEnd": None, "Node": None}
         else:
-            out.append({
+            entry = {
                 "File": e.get("File", ""),
                 "Text": e.get("Text"),
                 "Voice": e.get("Voice"),
@@ -327,7 +347,18 @@ def normalize_rotation(rotation):
                 "TimeStart": e.get("TimeStart"),
                 "TimeEnd": e.get("TimeEnd"),
                 "Node": e.get("Node"),
-            })
+            }
+        entry["FileMissing"] = not (entry["File"] and os.path.exists(entry["File"]))
+        out.append(entry)
+    return out
+
+def scheduled_with_health(scheduled):
+    out = []
+    for s in scheduled:
+        s2 = dict(s)
+        filepath = s.get("File", "")
+        s2["FileMissing"] = not (filepath and os.path.exists(filepath))
+        out.append(s2)
     return out
 
 def cmd_list_json(config):
@@ -338,6 +369,7 @@ def cmd_list_json(config):
         "poll_interval": poll,
         "debug": debug,
         "herald_enabled": not os.path.exists(DISABLE_FLAG),
+        "version": VERSION,
         "tail_message": {
             "enable": tm_on,
             "min_interval": min_int,
@@ -348,7 +380,7 @@ def cmd_list_json(config):
                 "silence_threshold": swp_thr,
             },
         },
-        "scheduled": scheduled,
+        "scheduled": scheduled_with_health(scheduled),
     }
     print(json.dumps(out, indent=2))
 
@@ -525,6 +557,65 @@ def cmd_remove(config, identifier):
 
     print(json.dumps({"success": False, "message": f"No match found for: {identifier}"}))
 
+def cmd_reorder_rotation(config, args):
+    tm = config.setdefault("TailMessage", {})
+    rotation = tm.setdefault("Rotation", [])
+
+    target = os.path.basename(args.name)
+    target_noext = os.path.splitext(target)[0]
+    idx = None
+    for i, e in enumerate(rotation):
+        base = os.path.basename(rotation_entry_file(e))
+        base_noext = os.path.splitext(base)[0]
+        if base == target or base_noext == target_noext:
+            idx = i
+            break
+
+    if idx is None:
+        print(json.dumps({"success": False, "message": f"No rotation entry found for: {args.name}"}))
+        return
+
+    if args.direction == "up":
+        if idx == 0:
+            print(json.dumps({"success": False, "message": "Already first in rotation"}))
+            return
+        rotation[idx - 1], rotation[idx] = rotation[idx], rotation[idx - 1]
+    else:
+        if idx == len(rotation) - 1:
+            print(json.dumps({"success": False, "message": "Already last in rotation"}))
+            return
+        rotation[idx + 1], rotation[idx] = rotation[idx], rotation[idx + 1]
+
+    save_config(config)
+    print(json.dumps({"success": True, "message": "Rotation reordered"}))
+
+def cmd_log_playback(args):
+    state = load_state()
+    log_playback(state, args.type, args.name, args.file, args.node, args.play_mode)
+    save_state(state)
+    print(json.dumps({"success": True}))
+
+def cmd_playback_history():
+    state = load_state()
+    history = state.get("playback_history", [])
+    print(json.dumps({"history": list(reversed(history))}))
+
+def cmd_export_config(config):
+    print(json.dumps(config, indent=2))
+
+def cmd_import_config(args):
+    try:
+        with open(args.file) as f:
+            new_config = json.load(f)
+    except Exception as e:
+        print(json.dumps({"success": False, "message": f"Could not read import file: {e}"}))
+        return
+    if not isinstance(new_config, dict) or "Node" not in new_config:
+        print(json.dumps({"success": False, "message": "Invalid config: not a recognizable asl3-herald config"}))
+        return
+    save_config(new_config)
+    print(json.dumps({"success": True, "message": "Config imported and saved"}))
+
 def cmd_update_settings(config, args):
     if args.node is not None:
         config["Node"] = args.node
@@ -600,6 +691,24 @@ def build_arg_parser():
     p_remove = sub.add_parser("remove", help="Remove a rotation file or scheduled announcement by name")
     p_remove.add_argument("identifier")
 
+    p_reorder = sub.add_parser("reorder-rotation", help="Move a rotation entry up or down in the list")
+    p_reorder.add_argument("name")
+    p_reorder.add_argument("--direction", choices=["up", "down"], required=True)
+
+    p_log_play = sub.add_parser("log-playback", help="Record a playback event in history (internal use)")
+    p_log_play.add_argument("--type", default="test")
+    p_log_play.add_argument("--name", required=True)
+    p_log_play.add_argument("--file", default="")
+    p_log_play.add_argument("--node", default="")
+    p_log_play.add_argument("--play-mode", dest="play_mode", default="local")
+
+    sub.add_parser("playback-history", help="Print playback history as JSON")
+
+    sub.add_parser("export-config", help="Export the full daemon config as JSON (for backup)")
+
+    p_import = sub.add_parser("import-config", help="Restore the full daemon config from an exported JSON file")
+    p_import.add_argument("file")
+
     p_settings = sub.add_parser("update-settings", help="Update general daemon settings")
     p_settings.add_argument("--node")
     p_settings.add_argument("--poll-interval", type=int)
@@ -633,6 +742,16 @@ def cli_main():
         cmd_edit_scheduled(config, args)
     elif args.command == "remove":
         cmd_remove(config, args.identifier)
+    elif args.command == "reorder-rotation":
+        cmd_reorder_rotation(config, args)
+    elif args.command == "log-playback":
+        cmd_log_playback(args)
+    elif args.command == "playback-history":
+        cmd_playback_history()
+    elif args.command == "export-config":
+        cmd_export_config(config)
+    elif args.command == "import-config":
+        cmd_import_config(args)
     elif args.command == "update-settings":
         cmd_update_settings(config, args)
 
@@ -715,7 +834,9 @@ def main():
                     name = sched.get("Name", sched.get("File", ""))
                     log_info(f"Scheduled announcement: {name}")
                     target_node = str(sched["Node"]) if sched.get("Node") else node
-                    play_file(target_node, sched["File"], sched.get("PlayMode", "local"))
+                    play_mode = sched.get("PlayMode", "local")
+                    play_file(target_node, sched["File"], play_mode)
+                    log_playback(state, "scheduled", name, sched["File"], target_node, play_mode)
                     state["scheduled_played"][sched.get("Name", "")] = now_dt.strftime("%Y-%m-%d")
                     state["scheduled_pending"].pop(sched.get("Name", ""), None)
                     duration = audio_duration(sched["File"]) or DEFAULT_ANNOUNCEMENT_DURATION
@@ -773,6 +894,7 @@ def main():
                                 # regardless of whose turn it was.
                                 log_info("Playing SkywarnPlus WX tail message (new/changed alert)")
                                 play_file(node, swp_file)
+                                log_playback(state, "wx", "SkywarnPlus WX Alert", swp_file, node)
                                 state["swp_last_mtime"] = swp_mtime
                                 state["swp_next_is_rotation"] = True
                                 state["last_tail_played"] = now
@@ -788,7 +910,9 @@ def main():
                                     filepath = rotation_entry_file(entry)
                                     if os.path.exists(filepath):
                                         log_info(f"Playing rotation [{idx + 1}/{len(eligible)}] (alternating with active WX alert): {Path(filepath).name}")
-                                        play_file(rotation_entry_node(entry, node), filepath)
+                                        target_node = rotation_entry_node(entry, node)
+                                        play_file(target_node, filepath)
+                                        log_playback(state, "rotation", Path(filepath).name, filepath, target_node)
                                         state["rotation_index"]       = (idx + 1) % len(eligible)
                                         state["swp_next_is_rotation"] = False
                                         state["last_tail_played"]     = now
@@ -796,17 +920,20 @@ def main():
                                     else:
                                         log_warn(f"Rotation file not found: {filepath} - playing WX alert instead")
                                         play_file(node, swp_file)
+                                        log_playback(state, "wx", "SkywarnPlus WX Alert", swp_file, node)
                                         state["last_tail_played"] = now
                                         save_state(state)
                                 else:
                                     log_debug("No rotation entries eligible right now (day/time-window gating) - playing WX alert instead")
                                     play_file(node, swp_file)
+                                    log_playback(state, "wx", "SkywarnPlus WX Alert", swp_file, node)
                                     state["last_tail_played"] = now
                                     save_state(state)
 
                             else:
                                 log_info("Playing SkywarnPlus WX tail message (alternating)")
                                 play_file(node, swp_file)
+                                log_playback(state, "wx", "SkywarnPlus WX Alert", swp_file, node)
                                 state["swp_next_is_rotation"] = True
                                 state["last_tail_played"] = now
                                 save_state(state)
@@ -819,7 +946,9 @@ def main():
                                 filepath = rotation_entry_file(entry)
                                 if os.path.exists(filepath):
                                     log_info(f"Playing rotation [{idx + 1}/{len(eligible)}]: {Path(filepath).name}")
-                                    play_file(rotation_entry_node(entry, node), filepath)
+                                    target_node = rotation_entry_node(entry, node)
+                                    play_file(target_node, filepath)
+                                    log_playback(state, "rotation", Path(filepath).name, filepath, target_node)
                                     state["rotation_index"]   = (idx + 1) % len(eligible)
                                     state["last_tail_played"] = now
                                     save_state(state)

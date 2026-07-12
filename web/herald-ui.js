@@ -119,6 +119,7 @@
     setHeraldStatus.textContent = heraldStatusText;
     setHeraldStatus.style.color = heraldStatusColor;
     setHeraldStatus.style.fontWeight = 'bold';
+    document.getElementById('set-herald-version').textContent = data.version || 'unknown';
 
     document.getElementById('set-node').value = data.node || '';
     document.getElementById('set-poll-interval').value = data.poll_interval;
@@ -130,7 +131,8 @@
 
     const tbody = document.querySelector('#tail-table tbody');
     tbody.innerHTML = '';
-    (data.tail_message.rotation || []).forEach((entry, i) => {
+    const rotationList = data.tail_message.rotation || [];
+    rotationList.forEach((entry, i) => {
       const isObj = entry && typeof entry === 'object';
       const file = isObj ? (entry.File || '') : entry;
       const text = isObj ? entry.Text : null;
@@ -139,14 +141,19 @@
       const timeStart = isObj ? entry.TimeStart : null;
       const timeEnd = isObj ? entry.TimeEnd : null;
       const node = isObj ? entry.Node : null;
+      const fileMissing = isObj && !!entry.FileMissing;
       const daysAttr = Array.isArray(days) ? days.join(',') : (days || 'daily');
       const daysDisplay = Array.isArray(days) ? days.join(', ') : (days || 'Daily');
       const windowDisplay = (timeStart || timeEnd) ? ((timeStart || '00:00') + '–' + (timeEnd || '23:59')) : '—';
       const name = basename(file).replace(/\.wav$/, '');
+      const canMoveUp = i > 0;
+      const canMoveDown = i < rotationList.length - 1;
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + (i + 1) + '</td><td>' + basename(file) + '</td><td>' + daysDisplay + '</td>' +
+      tr.innerHTML = '<td>' + (i + 1) + '</td><td>' + basename(file) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td><td>' + daysDisplay + '</td>' +
         '<td>' + windowDisplay + '</td><td>' + (node || '—') + '</td><td>' +
-        '<button class="btn-play" data-name="' + name + '">Play</button>' +
+        '<button class="btn-reorder" data-name="' + name + '" data-direction="up" title="Move up"' + (canMoveUp ? '' : ' disabled') + '>&uarr;</button>' +
+        '<button class="btn-reorder" data-name="' + name + '" data-direction="down" title="Move down"' + (canMoveDown ? '' : ' disabled') + '>&darr;</button>' +
+        '<button class="btn-play" data-name="' + name + '">Test (local playback)</button>' +
         '<button class="btn-edit" data-type="tail" data-name="' + name + '" data-text="' + escapeAttr(text) + '" data-voice="' + escapeAttr(voice) + '" data-days="' + escapeAttr(daysAttr) + '" data-time-start="' + escapeAttr(timeStart) + '" data-time-end="' + escapeAttr(timeEnd) + '" data-node="' + escapeAttr(node) + '">Edit</button>' +
         '<button class="btn-danger" data-name="' + name + '">Remove</button></td>';
       tbody.appendChild(tr);
@@ -158,18 +165,41 @@
       const daysAttr = Array.isArray(s.Days) ? s.Days.join(',') : (s.Days || 'daily');
       const daysDisplay = Array.isArray(s.Days) ? s.Days.join(', ') : s.Days;
       const playMode = s.PlayMode === 'global' ? 'global' : 'local';
+      const fileMissing = !!s.FileMissing;
       const tr = document.createElement('tr');
       tr.innerHTML = '<td>' + s.Name + '</td><td>' + s.Time + '</td><td>' + daysDisplay + '</td>' +
         '<td>' + (s.Week || '—') + '</td><td>' + (playMode === 'global' ? 'Global' : 'Local') + '</td>' +
         '<td>' + (s.Node || '—') + '</td>' +
-        '<td>' + basename(s.File) + '</td><td>' +
-        '<button class="btn-play" data-name="' + s.Name + '">Play</button>' +
+        '<td>' + basename(s.File) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td><td>' +
+        '<button class="btn-play" data-name="' + s.Name + '">Test (local playback)</button>' +
         '<button class="btn-edit" data-type="sched" data-name="' + s.Name + '" data-time="' + s.Time + '" data-days="' + daysAttr + '" data-week="' + (s.Week || '') + '" data-playmode="' + playMode + '" data-node="' + escapeAttr(s.Node) + '" data-text="' + escapeAttr(s.Text) + '" data-voice="' + escapeAttr(s.Voice) + '">Edit</button>' +
         '<button class="btn-danger" data-name="' + s.Name + '">Remove</button></td>';
       stbody.appendChild(tr);
     });
 
     wireRowButtons();
+    loadHistory();
+  }
+
+  // ── Playback history ─────────────────────────────────────────────────
+  async function loadHistory() {
+    const data = await api('playback_history.php');
+    const tbody = document.querySelector('#history-table tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    const history = (data && data.history) || [];
+    if (!history.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="muted">(no playback recorded yet)</td></tr>';
+      return;
+    }
+    const typeLabels = { rotation: 'Rotation', wx: 'SkywarnPlus WX', scheduled: 'Scheduled', test: 'Manual Test' };
+    history.forEach(h => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + escapeAttr(h.time) + '</td><td>' + (typeLabels[h.type] || escapeAttr(h.type)) + '</td>' +
+        '<td>' + escapeAttr(h.name) + '</td><td>' + escapeAttr(h.file) + '</td>' +
+        '<td>' + escapeAttr(h.node) + '</td><td>' + (h.play_mode === 'global' ? 'Global' : 'Local') + '</td>';
+      tbody.appendChild(tr);
+    });
   }
 
   function wireRowButtons() {
@@ -177,6 +207,14 @@
       btn.onclick = async () => {
         await api('play.php', { method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ name: btn.dataset.name }) });
+      };
+    });
+    document.querySelectorAll('.btn-reorder').forEach(btn => {
+      btn.onclick = async () => {
+        if (btn.disabled) return;
+        await api('reorder_rotation.php', { method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ name: btn.dataset.name, direction: btn.dataset.direction }) });
+        loadAll();
       };
     });
     document.querySelectorAll('.btn-danger').forEach(btn => {
@@ -296,6 +334,39 @@
     const data = await api('reload.php', { method: 'POST' });
     showMsg(msgEl, data.message || 'Config reloaded', data.success !== false);
     loadAll();
+  });
+
+  document.getElementById('btn-check-update').addEventListener('click', async () => {
+    const msgEl = document.getElementById('update-check-msg');
+    showMsg(msgEl, 'Checking...', true);
+    const data = await api('version_check.php');
+    if (!data.success) {
+      showMsg(msgEl, data.message || 'Could not check for updates', false);
+      return;
+    }
+    if (data.update_available) {
+      showMsg(msgEl, 'Update available: v' + data.latest_version + ' (currently running v' + data.current_version + '). See the README for update instructions.', false);
+    } else {
+      showMsg(msgEl, 'Up to date (v' + data.current_version + ').', true);
+    }
+  });
+
+  // ── Backup / restore ──────────────────────────────────────────────────
+  document.getElementById('btn-export-config').addEventListener('click', () => {
+    window.location.href = API + 'config_export.php';
+  });
+
+  document.getElementById('btn-import-config').addEventListener('click', async () => {
+    const msgEl = document.getElementById('backup-msg');
+    const f = document.getElementById('config-import-file').files[0];
+    if (!f) { showMsg(msgEl, 'Choose a backup file first', false); return; }
+    if (!confirm('This will replace the ENTIRE current configuration. Continue?')) return;
+    const form = new FormData();
+    form.append('file', f);
+    const res = await fetch(API + 'config_import.php', { method: 'POST', body: form });
+    const data = await res.json().catch(() => ({ success: false, message: 'Invalid server response' }));
+    showMsg(msgEl, data.message || (data.success ? 'Config restored' : 'Failed'), data.success);
+    if (data.success) loadAll();
   });
 
   // ── Settings ──────────────────────────────────────────────────────────
