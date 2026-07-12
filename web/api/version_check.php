@@ -30,8 +30,16 @@ if (function_exists('curl_init')) {
         CURLOPT_FOLLOWLOCATION => true,
     ]);
     $result = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     if ($result === false) {
         $fetch_error = curl_error($ch);
+    } elseif ($http_code !== 200) {
+        // A non-200 response (e.g. 403 rate-limit, 404) still returns a
+        // response body via CURLOPT_RETURNTRANSFER - it must not be trusted
+        // as the actual file content just because curl_exec() didn't fail.
+        $decoded_error = json_decode($result, true);
+        $api_message = is_array($decoded_error) && isset($decoded_error['message']) ? $decoded_error['message'] : $result;
+        $fetch_error = "GitHub returned HTTP $http_code: " . substr($api_message, 0, 200);
     } else {
         $latest_raw = $result;
     }
@@ -41,10 +49,18 @@ if (function_exists('curl_init')) {
         'method'  => 'GET',
         'header'  => "Accept: application/vnd.github.v3.raw\r\nUser-Agent: asl3-herald-update-check\r\n",
         'timeout' => 5,
+        'ignore_errors' => true,
     ]]);
-    $latest_raw = @file_get_contents(HERALD_VERSION_CHECK_URL, false, $context);
-    if ($latest_raw === false) {
+    $result = @file_get_contents(HERALD_VERSION_CHECK_URL, false, $context);
+    $status_line = isset($http_response_header[0]) ? $http_response_header[0] : '';
+    if ($result === false) {
         $fetch_error = 'file_get_contents() failed (network issue, or GitHub unreachable)';
+    } elseif ($status_line !== '' && strpos($status_line, '200') === false) {
+        $decoded_error = json_decode($result, true);
+        $api_message = is_array($decoded_error) && isset($decoded_error['message']) ? $decoded_error['message'] : $result;
+        $fetch_error = "GitHub returned $status_line: " . substr($api_message, 0, 200);
+    } else {
+        $latest_raw = $result;
     }
 } else {
     $fetch_error = "PHP can't make outbound HTTPS requests: neither the curl extension nor allow_url_fopen is available. Install php-curl (sudo apt install php-curl && sudo systemctl restart apache2) to fix this.";
