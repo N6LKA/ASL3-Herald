@@ -23,7 +23,15 @@ include("header.inc");
 
 <?php if (isset($_SESSION['sm61loggedin']) && $_SESSION['sm61loggedin'] === true): ?>
     <?php include __DIR__ . '/../asl3-herald/herald-ui-fragment.php'; ?>
-    <script src="/asl3-herald/herald-ui.js"></script>
+    <?php
+    // Cache-bust with the file's own mtime so the browser only re-fetches
+    // when herald-ui.js actually changes - same reasoning as the Allmon3
+    // page's Date.now() cache-buster on this same file, adapted to a plain
+    // server-rendered <script> tag instead of a JS-created one.
+    $herald_ui_js_path = __DIR__ . '/../asl3-herald/herald-ui.js';
+    $herald_ui_js_ver = @filemtime($herald_ui_js_path) ?: time();
+    ?>
+    <script src="/asl3-herald/herald-ui.js?v=<?php echo $herald_ui_js_ver; ?>"></script>
 <?php else: ?>
     <p style="text-align:center; margin-top:40px;">
         Please log in (top of page) to manage ASL3 Herald announcements.
