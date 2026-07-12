@@ -23,20 +23,36 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-GITHUB_CONTENTS_API="https://api.github.com/repos/N6LKA/asl3-herald/contents"
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
+info()    { echo -e "${GREEN}[INFO]${NC}  $*"; }
+warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
+error()   { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
-# Fetches one repo file at the given ref via GitHub's Contents API rather
-# than raw.githubusercontent.com - that CDN (Fastly) has been confirmed
-# (more than once) to serve a stale cached copy of a file for an extended
-# stretch, even with a "Cache-Control: no-cache" *request* header and a
-# cache-busting query string. The Contents API reads straight from git
-# storage with no CDN layer in between, so a freshly-pushed commit is
-# reflected on the very next fetch - important here since this installer is
-# routinely re-run minutes apart while testing changes on develop.
+# Downloads the whole repo at the given ref as a single tarball (GitHub's
+# codeload service, not raw.githubusercontent.com) and extracts it once, up
+# front - fetch_repo_file() below then just copies out of that local copy.
+# Two problems this avoids, both hit while testing this installer itself:
+#   1. raw.githubusercontent.com is fronted by a CDN (Fastly) that can serve
+#      a stale cached copy of an individual file for an extended stretch,
+#      even with a "Cache-Control: no-cache" request header and a
+#      cache-busting query string.
+#   2. Fetching each of the ~30 repo files individually through GitHub's
+#      Contents API (the first fix for #1) burns through GitHub's 60
+#      requests/hour unauthenticated rate limit after just two reinstalls -
+#      a single tarball download is one request no matter how many files
+#      the repo has.
+REPO_TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$REPO_TMP_DIR"' EXIT
+
+info "Downloading asl3-herald ($BRANCH) ..."
+if ! curl -fsSL "https://github.com/N6LKA/asl3-herald/archive/refs/heads/${BRANCH}.tar.gz" -o "$REPO_TMP_DIR/repo.tar.gz"; then
+    error "Could not download the asl3-herald repo archive for branch '$BRANCH'."
+fi
+tar -xzf "$REPO_TMP_DIR/repo.tar.gz" -C "$REPO_TMP_DIR" --strip-components=1
+
 fetch_repo_file() {
     local path="$1" dest="$2"
-    curl -fsSL -H "Accept: application/vnd.github.v3.raw" \
-        "$GITHUB_CONTENTS_API/${path}?ref=${BRANCH}" -o "$dest"
+    cp "$REPO_TMP_DIR/$path" "$dest"
 }
 
 INSTALL_DIR="/usr/local/bin/asl3-herald"
@@ -44,11 +60,6 @@ CONFIG_DIR="/etc/asterisk/scripts/asl3-herald"
 ANNOUNCE_DIR="$CONFIG_DIR/announcements"
 SERVICE_FILE="/etc/systemd/system/asl3-herald.service"
 HERALD_BIN="/usr/local/bin/herald"
-
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
-info()    { echo -e "${GREEN}[INFO]${NC}  $*"; }
-warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
-error()   { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
 # Captured before anything is touched: if the service was already running,
 # it's an update/reinstall (not a fresh install), so we restart it at the end
