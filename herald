@@ -534,10 +534,16 @@ cmd_play() {
     entry_node="$(echo "$info" | json_get "next((s.get('Node') for s in d['scheduled'] if s.get('Name')=='$name' and s.get('Node')), next((r.get('Node') for r in d['tail_message']['rotation'] if isinstance(r, dict) and r.get('File')=='$wavfile' and r.get('Node')), ''))")"
     [[ -n "$entry_node" ]] && node="$entry_node"
 
+    # Distinguishes a Tail Message test-play from a Scheduled Announcement
+    # test-play in the Playback History tab, which otherwise couldn't tell
+    # them apart (both used to log as a generic "test" type).
+    local entry_kind
+    entry_kind="$(echo "$info" | json_get "'scheduled' if any(s.get('Name')=='$name' for s in d['scheduled']) else 'tail'")"
+
     local path_no_ext="${wavfile%.wav}"
     echo "Testing (local playback) $name on node $node ..."
     asterisk -rx "rpt localplay $node $path_no_ext"
-    python3 "$DAEMON_PY" log-playback --type test --name "$name" --file "$wavfile" --node "$node" --play-mode local >/dev/null 2>&1 || true
+    python3 "$DAEMON_PY" log-playback --type "test-$entry_kind" --name "$name" --file "$wavfile" --node "$node" --play-mode local >/dev/null 2>&1 || true
 }
 
 # ── Scheduled announcement commands ───────────────────────────────────────────

@@ -192,7 +192,14 @@
       tbody.innerHTML = '<tr><td colspan="6" class="muted">(no playback recorded yet)</td></tr>';
       return;
     }
-    const typeLabels = { rotation: 'Rotation', wx: 'SkywarnPlus WX', scheduled: 'Scheduled', test: 'Manual Test' };
+    const typeLabels = {
+      rotation: 'Tail Message',
+      wx: 'Tail Message (WX)',
+      scheduled: 'Scheduled Announcement',
+      'test-tail': 'Tail Message (Test)',
+      'test-scheduled': 'Scheduled Announcement (Test)',
+      test: 'Manual Test',
+    };
     history.forEach(h => {
       const tr = document.createElement('tr');
       tr.innerHTML = '<td>' + escapeAttr(h.time) + '</td><td>' + (typeLabels[h.type] || escapeAttr(h.type)) + '</td>' +
