@@ -1,8 +1,9 @@
 # asl3-herald.conf — Enhanced Tail Message & Announcement Daemon
 # Copy to /etc/asterisk/scripts/asl3-herald/asl3-herald.conf and edit.
 
-# Your ASL3 node number
-Node: "501260"
+# Your ASL3 node number (required — install.sh normally prompts for this and
+# fills it in automatically; if left blank, the daemon will refuse to start)
+Node: ""
 
 # Poll interval in seconds (how often to check for unkeys)
 PollInterval: 1

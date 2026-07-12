@@ -2,7 +2,9 @@
 # asl3-herald uninstall script
 # Usage: curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/uninstall.sh | sudo bash
 #   (the "sudo bash <(curl ...)" process-substitution form fails with
-#    /dev/fd/63: No such file or directory on some systems — pipe instead)
+#    /dev/fd/63: No such file or directory on some systems — pipe instead.
+#    See install.sh's header comment for why this bootstrap fetch uses
+#    raw.githubusercontent.com rather than GitHub's Contents API.)
 #
 # Options (pass after "--" when piping): --purge-config  --purge-piper  --purge-all
 #   e.g. curl -fsSL ... | sudo bash -s -- --purge-all

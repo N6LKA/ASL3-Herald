@@ -89,6 +89,12 @@
   #herald-ui .msg.ok { color: #27ae60; }
   #herald-ui .msg.err { color: #e74c3c; }
   #herald-ui .muted { color: #777; font-size: 0.95em; }
+  #herald-ui .btn-reorder { padding: 4px 8px; }
+  #herald-ui .btn-reorder:disabled { opacity: 0.3; cursor: default; }
+  #herald-ui .badge-missing {
+    background: #e74c3c; color: #fff; font-size: 0.75em;
+    padding: 2px 6px; border-radius: 4px; margin-left: 6px; white-space: nowrap;
+  }
 </style>
 
 <div class="status-bar" id="herald-status-bar">
@@ -101,6 +107,7 @@
 <div class="tabs">
   <button class="tab-btn active" data-tab="tail">Tail Messages</button>
   <button class="tab-btn" data-tab="scheduled">Scheduled Announcements</button>
+  <button class="tab-btn" data-tab="history">Playback History</button>
   <button class="tab-btn" data-tab="settings">Settings</button>
 </div>
 
@@ -255,11 +262,25 @@
   </div>
 </div>
 
+<!-- ══════════════════ PLAYBACK HISTORY ══════════════════ -->
+<div class="tab-panel" id="tab-history">
+  <div class="card">
+    <h3>Playback History</h3>
+    <p class="muted">Most recent plays first — rotation, SkywarnPlus WX, scheduled announcements, and manual test plays. Kept for the most recent 200 events.</p>
+    <table id="history-table">
+      <thead><tr><th>Time</th><th>Type</th><th>Name</th><th>File</th><th>Node</th><th>Play Mode</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
 <!-- ══════════════════ SETTINGS ══════════════════ -->
 <div class="tab-panel" id="tab-settings">
   <div class="card">
     <h3>Herald Daemon</h3>
     <p class="muted">Status: <span id="set-herald-status">—</span></p>
+    <p class="muted">Version: <span id="set-herald-version">—</span> <button id="btn-check-update">Check for Updates</button></p>
+    <div class="msg" id="update-check-msg"></div>
     <button class="btn-toggle" id="btn-toggle-enable">Enable/Disable Herald</button>
     <button id="btn-reload">Reload Config</button>
     <div class="msg" id="herald-daemon-msg"></div>
@@ -291,6 +312,17 @@
     <br><br>
     <button class="btn-primary" id="btn-save-settings">Save &amp; Reload</button>
     <div class="msg" id="settings-msg"></div>
+  </div>
+
+  <div class="card">
+    <h3>Backup &amp; Restore</h3>
+    <p class="muted">Export the full configuration (rotation, scheduled announcements, and settings) as a JSON file, or restore from a previously exported file. Restoring replaces the entire configuration.</p>
+    <button id="btn-export-config">Download Config Backup</button>
+    <br><br>
+    <label>Restore from backup file</label>
+    <input type="file" id="config-import-file" accept=".json">
+    <button class="btn-danger" id="btn-import-config">Restore Config</button>
+    <div class="msg" id="backup-msg"></div>
   </div>
 </div>
 </div>

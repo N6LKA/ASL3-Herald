@@ -177,7 +177,12 @@ window.addEventListener('pageshow', async function() {
             const resp = await fetch("/asl3-herald/herald-ui-fragment.php?_=" + Date.now(), { cache: "no-store" });
             gate.innerHTML = await resp.text();
             const s = document.createElement("script");
-            s.src = "/asl3-herald/herald-ui.js";
+            // Same cache-busting reasoning as the fragment fetch above - this
+            // was previously missed here, so herald-ui.js itself could stay
+            // browser-cached (or CDN-cached) even after the fragment/markup
+            // correctly updated, making JS-only fixes appear not to "take"
+            // until a hard refresh.
+            s.src = "/asl3-herald/herald-ui.js?_=" + Date.now();
             document.body.appendChild(s);
         } catch (e) {
             gate.innerHTML = "<p style='color:#dc3545;'>Could not load ASL3 Herald. Check that the web UI is installed.</p>";

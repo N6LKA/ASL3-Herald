@@ -1,7 +1,7 @@
 ![asl3-herald](web/img/asl3-herald-banner.svg)
 
-![Version](https://img.shields.io/badge/version-1.3.0-blue)
-![Release Date](https://img.shields.io/badge/released-2026--07--11-green)
+![Version](https://img.shields.io/badge/version-1.4.0-blue)
+![Release Date](https://img.shields.io/badge/released-2026--07--12-green)
 ![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
 
 **Enhanced tail message daemon for ASL3/app_rpt with advanced announcement features.**
@@ -36,6 +36,12 @@ Plus:
 - **Web UI** — optional browser-based management linked from Allmon3 or Supermon 7, gated behind each app's own login
 - **Instant disable/enable** — `herald toggle` / `herald enable` / `herald disable`, no config edits or restarts needed
 - **Live config reload** — `herald reload` sends SIGHUP to pick up config changes immediately
+- **Reorderable rotation** — move a rotation entry earlier/later in the cycle from the web UI or CLI, no remove-and-re-add needed
+- **Playback history** — the last 200 plays (rotation, WX, scheduled, and manual test plays) are logged with timestamp, node, and play mode, viewable in the web UI's Playback History tab
+- **Test playback, always local** — the Play/Test button (web UI and `herald play`) always plays immediately on this node only, regardless of a scheduled announcement's configured `PlayMode` — it's for confirming an entry sounds right, never a live broadcast
+- **Config backup/restore** — export the full rotation/scheduled/settings config as a JSON file, or restore from one, via the Settings tab or `herald export-config` / `herald import-config`
+- **Missing-file health check** — a rotation or scheduled entry whose WAV file no longer exists on disk is flagged (`herald status`'s missing-file count, `herald list`, and a badge in the web UI) instead of failing silently
+- **Version display + update check** — the installed version is shown in the web UI's Settings tab, with a "Check for Updates" button that compares it against the latest `main` release on GitHub
 
 ---
 
@@ -119,7 +125,7 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 **Example config:**
 
 ```yaml
-Node: "501260"
+Node: "YOUR_NODE_NUMBER"
 PollInterval: 1
 Debug: false
 
@@ -161,6 +167,9 @@ Scheduled:
 | `sudo herald reload` | Reload config file without restarting (SIGHUP) |
 | `herald list-json` | Print config as JSON (used by the web UI) |
 | `herald voices [--json]` | List available Piper voices |
+| `herald playback-history` | Print recent playback history as JSON |
+| `herald export-config` | Print the full config as JSON (for backup) |
+| `sudo herald import-config <path>` | Restore the full config from an exported JSON file (replaces everything) |
 
 **Tail Messages:**
 
@@ -169,9 +178,10 @@ Scheduled:
 | `sudo herald add "<text>" [--name <name>] [--voice <voice>] [--days daily\|d1,d2] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]` | Generate TTS WAV and add to rotation |
 | `sudo herald add-file <path> [--name <name>] [--days daily\|d1,d2] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]` | Copy an existing WAV into rotation |
 | `sudo herald edit-rotation <name> [--new-name <n>] [--text "<text>"] [--voice <v>] [--file <path>] [--days ...] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]` | Edit an existing rotation entry in place |
-| `herald list` | List rotation + scheduled announcements |
+| `sudo herald reorder-rotation <name> <up\|down>` | Move a rotation entry earlier/later in the cycle |
+| `herald list` | List rotation + scheduled announcements (flags entries with a missing file) |
 | `sudo herald remove <name>` | Remove a rotation file or scheduled announcement |
-| `sudo herald play <name>` | Play an announcement on the node immediately |
+| `sudo herald play <name>` | Test-play an announcement on the node immediately (always local, ignores `PlayMode`) |
 
 `--days`/`--time-start`/`--time-end` restrict a rotation entry to specific days-of-week and/or a time-of-day window; leave unset for an entry that's always eligible. `--node` targets a specific node number instead of the daemon's configured `Node`.
 
@@ -224,6 +234,9 @@ An optional browser-based UI for managing both Tail Messages and Scheduled Annou
 - **Optional**: `install.sh` also appends a rule to `/etc/allmon3/custom.css` that hides the sidebar link entirely until you're logged into Allmon3, using Allmon3's own stock `body.logged-in`/`body.logged-out` class toggle. This is cosmetic only — the page itself still gates its content on real login status regardless of whether the link is visible.
 - **Supermon 7**: `install.sh` installs `asl3-herald.php` directly into Supermon's own directory (`/var/www/html/supermon/`) and adds a link at the bottom of the page after logging in (added to `footer.inc`, inside Supermon's own existing login-conditional block — so it's already hidden until logged in, natively). Because the page lives inside Supermon's own directory, it includes Supermon's real `session.inc`/`header.inc`/`footer.inc` unmodified — same nav and login dialog as any other Supermon page, and the same named session cookie (`supermon61`) Supermon itself uses, so login detection always matches Supermon's actual state.
 - Both pages support adding announcements via typed text (with Piper voice selection) or by uploading an existing `.wav`/`.mp3` file (auto-converted to 8kHz mono).
+- **Playback History tab** — the last 200 plays (rotation, WX, scheduled, manual test) with timestamp, node, and play mode.
+- **Settings tab** also shows the installed version with a "Check for Updates" button (compares against `main`'s `version.txt` via GitHub's API), plus a Backup & Restore card to download the full config as JSON or restore from a previously exported file.
+- Rotation entries in the Tail Messages tab have Up/Down buttons to reorder the cycle, and any entry (rotation or scheduled) whose WAV file no longer exists on disk shows a "MISSING FILE" badge.
 - All mutations go through the same `herald` CLI used at the command line — the web UI never edits the YAML config directly. `www-data` is granted narrow, passwordless `sudo` access to run `herald` only (see `/etc/sudoers.d/asl3-herald-web`). The JSON API endpoints themselves are not independently re-verified against Allmon3/Supermon login state (the display pages are gated, but the raw API URLs aren't) — a deliberate simplicity/portability tradeoff, since properly closing that gap would require a per-user Apache config change that isn't reliable across arbitrary installs. The API's own blast radius is narrow regardless: `www-data` can only run the `herald` CLI, nothing else.
 
 If neither Allmon3 nor Supermon is detected at install time, `install.sh` installs `apache2` + `php` on its own so the shared UI still has somewhere to run. `menu.ini` and `custom.css` changes are always appended to the end of the file (never inserted in the middle) so they don't disturb any existing customizations, and both are idempotent — re-running `install.sh` won't duplicate them. The Allmon3/Supermon pages themselves are always overwritten on install/update, since they're fully managed by asl3-herald.
@@ -250,7 +263,7 @@ journalctl -u asl3-herald -f          # Follow live log output
 | `/usr/local/bin/asl3-herald/version.txt` | Version file |
 | `/usr/local/bin/herald` | Management command |
 | `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf` | Configuration file |
-| `/etc/asterisk/scripts/asl3-herald/asl3-herald.state` | Runtime state (rotation index, last played time) |
+| `/etc/asterisk/scripts/asl3-herald/asl3-herald.state` | Runtime state (rotation index, last played time, playback history) |
 | `/etc/asterisk/scripts/asl3-herald/asl3-herald-disabled` | Disable flag (presence disables tail messages) |
 | `/etc/asterisk/scripts/asl3-herald/announcements/` | Announcement WAV files |
 | `/etc/systemd/system/asl3-herald.service` | systemd service unit |
