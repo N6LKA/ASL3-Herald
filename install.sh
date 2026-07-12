@@ -296,9 +296,11 @@ if [[ -d /etc/allmon3 ]]; then
 
     # menu.ini — appended to the END of the file so it never disturbs existing
     # custom menu entries; idempotent (skips if a [Herald] section already exists).
+    MENU_INI_CHANGED=false
     if [[ -f "$MENU_INI" ]] && grep -q "^\[Herald\]" "$MENU_INI"; then
         info "Allmon3 menu.ini already has a [Herald] entry — skipping"
     else
+        MENU_INI_CHANGED=true
         info "Adding ASL3 Herald sidebar link to $MENU_INI ..."
         if [[ -f "$MENU_INI" ]]; then
             cp "$MENU_INI" "$MENU_INI.bak.$(date +%Y%m%d-%H%M%S)"
@@ -341,6 +343,16 @@ EOF
 /* asl3-herald: hide sidebar link until logged into Allmon3 */
 $CSS_RULE
 EOF
+    fi
+
+    # Allmon3 reads menu.ini into memory at startup, same reasoning as the
+    # asl3-herald daemon itself needing a restart (not just a config
+    # reload) to pick up a change made to a file on disk - only restart when
+    # the section was actually just added, never when it already existed
+    # (a plain reinstall shouldn't bounce Allmon3 for no reason).
+    if $MENU_INI_CHANGED && systemctl is-active --quiet allmon3 2>/dev/null; then
+        info "Restarting allmon3 to pick up the new sidebar link ..."
+        systemctl restart allmon3
     fi
 fi
 
@@ -416,8 +428,8 @@ echo ""
 echo "  Web UI:  installed to $WEB_DIR"
 if [[ -d /etc/allmon3 ]]; then
     echo "           Allmon3 — look for the \"Announcement Settings\" link in the sidebar"
-    echo "           (added to the bottom of $MENU_INI; restart allmon3 if it was just added:"
-    echo "            sudo systemctl restart allmon3)"
+    echo "           (added to the bottom of $MENU_INI; allmon3 was restarted automatically"
+    echo "            if the link was just added)"
 fi
 if [[ -f "$SUPERMON_FOOTER" ]]; then
     echo "           Supermon — look for the \"ASL3 Herald\" link at the bottom after logging in"

@@ -207,6 +207,7 @@
       btn.onclick = async () => {
         await api('play.php', { method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ name: btn.dataset.name }) });
+        loadHistory();
       };
     });
     document.querySelectorAll('.btn-reorder').forEach(btn => {
