@@ -240,6 +240,18 @@ if [[ ! -d /etc/allmon3 && ! -d /var/www/html/supermon ]]; then
     systemctl enable --now apache2
 fi
 
+# php-curl - needed for the Settings tab's "Check for Updates" button to make
+# an outbound HTTPS request to GitHub. Checked/installed unconditionally
+# regardless of what host app is detected, same reasoning as the php-curl
+# check this installer used to do for an older Allmon3 auth check: some
+# hosts have PHP/Apache already present (via Allmon3/Supermon) but still
+# missing the curl extension specifically.
+if ! php -r 'exit(function_exists("curl_init") ? 0 : 1);' 2>/dev/null; then
+    info "Installing php-curl (needed for the update-check feature) ..."
+    apt-get install -y -qq php-curl
+    systemctl restart apache2 2>/dev/null || true
+fi
+
 info "Installing web UI to $WEB_DIR ..."
 mkdir -p "$WEB_DIR/api" "$WEB_DIR/img"
 for f in herald-common.php herald-ui-fragment.php herald-ui.js; do
