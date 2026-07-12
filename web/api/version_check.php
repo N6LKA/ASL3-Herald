@@ -30,13 +30,23 @@ if ($latest_raw === false) {
 }
 
 $latest = trim($latest_raw);
-$update_available = ($latest !== '' && $current !== 'unknown')
-    ? version_compare($latest, $current, '>')
-    : false;
+
+// Three distinct states, not just "same or different" - installing from
+// --branch develop (for testing ahead of a release) can leave the running
+// version numerically ahead of main's latest release, which is neither
+// "update available" nor really "up to date" in the usual sense.
+$update_available = false;
+$ahead_of_main = false;
+if ($latest !== '' && $current !== 'unknown') {
+    $cmp = version_compare($current, $latest); // -1, 0, or 1
+    $update_available = $cmp < 0;
+    $ahead_of_main = $cmp > 0;
+}
 
 herald_json_response([
     'success' => true,
     'current_version' => $current,
     'latest_version' => $latest,
     'update_available' => $update_available,
+    'ahead_of_main' => $ahead_of_main,
 ]);

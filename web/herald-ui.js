@@ -346,6 +346,8 @@
     }
     if (data.update_available) {
       showMsg(msgEl, 'Update available: v' + data.latest_version + ' (currently running v' + data.current_version + '). See the README for update instructions.', false);
+    } else if (data.ahead_of_main) {
+      showMsg(msgEl, 'Running v' + data.current_version + ', ahead of the latest release on main (v' + data.latest_version + ') - expected if installed from the develop branch for testing.', true);
     } else {
       showMsg(msgEl, 'Up to date (v' + data.current_version + ').', true);
     }
