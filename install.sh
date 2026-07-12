@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # asl3-herald install script
-# Usage: curl -fsSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/N6LKA/asl3-herald/contents/install.sh?ref=main" | sudo bash
+# Usage: curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/install.sh | sudo bash
 #   (the "sudo bash <(curl ...)" process-substitution form fails with
 #    /dev/fd/63: No such file or directory on some systems — pipe instead.
-#    Fetched via GitHub's Contents API, not raw.githubusercontent.com - that
-#    CDN can serve a stale cached copy of this very file, which would then
-#    go on to fetch every other repo file the same stale way internally.)
+#    This bootstrap fetch of install.sh itself can occasionally be served
+#    stale by raw.githubusercontent.com's CDN, but that's low-stakes here -
+#    once ANY reasonably-current install.sh runs, its own internal file
+#    fetch (below) downloads the whole repo as one tarball from GitHub's
+#    codeload service, which is neither CDN-cached per file nor subject to
+#    the api.github.com REST API's 60-requests/hour rate limit - both of
+#    which were hit and are worse failure modes than an occasionally-stale
+#    bootstrap script.)
 #
 # To test unreleased changes from the develop branch instead of main:
-#   curl -fsSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/N6LKA/asl3-herald/contents/install.sh?ref=develop" | sudo bash -s -- --branch develop
+#   curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/develop/install.sh | sudo bash -s -- --branch develop
 #   (pass --branch as a script argument, not an env var - env vars set before
 #    "sudo" on a piped command don't reliably survive the sudo call on every
 #    system, but args after "bash -s --" always do)
