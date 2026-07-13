@@ -141,18 +141,19 @@ fi
 if [[ -x "$PIPER_BIN" ]]; then
     info "Downloading default Piper voices (this may take a few minutes)..."
     mkdir -p "$PIPER_VOICE_DIR"
-    # Primary: Hugging Face. Fallback: GitHub LFS mirror of the same repo.
-    # HF sometimes 403s on datacenter/VPS IPs or after rate-limit exhaustion;
-    # GitHub LFS (media.githubusercontent.com) is more reliable in those cases.
-    HF_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main"
-    GH_LFS_BASE="https://media.githubusercontent.com/media/rhasspy/piper-voices/main"
-    GH_RAW_BASE="https://raw.githubusercontent.com/rhasspy/piper-voices/main"
 
-    _dl_curl() {
-        curl -fsSL --retry 2 --retry-delay 3 --http1.1 \
-            -A "Mozilla/5.0 (compatible; asl3-herald-installer)" \
-            "$1" -o "$2" 2>/dev/null
-    }
+    # HuggingFace blocks direct curl downloads from many server/VPS IPs (403).
+    # The huggingface_hub Python package uses HF's API to obtain pre-signed
+    # download URLs, bypassing that block. We install it (idempotent, silent)
+    # and use it as the primary download method; direct curl is only a fallback
+    # for environments where pip is unavailable.
+    HF_REPO="rhasspy/piper-voices"
+    HF_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main"
+
+    HAVE_HF_HUB=false
+    if python3 -m pip install -q huggingface_hub 2>/dev/null; then
+        python3 -c "from huggingface_hub import hf_hub_download" 2>/dev/null && HAVE_HF_HUB=true
+    fi
 
     download_voice() {
         local onnx_file="$1" model_path="$2" json_path="$3"
@@ -160,29 +161,41 @@ if [[ -x "$PIPER_BIN" ]]; then
             return
         fi
 
-        local onnx_ok=false
-        for url in "$HF_BASE/$model_path" "$GH_LFS_BASE/$model_path"; do
-            if _dl_curl "$url" "$PIPER_VOICE_DIR/$onnx_file"; then
-                onnx_ok=true; break
-            fi
-            rm -f "$PIPER_VOICE_DIR/$onnx_file"
-        done
-        if ! $onnx_ok; then
-            warn "Failed to download voice $onnx_file — skipping (re-run installer to retry)"
-            return
-        fi
-
-        local json_ok=false
-        for url in "$HF_BASE/$json_path" "$GH_RAW_BASE/$json_path"; do
-            if _dl_curl "$url" "$PIPER_VOICE_DIR/$onnx_file.json"; then
-                json_ok=true; break
-            fi
-            rm -f "$PIPER_VOICE_DIR/$onnx_file.json"
-        done
-        if ! $json_ok; then
-            warn "Failed to download voice config for $onnx_file — removing partial"
-            rm -f "$PIPER_VOICE_DIR/$onnx_file"
-            return
+        if $HAVE_HF_HUB; then
+            python3 - <<PYEOF || { warn "Failed to download voice $onnx_file — skipping"; return; }
+import sys, os, shutil
+try:
+    from huggingface_hub import hf_hub_download
+    for hf_path, local_name in [
+        ("$model_path", "$onnx_file"),
+        ("$json_path",  "$onnx_file.json"),
+    ]:
+        dest = os.path.join("$PIPER_VOICE_DIR", local_name)
+        if os.path.exists(dest):
+            continue
+        tmp = hf_hub_download(repo_id="$HF_REPO", filename=hf_path, repo_type="model")
+        shutil.copy(tmp, dest)
+        os.chmod(dest, 0o644)
+except Exception as e:
+    print(f"hf_hub_download failed: {e}", file=sys.stderr)
+    sys.exit(1)
+PYEOF
+        else
+            # Direct curl fallback — may 403 on some server IPs
+            curl -fsSL --retry 3 --retry-delay 5 \
+                -A "Mozilla/5.0 (compatible; asl3-herald-installer)" \
+                "$HF_BASE/$model_path" -o "$PIPER_VOICE_DIR/$onnx_file" || {
+                warn "Failed to download voice $onnx_file — skipping (re-run installer to retry)"
+                rm -f "$PIPER_VOICE_DIR/$onnx_file"
+                return
+            }
+            curl -fsSL --retry 3 --retry-delay 5 \
+                -A "Mozilla/5.0 (compatible; asl3-herald-installer)" \
+                "$HF_BASE/$json_path" -o "$PIPER_VOICE_DIR/$onnx_file.json" || {
+                warn "Failed to download voice config for $onnx_file — removing partial"
+                rm -f "$PIPER_VOICE_DIR/$onnx_file" "$PIPER_VOICE_DIR/$onnx_file.json"
+                return
+            }
         fi
     }
 
