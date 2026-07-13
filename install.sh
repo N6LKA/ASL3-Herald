@@ -148,8 +148,20 @@ if [[ -x "$PIPER_BIN" ]]; then
         if [[ -f "$PIPER_VOICE_DIR/$onnx_file" && -f "$PIPER_VOICE_DIR/$onnx_file.json" ]]; then
             return
         fi
-        curl -fsSL "$BASE_URL/$model_path"  -o "$PIPER_VOICE_DIR/$onnx_file"
-        curl -fsSL "$BASE_URL/$json_path"   -o "$PIPER_VOICE_DIR/$onnx_file.json"
+        # --retry handles transient network errors (HTTP/2 stream cancellations
+        # from Hugging Face are common); || true keeps a single failed voice
+        # from aborting the whole install under set -e.
+        curl -fsSL --retry 3 --retry-delay 2 --http1.1 \
+            "$BASE_URL/$model_path" -o "$PIPER_VOICE_DIR/$onnx_file" || {
+            warn "Failed to download voice $onnx_file — skipping (you can re-run the installer to retry)"
+            return
+        }
+        curl -fsSL --retry 3 --retry-delay 2 --http1.1 \
+            "$BASE_URL/$json_path" -o "$PIPER_VOICE_DIR/$onnx_file.json" || {
+            warn "Failed to download voice config $onnx_file.json — removing partial download"
+            rm -f "$PIPER_VOICE_DIR/$onnx_file"
+            return
+        }
     }
 
     download_voice "en_US-lessac-medium.onnx"     "en/en_US/lessac/medium/en_US-lessac-medium.onnx"         "en/en_US/lessac/medium/en_US-lessac-medium.onnx.json"
