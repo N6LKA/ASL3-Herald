@@ -161,6 +161,7 @@
   <span><strong>MinInterval:</strong> <span id="hs-mininterval">—</span>s</span>
   <span><strong>SkywarnPlus:</strong> <span id="hs-swp">—</span></span>
   <span><strong>Herald:</strong> <span id="hs-enabled">—</span></span>
+  <span><strong>Next tail:</strong> <span id="hs-countdown">—</span></span>
 </div>
 
 <div class="tabs">
