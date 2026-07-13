@@ -66,14 +66,21 @@ ANNOUNCE_DIR="$CONFIG_DIR/announcements"
 SERVICE_FILE="/etc/systemd/system/asl3-herald.service"
 HERALD_BIN="/usr/local/bin/herald"
 
-# Captured before anything is touched: if the service was already running,
-# it's an update/reinstall (not a fresh install), so we restart it at the end
-# to actually load the new code - `herald reload` (SIGHUP) only re-reads the
-# YAML config into an already-running process, it can never pick up changes
-# to asl3-herald.py itself. Re-running this installer alone was never enough
-# to apply a code update; only a restart (or reboot) does.
+# Captured before anything is touched so we know how to handle service startup
+# at the end:
+#   WAS_ACTIVE=true  → already running; restart to pick up code changes
+#   HAS_CONFIG=true  → existing configured install (reinstall after uninstall);
+#                      start automatically rather than showing "Next steps"
+#   both false       → genuinely fresh install; leave stopped, show Next steps
 WAS_ACTIVE=false
 systemctl is-active --quiet asl3-herald 2>/dev/null && WAS_ACTIVE=true
+
+HAS_CONFIG=false
+CONFIG_DIR_EARLY="/etc/asterisk/scripts/asl3-herald"
+if [[ -f "$CONFIG_DIR_EARLY/asl3-herald.conf" ]] && \
+   grep -qE '^Node:[[:space:]]+"[0-9]+"' "$CONFIG_DIR_EARLY/asl3-herald.conf" 2>/dev/null; then
+    HAS_CONFIG=true
+fi
 
 if [[ $EUID -ne 0 ]]; then
     error "This installer must be run as root. Use: curl -fsSL ... | sudo bash"
@@ -134,15 +141,63 @@ fi
 if [[ -x "$PIPER_BIN" ]]; then
     info "Downloading default Piper voices (this may take a few minutes)..."
     mkdir -p "$PIPER_VOICE_DIR"
-    BASE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main"
+
+    # HuggingFace blocks direct curl downloads from many server/VPS IPs (403).
+    # The huggingface_hub Python package uses HF's API to obtain pre-signed
+    # download URLs, bypassing that block. We install it (idempotent, silent)
+    # and use it as the primary download method; direct curl is only a fallback
+    # for environments where pip is unavailable.
+    HF_REPO="rhasspy/piper-voices"
+    HF_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main"
+
+    HAVE_HF_HUB=false
+    if python3 -c "from huggingface_hub import hf_hub_download" 2>/dev/null || \
+       python3 -m pip install -q --break-system-packages huggingface_hub 2>/dev/null; then
+        python3 -c "from huggingface_hub import hf_hub_download" 2>/dev/null && HAVE_HF_HUB=true
+    fi
 
     download_voice() {
         local onnx_file="$1" model_path="$2" json_path="$3"
         if [[ -f "$PIPER_VOICE_DIR/$onnx_file" && -f "$PIPER_VOICE_DIR/$onnx_file.json" ]]; then
             return
         fi
-        curl -fsSL "$BASE_URL/$model_path"  -o "$PIPER_VOICE_DIR/$onnx_file"
-        curl -fsSL "$BASE_URL/$json_path"   -o "$PIPER_VOICE_DIR/$onnx_file.json"
+
+        if $HAVE_HF_HUB; then
+            python3 - <<PYEOF || { warn "Failed to download voice $onnx_file — skipping"; return; }
+import sys, os, shutil
+try:
+    from huggingface_hub import hf_hub_download
+    for hf_path, local_name in [
+        ("$model_path", "$onnx_file"),
+        ("$json_path",  "$onnx_file.json"),
+    ]:
+        dest = os.path.join("$PIPER_VOICE_DIR", local_name)
+        if os.path.exists(dest):
+            continue
+        tmp = hf_hub_download(repo_id="$HF_REPO", filename=hf_path, repo_type="model")
+        shutil.copy(tmp, dest)
+        os.chmod(dest, 0o644)
+except Exception as e:
+    print(f"hf_hub_download failed: {e}", file=sys.stderr)
+    sys.exit(1)
+PYEOF
+        else
+            # Direct curl fallback — may 403 on some server IPs
+            curl -fsSL --retry 3 --retry-delay 5 \
+                -A "Mozilla/5.0 (compatible; asl3-herald-installer)" \
+                "$HF_BASE/$model_path" -o "$PIPER_VOICE_DIR/$onnx_file" || {
+                warn "Failed to download voice $onnx_file — skipping (re-run installer to retry)"
+                rm -f "$PIPER_VOICE_DIR/$onnx_file"
+                return
+            }
+            curl -fsSL --retry 3 --retry-delay 5 \
+                -A "Mozilla/5.0 (compatible; asl3-herald-installer)" \
+                "$HF_BASE/$json_path" -o "$PIPER_VOICE_DIR/$onnx_file.json" || {
+                warn "Failed to download voice config for $onnx_file — removing partial"
+                rm -f "$PIPER_VOICE_DIR/$onnx_file" "$PIPER_VOICE_DIR/$onnx_file.json"
+                return
+            }
+        fi
     }
 
     download_voice "en_US-lessac-medium.onnx"     "en/en_US/lessac/medium/en_US-lessac-medium.onnx"         "en/en_US/lessac/medium/en_US-lessac-medium.onnx.json"
@@ -153,7 +208,13 @@ if [[ -x "$PIPER_BIN" ]]; then
     download_voice "en_US-ryan-low.onnx"          "en/en_US/ryan/low/en_US-ryan-low.onnx"                   "en/en_US/ryan/low/en_US-ryan-low.onnx.json"
 
     chmod 644 "$PIPER_VOICE_DIR"/*.onnx "$PIPER_VOICE_DIR"/*.onnx.json 2>/dev/null || true
-    info "Piper voices installed: lessac, joe, amy, kristin, libritts_r, ryan"
+    VOICES_INSTALLED=()
+    for f in "$PIPER_VOICE_DIR"/*.onnx; do [[ -f "$f" ]] && VOICES_INSTALLED+=("$(basename "${f%.onnx}")"); done
+    if [[ ${#VOICES_INSTALLED[@]} -gt 0 ]]; then
+        info "Piper voices installed: ${VOICES_INSTALLED[*]}"
+    else
+        warn "No Piper voices could be downloaded. Run the installer again to retry, or download manually."
+    fi
 else
     warn "Piper TTS not available. 'herald add' will fall back to festival or espeak-ng if installed."
     warn "Install with:  sudo apt install festival sox"
@@ -217,6 +278,11 @@ else
             warn "'$MIN_INTERVAL' isn't a number — leaving MinInterval at the default (300s = 5 min)."
         fi
     fi
+
+    # AMI credentials are NOT stored in asl3-herald.conf — the daemon reads them
+    # directly from /etc/allmon3/allmon3.ini (Allmon3) or /etc/asterisk/manager.conf
+    # (Supermon / other frontends) at startup and on every SIGHUP reload.
+    # No action needed here.
 
     warn "Review the rest of the config before starting: $CONFIG_DIR/asl3-herald.conf"
 fi
@@ -394,15 +460,14 @@ if [[ -f "$SUPERMON_FOOTER" ]]; then
     fi
 fi
 
-# ── Restart if this was an update to an already-running install ────────────────
-# `herald reload` (SIGHUP) only re-reads the YAML config, never the daemon's
-# own code - a code update (like this one) needs an actual process restart to
-# take effect. Only done when the service was already active before this run,
-# so a genuinely fresh install still starts with an unedited example config
-# only once the user is ready (per "Next steps" below).
+# ── Start / restart the service ───────────────────────────────────────────────
+# Always start (or restart) — never leave the service stopped after an install.
 if $WAS_ACTIVE; then
     info "asl3-herald was already running — restarting to load the updated code ..."
     systemctl restart asl3-herald
+else
+    info "Starting asl3-herald ..."
+    systemctl start asl3-herald
 fi
 
 # ── Summary ────────────────────────────────────────────────────────────────────
@@ -412,16 +477,16 @@ echo ""
 echo -e "  ${GREEN}asl3-herald v${VERSION} installed successfully.${NC}"
 echo ""
 if $WAS_ACTIVE; then
-    echo "  Service was already running and has been restarted to pick up this update."
-    echo "  Check status:  herald status"
+    echo "  Service restarted to pick up the updated code."
 else
-    echo "  Next steps:"
-    echo "  1. Edit config:   nano $CONFIG_DIR/asl3-herald.conf"
-    echo "  2. Start service: sudo systemctl start asl3-herald"
-    echo "  3. Check status:  herald status"
-    echo "  4. Add a message: sudo herald add \"This is W1ABC, repeater ID.\" --name id"
-    echo "  5. List voices:   herald voices"
+    echo "  Service started."
 fi
+echo "  Check status:  herald status"
+echo ""
+echo "  Next steps:"
+echo "  1. Edit config:   nano $CONFIG_DIR/asl3-herald.conf"
+echo "  2. Add a message: sudo herald add \"This is W1ABC, repeater ID.\" --name id"
+echo "  3. List voices:   herald voices"
 echo ""
 echo "  Manage:  herald <status|enable|disable|reload|voices|add|add-file|list|remove|play|add-schedule|add-schedule-file|reorder-rotation|playback-history|export-config|import-config>"
 echo ""

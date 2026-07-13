@@ -5,11 +5,18 @@
 # fills it in automatically; if left blank, the daemon will refuse to start)
 Node: ""
 
-# Poll interval in seconds (how often to check for unkeys)
-PollInterval: 1
-
 # Enable debug logging (set true only for troubleshooting)
 Debug: false
+
+# ── Asterisk Manager Interface (AMI) ──────────────────────────────────────────
+# AMI enables real-time, low-latency unkey detection and network keyup support.
+# The connection is local-only (127.0.0.1) — no internet access involved.
+# Herald reads AMI credentials automatically from the system at startup and on
+# every SIGHUP reload — you do NOT store them here. Sources, in order:
+#   1. /etc/allmon3/allmon3.ini   (Allmon3 users — already configured)
+#   2. /etc/asterisk/manager.conf (Supermon / other frontends, or Allmon3 fallback)
+# If neither file yields usable credentials, Herald falls back to the legacy
+# CLI kerchunk-counter method (local RF unkeys only, ~1s latency).
 
 TailMessage:
   # Enable/disable the tail message function entirely
@@ -19,6 +26,11 @@ TailMessage:
   # This is in SECONDS, not milliseconds like rpt.conf's tailmessagetime.
   # Examples: 5 min = 300 | 10 min = 600 | 15 min = 900
   MinInterval: 300
+
+  # When enabled, tail messages also fire after a network-connected node
+  # unkeys (not just local RF). Requires AMI (see above).
+  # Default: false (local RF only, matching legacy behavior)
+  NetworkKeyupTrigger: true
 
   # Rotating tail message files (played in order, then repeats). Empty by
   # default — add your own via `herald add`/`herald add-file` or the web UI,

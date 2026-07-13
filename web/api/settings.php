@@ -17,17 +17,14 @@ if ($node === '' || !preg_match('/^[a-zA-Z0-9]{1,20}$/', $node)) {
     herald_json_response(['success' => false, 'message' => 'Invalid node number'], 400);
 }
 
-$pollInterval = filter_var($input['poll_interval'] ?? null, FILTER_VALIDATE_INT);
-if ($pollInterval === false || $pollInterval < 1) {
-    herald_json_response(['success' => false, 'message' => 'Invalid poll interval'], 400);
-}
-
 $debug = ($input['debug'] ?? false) ? 'true' : 'false';
 
 $minInterval = filter_var($input['min_interval'] ?? null, FILTER_VALIDATE_INT);
 if ($minInterval === false || $minInterval < 0) {
     herald_json_response(['success' => false, 'message' => 'Invalid min interval'], 400);
 }
+
+$networkKeyupTrigger = ($input['network_keyup_trigger'] ?? false) ? 'true' : 'false';
 
 $swpEnable = ($input['swp_enable'] ?? false) ? 'true' : 'false';
 
@@ -44,9 +41,9 @@ if ($swpThreshold === false || $swpThreshold < 0) {
 herald_respond_from_cli(herald_run_sudo([
     'update-settings',
     '--node', $node,
-    '--poll-interval', (string) $pollInterval,
     '--debug', $debug,
     '--min-interval', (string) $minInterval,
+    '--network-keyup-trigger', $networkKeyupTrigger,
     '--swp-enable', $swpEnable,
     '--swp-wxfile', $swpWxFile,
     '--swp-threshold', (string) $swpThreshold,
