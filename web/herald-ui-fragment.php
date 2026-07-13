@@ -95,6 +95,49 @@
     background: #e74c3c; color: #fff; font-size: 0.75em;
     padding: 2px 6px; border-radius: 4px; margin-left: 6px; white-space: nowrap;
   }
+  #herald-ui .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  #herald-ui .toggle-row .toggle-label {
+    font-size: 0.95em;
+    color: #555;
+    display: inline;
+    margin: 0;
+    font-weight: normal;
+  }
+  #herald-ui .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 26px;
+    flex-shrink: 0;
+  }
+  #herald-ui .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  #herald-ui .toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #aaa;
+    border-radius: 26px;
+    transition: .3s;
+  }
+  #herald-ui .toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background-color: #fff;
+    border-radius: 50%;
+    transition: .3s;
+  }
+  #herald-ui .toggle-switch input:checked + .toggle-slider { background-color: #27ae60; }
+  #herald-ui .toggle-switch input:checked + .toggle-slider:before { transform: translateX(26px); }
 </style>
 
 <div class="status-bar" id="herald-status-bar">
@@ -111,7 +154,7 @@
   <button class="tab-btn" data-tab="settings">Settings</button>
 </div>
 
-<!-- ══════════════════ TAIL MESSAGES (unkey-triggered) ══════════════════ -->
+<!-- ══════════════════════ TAIL MESSAGES (unkey-triggered) ══════════════════════ -->
 <div class="tab-panel active" id="tab-tail">
   <div class="card">
     <h3>Rotation</h3>
@@ -177,7 +220,7 @@
   </div>
 </div>
 
-<!-- ══════════════════ SCHEDULED ANNOUNCEMENTS (clock-triggered) ══════════════════ -->
+<!-- ══════════════════════ SCHEDULED ANNOUNCEMENTS (clock-triggered) ══════════════════════ -->
 <div class="tab-panel" id="tab-scheduled">
   <div class="card">
     <h3>Scheduled Announcements</h3>
@@ -262,7 +305,7 @@
   </div>
 </div>
 
-<!-- ══════════════════ PLAYBACK HISTORY ══════════════════ -->
+<!-- ══════════════════════ PLAYBACK HISTORY ══════════════════════ -->
 <div class="tab-panel" id="tab-history">
   <div class="card">
     <h3>Playback History</h3>
@@ -276,7 +319,7 @@
   </div>
 </div>
 
-<!-- ══════════════════ SETTINGS ══════════════════ -->
+<!-- ══════════════════════ SETTINGS ══════════════════════ -->
 <div class="tab-panel" id="tab-settings">
   <div class="card">
     <h3>Herald Daemon</h3>
@@ -297,8 +340,15 @@
     <input type="text" id="set-min-interval" style="width: 100px;">
     <span class="muted" style="margin-left: 8px;">e.g. 300 = 5 min, 600 = 10 min, 900 = 15 min</span>
 
-    <label><input type="checkbox" id="set-network-keyup-trigger"> Fire tail messages on network unkeys too (requires AMI)</label>
-    <p class="muted" style="margin-top: 4px; margin-bottom: 0;">When enabled, tail messages play after a connected AllStar node unkeys, not just after local RF unkeys. Herald reads AMI credentials automatically from <code>/etc/allmon3/allmon3.ini</code> (Allmon3) or <code>/etc/asterisk/manager.conf</code> (Supermon / other frontends).</p>
+    <div class="toggle-row">
+      <span class="toggle-label">RF activation only</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="set-network-keyup-trigger">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">RF and Network activation</span>
+    </div>
+    <p class="muted" style="margin-top: 6px; margin-bottom: 0;">Off: tail messages play after a local RF unkey only. On: tail messages also play after a connected AllStar node unkeys.</p>
 
     <label><input type="checkbox" id="set-debug"> Enable debug logging</label>
 
