@@ -600,6 +600,12 @@ def cmd_playback_history():
     history = state.get("playback_history", [])
     print(json.dumps({"history": list(reversed(history))}))
 
+def cmd_clear_history():
+    state = load_state()
+    state["playback_history"] = []
+    save_state(state)
+    print(json.dumps({"success": True, "message": "Playback history cleared"}))
+
 def cmd_export_config(config):
     print(json.dumps(config, indent=2))
 
@@ -704,6 +710,8 @@ def build_arg_parser():
 
     sub.add_parser("playback-history", help="Print playback history as JSON")
 
+    sub.add_parser("clear-history", help="Clear the playback history")
+
     sub.add_parser("export-config", help="Export the full daemon config as JSON (for backup)")
 
     p_import = sub.add_parser("import-config", help="Restore the full daemon config from an exported JSON file")
@@ -748,6 +756,8 @@ def cli_main():
         cmd_log_playback(args)
     elif args.command == "playback-history":
         cmd_playback_history()
+    elif args.command == "clear-history":
+        cmd_clear_history()
     elif args.command == "export-config":
         cmd_export_config(config)
     elif args.command == "import-config":
