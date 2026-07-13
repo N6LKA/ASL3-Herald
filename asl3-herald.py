@@ -530,6 +530,7 @@ def scheduled_with_health(scheduled):
 
 def cmd_list_json(config):
     cfg = extract_config(config)
+    state = load_state()
     out = {
         "node":    cfg["node"],
         "debug":   cfg["debug"],
@@ -540,6 +541,7 @@ def cmd_list_json(config):
             "enable":           cfg["tm_on"],
             "min_interval":     cfg["min_int"],
             "network_keyup_trigger": cfg["network_trigger"],
+            "last_tail_played": state.get("last_tail_played", 0.0),
             "rotation":         normalize_rotation(cfg["rotation"]),
             "skywarnplus": {
                 "enable":           cfg["swp_on"],
