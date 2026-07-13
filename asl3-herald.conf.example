@@ -11,13 +11,12 @@ Debug: false
 # ── Asterisk Manager Interface (AMI) ──────────────────────────────────────────
 # AMI enables real-time, low-latency unkey detection and network keyup support.
 # The connection is local-only (127.0.0.1) — no internet access involved.
-# install.sh auto-discovers credentials from /etc/allmon3/allmon3.ini or
-# /etc/asterisk/manager.conf. If left blank, Herald falls back to the legacy
+# Herald reads AMI credentials automatically from the system at startup and on
+# every SIGHUP reload — you do NOT store them here. Sources, in order:
+#   1. /etc/allmon3/allmon3.ini   (Allmon3 users — already configured)
+#   2. /etc/asterisk/manager.conf (Supermon / other frontends, or Allmon3 fallback)
+# If neither file yields usable credentials, Herald falls back to the legacy
 # CLI kerchunk-counter method (local RF unkeys only, ~1s latency).
-AmiHost: "127.0.0.1"
-AmiPort: 5038
-AmiUser: ""
-AmiSecret: ""
 
 TailMessage:
   # Enable/disable the tail message function entirely
@@ -29,7 +28,7 @@ TailMessage:
   MinInterval: 300
 
   # When enabled, tail messages also fire after a network-connected node
-  # unkeys (not just local RF). Requires AMI credentials above.
+  # unkeys (not just local RF). Requires AMI (see above).
   # Default: false (local RF only, matching legacy behavior)
   NetworkKeyupTrigger: false
 
