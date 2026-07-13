@@ -8,9 +8,15 @@
 (function () {
   const API = '/asl3-herald/api/';
 
+  // Auto-clears after 6 s so users don't have to refresh to dismiss notices.
   function showMsg(el, text, ok) {
     el.textContent = text;
     el.className = 'msg ' + (ok ? 'ok' : 'err');
+    clearTimeout(el._autoHide);
+    el._autoHide = setTimeout(() => {
+      el.textContent = '';
+      el.className = 'msg';
+    }, 6000);
   }
 
   function escapeAttr(s) {
@@ -30,17 +36,27 @@
     return data;
   }
 
-  // ── Tabs ─────────────────────────────────────────────────────────────
+  // ── Tabs ───────────────────────────────────────────────────────────────────────────────
+  // History tab polls every 10 s while active so new plays appear without
+  // a manual page refresh; the interval is stopped when leaving the tab.
+  let historyPoller = null;
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+      if (btn.dataset.tab === 'history') {
+        loadHistory();
+        if (!historyPoller) historyPoller = setInterval(loadHistory, 10000);
+      } else {
+        clearInterval(historyPoller);
+        historyPoller = null;
+      }
     });
   });
 
-  // ── Source toggles (TTS vs file upload) ─────────────────────────────
+  // ── Source toggles (TTS vs file upload) ────────────────────────────────────────────
   function wireSourceToggle(name, ttsFieldsId, fileFieldsId) {
     document.querySelectorAll('input[name="' + name + '"]').forEach(radio => {
       radio.addEventListener('change', () => {
@@ -80,7 +96,7 @@
     });
   }
 
-  // ── Load voices ──────────────────────────────────────────────────────
+  // ── Load voices ────────────────────────────────────────────────────────────────────────────
   async function loadVoices() {
     const data = await api('voices.php');
     const voices = (data && data.voices) || [];
@@ -99,7 +115,7 @@
     });
   }
 
-  // ── Load status + lists ──────────────────────────────────────────────
+  // ── Load status + lists ────────────────────────────────────────────────────────────────────────
   async function loadAll() {
     const data = await api('list.php');
     if (!data || data.success === false) return;
@@ -122,9 +138,10 @@
     document.getElementById('set-herald-version').textContent = data.version || 'unknown';
 
     document.getElementById('set-node').value = data.node || '';
+    document.getElementById('set-poll-interval').value = data.poll_interval;
     document.getElementById('set-min-interval').value = data.tail_message.min_interval;
-    document.getElementById('set-network-keyup-trigger').checked = !!data.tail_message.network_keyup_trigger;
     document.getElementById('set-debug').checked = !!data.debug;
+    document.getElementById('set-network-keyup-trigger').checked = !!data.tail_message.network_keyup_trigger;
     document.getElementById('set-swp-enable').checked = !!data.tail_message.skywarnplus.enable;
     document.getElementById('set-swp-wxfile').value = data.tail_message.skywarnplus.wx_tail_file || '';
     document.getElementById('set-swp-threshold').value = data.tail_message.skywarnplus.silence_threshold;
@@ -181,7 +198,7 @@
     loadHistory();
   }
 
-  // ── Playback history ─────────────────────────────────────────────────
+  // ── Playback history ───────────────────────────────────────────────────────────────────
   async function loadHistory() {
     const data = await api('playback_history.php');
     const tbody = document.querySelector('#history-table tbody');
@@ -244,7 +261,7 @@
     });
   }
 
-  // ── Edit tail message ────────────────────────────────────────────────
+  // ── Edit tail message ───────────────────────────────────────────────────────────────────
   let editingTailName = null;
 
   function startEditTail(d) {
@@ -286,7 +303,7 @@
   }
   document.getElementById('tail-edit-cancel').addEventListener('click', cancelEditTail);
 
-  // ── Edit scheduled announcement ──────────────────────────────────────
+  // ── Edit scheduled announcement ─────────────────────────────────────────────────────────
   let editingSchedName = null;
 
   function startEditSched(d) {
@@ -333,7 +350,7 @@
   }
   document.getElementById('sched-edit-cancel').addEventListener('click', cancelEditSched);
 
-  // ── Enable/disable + reload ──────────────────────────────────────────
+  // ── Enable/disable + reload ───────────────────────────────────────────────────────────────────
   document.getElementById('btn-toggle-enable').addEventListener('click', async () => {
     const msgEl = document.getElementById('herald-daemon-msg');
     const data = await api('toggle.php', { method: 'POST' });
@@ -364,7 +381,7 @@
     }
   });
 
-  // ── Backup / restore ──────────────────────────────────────────────────
+  // ── Backup / restore ─────────────────────────────────────────────────────────────────────
   document.getElementById('btn-export-config').addEventListener('click', () => {
     window.location.href = API + 'config_export.php';
   });
@@ -382,16 +399,17 @@
     if (data.success) loadAll();
   });
 
-  // ── Settings ──────────────────────────────────────────────────────────
+  // ── Settings ──────────────────────────────────────────────────────────────────────────────
   document.getElementById('btn-save-settings').addEventListener('click', async () => {
     const msgEl = document.getElementById('settings-msg');
     const data = await api('settings.php', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         node: document.getElementById('set-node').value.trim(),
+        poll_interval: document.getElementById('set-poll-interval').value,
         min_interval: document.getElementById('set-min-interval').value,
-        network_keyup_trigger: document.getElementById('set-network-keyup-trigger').checked,
         debug: document.getElementById('set-debug').checked,
+        network_keyup_trigger: document.getElementById('set-network-keyup-trigger').checked,
         swp_enable: document.getElementById('set-swp-enable').checked,
         swp_wxfile: document.getElementById('set-swp-wxfile').value.trim(),
         swp_threshold: document.getElementById('set-swp-threshold').value,
@@ -401,7 +419,7 @@
     if (data.success) loadAll();
   });
 
-  // ── Add / edit tail message ──────────────────────────────────────────
+  // ── Add / edit tail message ────────────────────────────────────────────────────────────────
   document.getElementById('btn-add-tail').addEventListener('click', async () => {
     const msgEl = document.getElementById('tail-msg');
     const name = document.getElementById('tail-name').value.trim();
@@ -443,7 +461,7 @@
     }
   });
 
-  // ── Add / edit scheduled announcement ────────────────────────────────
+  // ── Add / edit scheduled announcement ──────────────────────────────────────────────────
   document.getElementById('btn-add-sched').addEventListener('click', async () => {
     const msgEl = document.getElementById('sched-msg');
     const name = document.getElementById('sched-name').value.trim();
@@ -490,7 +508,7 @@
     }
   });
 
-  // ── Clear history ─────────────────────────────────────────────────────
+  // ── Clear history ──────────────────────────────────────────────────────────────────────────
   document.getElementById('btn-clear-history').addEventListener('click', async () => {
     if (!confirm('Clear all playback history?')) return;
     const msgEl = document.getElementById('history-msg');
