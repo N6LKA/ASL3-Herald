@@ -36,16 +36,6 @@ error()   { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 # Downloads the whole repo at the given ref as a single tarball (GitHub's
 # codeload service, not raw.githubusercontent.com) and extracts it once, up
 # front - fetch_repo_file() below then just copies out of that local copy.
-# Two problems this avoids, both hit while testing this installer itself:
-#   1. raw.githubusercontent.com is fronted by a CDN (Fastly) that can serve
-#      a stale cached copy of an individual file for an extended stretch,
-#      even with a "Cache-Control: no-cache" request header and a
-#      cache-busting query string.
-#   2. Fetching each of the ~30 repo files individually through GitHub's
-#      Contents API (the first fix for #1) burns through GitHub's 60
-#      requests/hour unauthenticated rate limit after just two reinstalls -
-#      a single tarball download is one request no matter how many files
-#      the repo has.
 REPO_TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$REPO_TMP_DIR"' EXIT
 
@@ -69,16 +59,16 @@ HERALD_BIN="/usr/local/bin/herald"
 # Captured before anything is touched so we know how to handle service startup
 # at the end:
 #   WAS_ACTIVE=true  → already running; restart to pick up code changes
-#   HAS_CONFIG=true  → existing configured install (reinstall after uninstall);
-#                      start automatically rather than showing "Next steps"
-#   both false       → genuinely fresh install; leave stopped, show Next steps
+#   HAS_CONFIG=true  → existing configured install (reinstall after non-purge
+#                      uninstall); start automatically
+#   both false       → fresh install or purge-all reinstall; check after
+#                      prompts whether a node was entered, then decide
 WAS_ACTIVE=false
 systemctl is-active --quiet asl3-herald 2>/dev/null && WAS_ACTIVE=true
 
 HAS_CONFIG=false
-CONFIG_DIR_EARLY="/etc/asterisk/scripts/asl3-herald"
-if [[ -f "$CONFIG_DIR_EARLY/asl3-herald.conf" ]] && \
-   grep -qE '^Node:[[:space:]]+"[0-9]+"' "$CONFIG_DIR_EARLY/asl3-herald.conf" 2>/dev/null; then
+if [[ -f "$CONFIG_DIR/asl3-herald.conf" ]] && \
+   grep -qE '^Node:[[:space:]]+"[0-9]+"' "$CONFIG_DIR/asl3-herald.conf" 2>/dev/null; then
     HAS_CONFIG=true
 fi
 
@@ -192,11 +182,6 @@ else
     info "Installing example config ..."
     fetch_repo_file "asl3-herald.conf.example" "$CONFIG_DIR/asl3-herald.conf"
 
-    # Interactive prompts for a brand-new config only - never touches an
-    # existing one. Reads from /dev/tty rather than plain stdin, since this
-    # script's own stdin is the curl|bash pipe, not the terminal; falls back
-    # to leaving the field at its safe default/blank if no controlling
-    # terminal is available (e.g. a fully unattended/scripted run).
     NODE_NUM=""
     if [[ -r /dev/tty ]]; then
         read -rp "Enter your ASL3/AllStarLink node number (required): " NODE_NUM < /dev/tty || true
@@ -225,11 +210,6 @@ else
         fi
     fi
 
-    # AMI credentials are NOT stored in asl3-herald.conf — the daemon reads them
-    # directly from /etc/allmon3/allmon3.ini (Allmon3) or /etc/asterisk/manager.conf
-    # (Supermon / other frontends) at startup and on every SIGHUP reload.
-    # No action needed here.
-
     warn "Review the rest of the config before starting: $CONFIG_DIR/asl3-herald.conf"
 fi
 
@@ -252,12 +232,6 @@ if [[ ! -d /etc/allmon3 && ! -d /var/www/html/supermon ]]; then
     systemctl enable --now apache2
 fi
 
-# php-curl - needed for the Settings tab's "Check for Updates" button to make
-# an outbound HTTPS request to GitHub. Checked/installed unconditionally
-# regardless of what host app is detected, same reasoning as the php-curl
-# check this installer used to do for an older Allmon3 auth check: some
-# hosts have PHP/Apache already present (via Allmon3/Supermon) but still
-# missing the curl extension specifically.
 if ! php -r 'exit(function_exists("curl_init") ? 0 : 1);' 2>/dev/null; then
     info "Installing php-curl (needed for the update-check feature) ..."
     apt-get install -y -qq php-curl
@@ -287,12 +261,6 @@ EOF
 chmod 0440 "$SUDOERS_WEB"
 chown root:root "$SUDOERS_WEB"
 
-# Allmon3 integration — a dedicated page installed directly into Allmon3's
-# own web root (not /asl3-herald/), so it can load Allmon3's real
-# functions.js/index.js unmodified for chrome + login detection. A page
-# living outside Allmon3's own directory can't reliably read Allmon3's
-# session cookie server-side (its Path is scoped to Allmon3's own API
-# prefix), so this is a functional requirement, not just cosmetic.
 ALLMON3_WEB_ROOT="/usr/share/allmon3"
 MENU_INI="/etc/allmon3/menu.ini"
 if [[ -d /etc/allmon3 ]]; then
@@ -306,8 +274,6 @@ if [[ -d /etc/allmon3 ]]; then
         warn "(this is expected only on a non-standard Allmon3 install)"
     fi
 
-    # menu.ini — appended to the END of the file so it never disturbs existing
-    # custom menu entries; idempotent (skips if a [Herald] section already exists).
     MENU_INI_CHANGED=false
     if [[ -f "$MENU_INI" ]] && grep -q "^\[Herald\]" "$MENU_INI"; then
         info "Allmon3 menu.ini already has a [Herald] entry — skipping"
@@ -320,8 +286,6 @@ if [[ -d /etc/allmon3 ]]; then
             touch "$MENU_INI"
         fi
         if [[ -s "$MENU_INI" ]]; then
-            # Ensure the file ends with a newline, then add a blank line as a
-            # separator, so the new section doesn't run up against the last line.
             [[ -n "$(tail -c1 "$MENU_INI")" ]] && echo >> "$MENU_INI"
             echo >> "$MENU_INI"
         fi
@@ -333,9 +297,6 @@ EOF
         info "Added to the bottom of $MENU_INI — move/relabel it there if you'd like it elsewhere"
     fi
 
-    # custom.css — hides the sidebar link until logged into Allmon3. Cosmetic
-    # only; asl3-herald.html itself still gates its content on real login
-    # status regardless of whether the link is visible.
     CUSTOM_CSS="/etc/allmon3/custom.css"
     CSS_RULE='body.logged-out a[href*="asl3-herald"] { display: none !important; }'
     if [[ -f "$CUSTOM_CSS" ]] && grep -qF "$CSS_RULE" "$CUSTOM_CSS"; then
@@ -357,24 +318,12 @@ $CSS_RULE
 EOF
     fi
 
-    # Allmon3 reads menu.ini into memory at startup, same reasoning as the
-    # asl3-herald daemon itself needing a restart (not just a config
-    # reload) to pick up a change made to a file on disk - only restart when
-    # the section was actually just added, never when it already existed
-    # (a plain reinstall shouldn't bounce Allmon3 for no reason).
     if $MENU_INI_CHANGED && systemctl is-active --quiet allmon3 2>/dev/null; then
         info "Restarting allmon3 to pick up the new sidebar link ..."
         systemctl restart allmon3
     fi
 fi
 
-# Supermon integration — a dedicated page installed directly into Supermon's
-# own directory (not /asl3-herald/), so it can include Supermon's real
-# session.inc/header.inc/footer.inc unmodified. Supermon's session cookie is
-# named "supermon61" (set by session.inc) — a page living outside Supermon's
-# own directory that calls plain session_start() reads a different cookie
-# (PHP's default PHPSESSID) and never sees the real login state, so this is
-# a functional requirement, not just cosmetic.
 SUPERMON_DIR="/var/www/html/supermon"
 if [[ -d "$SUPERMON_DIR" ]]; then
     info "Installing Supermon Announcement Settings page to $SUPERMON_DIR ..."
@@ -383,8 +332,6 @@ if [[ -d "$SUPERMON_DIR" ]]; then
     chmod 644 "$SUPERMON_DIR/asl3-herald.php"
 fi
 
-# Supermon footer link — added inside Supermon's own login-conditional
-# block, so it's already hidden until logged in, natively.
 if [[ -f "$SUPERMON_FOOTER" ]]; then
     if grep -q "asl3-herald.php" "$SUPERMON_FOOTER"; then
         info "Supermon footer link already present — skipping"
@@ -407,13 +354,14 @@ if [[ -f "$SUPERMON_FOOTER" ]]; then
 fi
 
 # ── Start / restart the service ──────────────────────────────────────────────────────────────────────────
-# `herald reload` (SIGHUP) only re-reads the YAML config, never the daemon's
-# own code - a code update needs an actual process restart.
 if $WAS_ACTIVE; then
     info "asl3-herald was already running — restarting to load the updated code ..."
     systemctl restart asl3-herald
 elif $HAS_CONFIG; then
     info "Existing configured install detected — starting asl3-herald ..."
+    systemctl start asl3-herald
+elif grep -qE '^Node:[[:space:]]+"[0-9]+"' "$CONFIG_DIR/asl3-herald.conf" 2>/dev/null; then
+    info "Node number configured — starting asl3-herald ..."
     systemctl start asl3-herald
 fi
 
@@ -426,8 +374,8 @@ echo ""
 if $WAS_ACTIVE; then
     echo "  Service restarted to pick up the updated code."
     echo "  Check status:  herald status"
-elif $HAS_CONFIG; then
-    echo "  Existing configuration preserved — service started."
+elif systemctl is-active --quiet asl3-herald 2>/dev/null; then
+    echo "  Service started automatically."
     echo "  Check status:  herald status"
 else
     echo "  Next steps:"
