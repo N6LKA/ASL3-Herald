@@ -490,6 +490,15 @@
     }
   });
 
+  // ── Clear history ─────────────────────────────────────────────────────
+  document.getElementById('btn-clear-history').addEventListener('click', async () => {
+    if (!confirm('Clear all playback history?')) return;
+    const msgEl = document.getElementById('history-msg');
+    const data = await api('clear_history.php', { method: 'POST' });
+    showMsg(msgEl, data.message || (data.success !== false ? 'History cleared' : 'Failed'), data.success !== false);
+    if (data.success !== false) loadHistory();
+  });
+
   loadVoices();
   loadAll();
 })();
