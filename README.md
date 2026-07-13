@@ -15,7 +15,8 @@
 `asl3-herald` covers two distinct functions:
 
 - **Tail Messages** — unkey-triggered, reactive to repeater activity:
-  - **Reliable unkey detection** — polls the `rpt stats` kerchunk counter every second (configurable via `PollInterval`) to detect transmissions; not dependent on the inconsistent native tail message trigger
+  - **Reliable unkey detection** — uses the Asterisk Manager Interface (AMI) for real-time, event-driven unkey detection that fires at the actual unkey (before the courtesy tone), giving a seamless native-feel tail message; falls back to the legacy `rpt stats` kerchunk counter if AMI credentials aren't available
+  - **Network keyup support** — with AMI active, the optional `NetworkKeyupTrigger` setting also fires tail messages after a connected AllStar node unkeys (not just local RF)
   - **Rotating messages** — cycles through a list of announcement files in order with a configurable minimum interval between plays
   - **SkywarnPlus WX integration** — when weather alerts are active, plays the SkywarnPlus `wx-tail.wav` file instead of the normal rotation (WX always takes priority)
   - **Optional day/time-window gating per entry** — a rotation entry can be restricted to specific days of the week and/or a time-of-day window (e.g. a net-announcement tail message that's only eligible Tuesday evenings); entries without gating stay eligible all the time, same as before
@@ -24,7 +25,7 @@
   - Plays a specific file at a configured time of day, on selected days of the week
   - Optional nth-week-of-month scheduling (e.g. "2nd Saturday of the month")
   - **Local or global playback** — each scheduled announcement can play locally on this node only (`rpt localplay`, the default) or globally to all connected/linked nodes (`rpt playback`)
-  - **Waits for unkey** — if the node is currently keyed when a scheduled announcement is due, it holds off rather than playing over live traffic, and keeps checking every poll until the node unkeys
+  - **Waits for unkey** — if the node is currently keyed when a scheduled announcement is due, it holds off rather than playing over live traffic, and keeps checking until the node unkeys
   - **Takes precedence over tail messages** — if a scheduled announcement and a tail message would both fire at the same moment, the scheduled announcement always plays; the tail message simply retries on its next unkey once the announcement has finished, with no penalty against `MinInterval`
 
 Both Tail Messages and Scheduled Announcements can be edited in place (name, text, voice, schedule, play mode) via `herald edit-rotation` / `herald edit-schedule` or the web UI, instead of removing and re-adding.
@@ -103,10 +104,10 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 | Setting | Default | Description |
 |---|---|---|
 | `Node` | _(required)_ | Your ASL3 node number |
-| `PollInterval` | `1` | Seconds between kerchunk counter polls |
 | `Debug` | `false` | Enable verbose debug logging |
 | `TailMessage.Enable` | `true` | Enable/disable tail message function |
 | `TailMessage.MinInterval` | `300` | Minimum seconds between tail messages |
+| `TailMessage.NetworkKeyupTrigger` | `false` | When enabled, tail messages also fire after a connected AllStar node unkeys (not just local RF); requires AMI |
 | `TailMessage.Rotation` | _(empty)_ | List of rotation entries (WAV file paths, or dicts with `File` plus optional `Days`/`TimeStart`/`TimeEnd`/`Node`) |
 | `TailMessage.Rotation[].Days` | _(always eligible)_ | Optional: `daily` (default) or a list, e.g. `[tuesday]` — restricts this entry to those days |
 | `TailMessage.Rotation[].TimeStart` / `TimeEnd` | _(none)_ | Optional: `HH:MM` window this entry is eligible in; omit either side for open-ended |
@@ -122,16 +123,18 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 | `Scheduled[].PlayMode` | `local` | `local` (this node only) or `global` (all connected/linked nodes) |
 | `Scheduled[].Node` | _(daemon's `Node`)_ | Optional: target a specific node number for this entry (multinodes= setups) |
 
+**AMI credentials** are never stored in `asl3-herald.conf`. The daemon reads them automatically at startup and on every config reload from `/etc/allmon3/allmon3.ini` (Allmon3 users) or `/etc/asterisk/manager.conf` (Supermon and other frontends). If neither file yields usable credentials, herald falls back to the legacy CLI kerchunk counter (local RF unkeys only).
+
 **Example config:**
 
 ```yaml
 Node: "YOUR_NODE_NUMBER"
-PollInterval: 1
 Debug: false
 
 TailMessage:
   Enable: true
   MinInterval: 300
+  NetworkKeyupTrigger: false
   Rotation:
     - /etc/asterisk/scripts/asl3-herald/announcements/tail1.wav
   SkywarnPlus:
@@ -279,7 +282,9 @@ journalctl -u asl3-herald -f          # Follow live log output
 
 ## How It Works
 
-`asl3-herald` polls `asterisk -rx "rpt stats <node>"` every second (configurable via `PollInterval`) and watches the **Kerchunks today** counter. Each time a transmission ends (unkey), the counter increments by one. This is the same reliable method used by other ASL3 monitoring tools such as `asl3-link-activity-monitor`.
+`asl3-herald` uses the **Asterisk Manager Interface (AMI)** for real-time unkey detection. The AMI connection runs on loopback (127.0.0.1) — no internet involved. AMI credentials are read automatically from `/etc/allmon3/allmon3.ini` (Allmon3) or `/etc/asterisk/manager.conf` (Supermon / other frontends) on startup and on every SIGHUP config reload, so changes to either file are picked up without touching herald's own config.
+
+With AMI active, the daemon polls XStat every 0.5 seconds and watches for the `RPT_RXKEYED` variable to transition from 1 to 0 — this fires at the actual unkey, before the courtesy tone, giving a native-feel seamless tail message. When `NetworkKeyupTrigger` is enabled, it also polls SawStat and fires on any connected node's PTT transitioning 1 to 0 (network unkey). If AMI credentials aren't available, the daemon falls back to polling the `rpt stats` kerchunk counter (local RF unkeys only, fires after the courtesy tone).
 
 Every poll, **scheduled announcements are checked first**, before the unkey/tail-message logic. When an unkey is detected, the daemon then checks in priority order:
 1. **Minimum interval** — if not enough time has passed since the last tail message, skip
@@ -289,7 +294,7 @@ Every poll, **scheduled announcements are checked first**, before the unkey/tail
 
 A newly-appeared or changed WX alert always plays immediately, taking priority over the rotation. But a **persistent** alert (unchanged since it last played — detected via `wx-tail.wav`'s own modification time, not a separate/optional SkywarnPlus feed) alternates with the rotation on each unkey instead of playing every single time, so a long-running alert (common in some areas, e.g. summer heat warnings) doesn't shut the rotation out entirely. As soon as the alert changes or a new one appears, it immediately jumps back to the front of the line.
 
-**Scheduled announcements** run on a separate time-based path, unaffected by the tail message interval or repeater activity. They fire once per configured `HH:MM` per day, optionally restricted to a specific week of the month via `Week`. If the node is currently keyed when a scheduled announcement is due (checked via `rpt stats`'s "Signal on input" field), it holds off and keeps re-checking every poll — even after the matching minute has passed — until the node unkeys, rather than missing the announcement or talking over live traffic. Once a scheduled announcement plays, its estimated audio duration (via `soxi`, or an 8-second fallback estimate) holds off any tail message for that long, so the two never overlap — this is also how a scheduled announcement takes precedence when both would fire at the same moment.
+**Scheduled announcements** run on a separate time-based path, unaffected by the tail message interval or repeater activity. They fire once per configured `HH:MM` per day, optionally restricted to a specific week of the month via `Week`. If the node is currently keyed when a scheduled announcement is due, it holds off and keeps re-checking every poll — even after the matching minute has passed — until the node unkeys, rather than missing the announcement or talking over live traffic. Once a scheduled announcement plays, its estimated audio duration (via `soxi`, or an 8-second fallback estimate) holds off any tail message for that long, so the two never overlap — this is also how a scheduled announcement takes precedence when both would fire at the same moment.
 
 State (rotation index, WX alternation, scheduled "waiting for unkey" status, and last played times) is saved to a JSON file so it survives service restarts.
 
