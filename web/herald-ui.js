@@ -36,6 +36,39 @@
     return data;
   }
 
+  // ── Countdown timer ────────────────────────────────────────────────────────────────────
+  let _cdTimer = null;
+  let _cdMinInt = 300;
+  let _cdLastPlayed = 0;
+
+  function _tickCountdown() {
+    const el = document.getElementById('hs-countdown');
+    if (!el) return;
+    if (_cdLastPlayed === 0) {
+      el.textContent = 'Ready';
+      el.style.color = '#27ae60';
+      return;
+    }
+    const remaining = _cdMinInt - (Date.now() / 1000 - _cdLastPlayed);
+    if (remaining <= 0) {
+      el.textContent = 'Ready';
+      el.style.color = '#27ae60';
+    } else {
+      const m = Math.floor(remaining / 60);
+      const s = Math.floor(remaining % 60);
+      el.textContent = m + ':' + String(s).padStart(2, '0');
+      el.style.color = '';
+    }
+  }
+
+  function startCountdown(minInterval, lastTailPlayed) {
+    _cdMinInt = minInterval;
+    _cdLastPlayed = lastTailPlayed;
+    clearInterval(_cdTimer);
+    _tickCountdown();
+    _cdTimer = setInterval(_tickCountdown, 1000);
+  }
+
   // ── Tabs ───────────────────────────────────────────────────────────────────────────────
   // History tab polls every 10 s while active so new plays appear without
   // a manual page refresh; the interval is stopped when leaving the tab.
@@ -123,6 +156,7 @@
     document.getElementById('hs-node').textContent = data.node || '—';
     document.getElementById('hs-mininterval').textContent = data.tail_message.min_interval;
     document.getElementById('hs-swp').textContent = data.tail_message.skywarnplus.enable ? 'enabled' : 'disabled';
+    startCountdown(data.tail_message.min_interval, data.tail_message.last_tail_played || 0);
 
     const heraldEnabled = !!data.herald_enabled;
     const heraldStatusText = heraldEnabled ? 'enabled' : 'DISABLED';
