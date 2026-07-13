@@ -75,9 +75,25 @@
   #herald-ui .btn-play   { background: #2980b9; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-primary{ background: #27ae60; color: #fff; border: none; border-radius: 4px; padding: 8px 16px; }
   #herald-ui .btn-toggle { background: #8e44ad; color: #fff; border: none; border-radius: 4px; }
-  #herald-ui input[type=text], #herald-ui input[type=time], #herald-ui select {
+  #herald-ui input[type=text], #herald-ui input[type=time], #herald-ui select, #herald-ui textarea {
     padding: 6px; margin: 4px 6px 4px 0;
   }
+  #herald-ui textarea {
+    resize: vertical;
+    min-height: 72px;
+    font-family: inherit;
+    font-size: inherit;
+    box-sizing: border-box;
+    margin: 4px 0;
+  }
+  #herald-ui .tts-row {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    margin-top: 4px;
+  }
+  #herald-ui .tts-row .tts-voice { flex: 0 0 auto; }
+  #herald-ui .tts-row .tts-text  { flex: 1 1 auto; min-width: 0; }
   #herald-ui .add-form { border-top: 2px solid #eee; margin-top: 12px; padding-top: 12px; }
   #herald-ui label { display: block; font-size: 0.95em; margin-top: 8px; }
   #herald-ui .field-row { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
@@ -166,27 +182,11 @@
 
     <div class="add-form">
       <h3 id="tail-form-heading">Add a Tail Message</h3>
-      <div class="source-toggle">
-        <label><input type="radio" name="tail-source" value="tts" checked> Text-to-Speech</label>
-        <label><input type="radio" name="tail-source" value="file"> Upload File</label>
-      </div>
-
-      <div id="tail-tts-fields">
-        <label>Text</label>
-        <input type="text" id="tail-text" style="width: 100%;" placeholder="e.g. This is a test transmission">
-        <label>Voice</label>
-        <select id="tail-voice"></select>
-      </div>
-      <div id="tail-file-fields" style="display:none;">
-        <label>Audio file (.wav or .mp3)</label>
-        <input type="file" id="tail-file" accept=".wav,.mp3">
-        <span class="muted" id="tail-file-keep-note" style="display:none;">Leave blank to keep the existing audio.</span>
-      </div>
 
       <label>Name (letters, numbers, hyphens only)</label>
       <input type="text" id="tail-name" placeholder="e.g. weekend-notice">
 
-      <div class="field-row">
+      <div class="field-row" style="margin-top: 8px;">
         <div>
           <label>Days (optional — leave Daily for always eligible)</label>
           <div class="days-picker" id="tail-days">
@@ -212,7 +212,30 @@
         </div>
       </div>
 
-      <br><br>
+      <div class="source-toggle" style="margin-top: 16px;">
+        <label><input type="radio" name="tail-source" value="tts" checked> Text-to-Speech</label>
+        <label><input type="radio" name="tail-source" value="file"> Upload File</label>
+      </div>
+
+      <div id="tail-tts-fields">
+        <div class="tts-row">
+          <div class="tts-voice">
+            <label>Voice</label>
+            <select id="tail-voice" style="display: block;"></select>
+          </div>
+          <div class="tts-text">
+            <label>Text</label>
+            <textarea id="tail-text" rows="3" placeholder="e.g. This is a test transmission" style="width: 100%;"></textarea>
+          </div>
+        </div>
+      </div>
+      <div id="tail-file-fields" style="display:none;">
+        <label>Audio file (.wav or .mp3)</label>
+        <input type="file" id="tail-file" accept=".wav,.mp3">
+        <span class="muted" id="tail-file-keep-note" style="display:none;">Leave blank to keep the existing audio.</span>
+      </div>
+
+      <br>
       <button class="btn-primary" id="btn-add-tail">Add to Rotation</button>
       <button id="tail-edit-cancel" style="display:none;">Cancel Edit</button>
       <div class="msg" id="tail-msg"></div>
