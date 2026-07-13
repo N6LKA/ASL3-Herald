@@ -267,6 +267,8 @@
   <div class="card">
     <h3>Playback History</h3>
     <p class="muted">Most recent plays first — rotation, SkywarnPlus WX, scheduled announcements, and manual test plays. Kept for the most recent 200 events.</p>
+    <button class="btn-danger" id="btn-clear-history">Clear History</button>
+    <div class="msg" id="history-msg"></div>
     <table id="history-table">
       <thead><tr><th>Time</th><th>Type</th><th>Name</th><th>File</th><th>Node</th><th>Play Mode</th></tr></thead>
       <tbody></tbody>
