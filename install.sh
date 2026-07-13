@@ -141,30 +141,49 @@ fi
 if [[ -x "$PIPER_BIN" ]]; then
     info "Downloading default Piper voices (this may take a few minutes)..."
     mkdir -p "$PIPER_VOICE_DIR"
-    BASE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main"
+    # Primary: Hugging Face. Fallback: GitHub LFS mirror of the same repo.
+    # HF sometimes 403s on datacenter/VPS IPs or after rate-limit exhaustion;
+    # GitHub LFS (media.githubusercontent.com) is more reliable in those cases.
+    HF_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main"
+    GH_LFS_BASE="https://media.githubusercontent.com/media/rhasspy/piper-voices/main"
+    GH_RAW_BASE="https://raw.githubusercontent.com/rhasspy/piper-voices/main"
+
+    _dl_curl() {
+        curl -fsSL --retry 2 --retry-delay 3 --http1.1 \
+            -A "Mozilla/5.0 (compatible; asl3-herald-installer)" \
+            "$1" -o "$2" 2>/dev/null
+    }
 
     download_voice() {
         local onnx_file="$1" model_path="$2" json_path="$3"
         if [[ -f "$PIPER_VOICE_DIR/$onnx_file" && -f "$PIPER_VOICE_DIR/$onnx_file.json" ]]; then
             return
         fi
-        # --retry handles transient network errors (HTTP/2 stream cancellations
-        # from Hugging Face are common); || true keeps a single failed voice
-        # from aborting the whole install under set -e.
-        curl -fsSL --retry 3 --retry-delay 3 --http1.1 \
-            -A "Mozilla/5.0 (compatible; asl3-herald-installer)" \
-            "$BASE_URL/$model_path" -o "$PIPER_VOICE_DIR/$onnx_file" || {
+
+        local onnx_ok=false
+        for url in "$HF_BASE/$model_path" "$GH_LFS_BASE/$model_path"; do
+            if _dl_curl "$url" "$PIPER_VOICE_DIR/$onnx_file"; then
+                onnx_ok=true; break
+            fi
+            rm -f "$PIPER_VOICE_DIR/$onnx_file"
+        done
+        if ! $onnx_ok; then
             warn "Failed to download voice $onnx_file — skipping (re-run installer to retry)"
+            return
+        fi
+
+        local json_ok=false
+        for url in "$HF_BASE/$json_path" "$GH_RAW_BASE/$json_path"; do
+            if _dl_curl "$url" "$PIPER_VOICE_DIR/$onnx_file.json"; then
+                json_ok=true; break
+            fi
+            rm -f "$PIPER_VOICE_DIR/$onnx_file.json"
+        done
+        if ! $json_ok; then
+            warn "Failed to download voice config for $onnx_file — removing partial"
             rm -f "$PIPER_VOICE_DIR/$onnx_file"
             return
-        }
-        curl -fsSL --retry 3 --retry-delay 3 --http1.1 \
-            -A "Mozilla/5.0 (compatible; asl3-herald-installer)" \
-            "$BASE_URL/$json_path" -o "$PIPER_VOICE_DIR/$onnx_file.json" || {
-            warn "Failed to download voice config for $onnx_file — removing partial download"
-            rm -f "$PIPER_VOICE_DIR/$onnx_file" "$PIPER_VOICE_DIR/$onnx_file.json"
-            return
-        }
+        fi
     }
 
     download_voice "en_US-lessac-medium.onnx"     "en/en_US/lessac/medium/en_US-lessac-medium.onnx"         "en/en_US/lessac/medium/en_US-lessac-medium.onnx.json"
@@ -175,7 +194,13 @@ if [[ -x "$PIPER_BIN" ]]; then
     download_voice "en_US-ryan-low.onnx"          "en/en_US/ryan/low/en_US-ryan-low.onnx"                   "en/en_US/ryan/low/en_US-ryan-low.onnx.json"
 
     chmod 644 "$PIPER_VOICE_DIR"/*.onnx "$PIPER_VOICE_DIR"/*.onnx.json 2>/dev/null || true
-    info "Piper voices installed: lessac, joe, amy, kristin, libritts_r, ryan"
+    VOICES_INSTALLED=()
+    for f in "$PIPER_VOICE_DIR"/*.onnx; do [[ -f "$f" ]] && VOICES_INSTALLED+=("$(basename "${f%.onnx}")"); done
+    if [[ ${#VOICES_INSTALLED[@]} -gt 0 ]]; then
+        info "Piper voices installed: ${VOICES_INSTALLED[*]}"
+    else
+        warn "No Piper voices could be downloaded. Run the installer again to retry, or download manually."
+    fi
 else
     warn "Piper TTS not available. 'herald add' will fall back to festival or espeak-ng if installed."
     warn "Install with:  sudo apt install festival sox"
