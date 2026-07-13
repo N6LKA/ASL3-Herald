@@ -68,9 +68,10 @@ Scheduled Announcements (clock-triggered):
   precedence over a tail message due at the same moment.
 
 Settings:
-  update-settings [--node <n>] [--poll-interval <n>] [--debug true|false]
-                  [--min-interval <n>] [--swp-enable true|false]
-                  [--swp-wxfile <path>] [--swp-threshold <n>]
+  update-settings [--node <n>] [--debug true|false] [--min-interval <n>]
+                  [--network-keyup-trigger true|false]
+                  [--swp-enable true|false] [--swp-wxfile <path>]
+                  [--swp-threshold <n>]
                                            Update general daemon settings
 EOF
 }
