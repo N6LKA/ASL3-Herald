@@ -218,6 +218,35 @@ else
         fi
     fi
 
+    # Auto-discover AMI credentials so the daemon can use real-time event-driven
+    # unkey detection instead of the legacy kerchunk-counter polling method.
+    # Tries /etc/allmon3/allmon3.ini first (already configured if Allmon3 is
+    # installed), then falls back to /etc/asterisk/manager.conf.
+    AMI_USER="" AMI_SECRET=""
+
+    if [[ -f /etc/allmon3/allmon3.ini ]]; then
+        # allmon3.ini has per-node sections; grab the first user/pass found
+        AMI_USER=$(awk -F'=' '/^[[:space:]]*user[[:space:]]*=/{gsub(/[[:space:]]/,"",$2); print $2; exit}' /etc/allmon3/allmon3.ini)
+        AMI_SECRET=$(awk -F'=' '/^[[:space:]]*pass[[:space:]]*=/{gsub(/[[:space:]]/,"",$2); print $2; exit}' /etc/allmon3/allmon3.ini)
+        [[ -n "$AMI_USER" ]] && info "AMI credentials sourced from /etc/allmon3/allmon3.ini (user: $AMI_USER)"
+    fi
+
+    if [[ -z "$AMI_USER" && -f /etc/asterisk/manager.conf ]]; then
+        # manager.conf: first non-[general] section name is the username; secret follows
+        AMI_USER=$(awk '/^\[/{u=substr($0,2,length($0)-2)} u && /^secret[[:space:]]*=/{gsub(/^secret[[:space:]]*=[[:space:]]*/,""); print u; exit}' /etc/asterisk/manager.conf)
+        AMI_SECRET=$(awk '/^\[/{in_general=($0=="[general]")} !in_general && /^secret[[:space:]]*=/{gsub(/^secret[[:space:]]*=[[:space:]]*/,""); print; exit}' /etc/asterisk/manager.conf)
+        [[ -n "$AMI_USER" ]] && info "AMI credentials sourced from /etc/asterisk/manager.conf (user: $AMI_USER)"
+    fi
+
+    if [[ -n "$AMI_USER" && -n "$AMI_SECRET" ]]; then
+        sed -i "s/^AmiUser: .*/AmiUser: \"$AMI_USER\"/" "$CONFIG_DIR/asl3-herald.conf"
+        sed -i "s/^AmiSecret: .*/AmiSecret: \"$AMI_SECRET\"/" "$CONFIG_DIR/asl3-herald.conf"
+        info "AMI credentials written to config — real-time unkey detection enabled."
+    else
+        warn "Could not auto-discover AMI credentials. Herald will use legacy kerchunk-counter mode."
+        warn "To enable AMI: set AmiUser and AmiSecret in $CONFIG_DIR/asl3-herald.conf"
+    fi
+
     warn "Review the rest of the config before starting: $CONFIG_DIR/asl3-herald.conf"
 fi
 
