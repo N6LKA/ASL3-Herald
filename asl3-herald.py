@@ -17,6 +17,7 @@ import socket
 import argparse
 import subprocess
 import traceback
+import configparser
 from datetime import datetime
 from pathlib import Path
 
@@ -189,6 +190,56 @@ class AmiConn:
         except Exception:
             pass
         self._sock = None
+
+# ── AMI credential discovery ──────────────────────────────────────────────────
+
+def load_ami_credentials():
+    """
+    Read AMI host/port/user/secret from the system — never from asl3-herald.conf.
+    Tries /etc/allmon3/allmon3.ini first (preferred: already configured if
+    Allmon3 is installed and stays in sync automatically when Allmon3 changes).
+    Falls back to /etc/asterisk/manager.conf.
+    Returns (host, port, user, secret) or (None, None, None, None) if not found.
+    """
+    allmon3_ini = "/etc/allmon3/allmon3.ini"
+    if os.path.exists(allmon3_ini):
+        try:
+            cp = configparser.ConfigParser()
+            cp.read(allmon3_ini)
+            for section in cp.sections():
+                user   = cp.get(section, "user", fallback=None)
+                secret = cp.get(section, "pass", fallback=None)
+                if user and secret:
+                    host = cp.get(section, "host", fallback="127.0.0.1")
+                    # "localhost" → loopback; any non-loopback bind is unusual
+                    # but we leave it as-is and let the connect attempt fail with
+                    # a clear error if it can't reach the AMI port.
+                    if host.lower() == "localhost":
+                        host = "127.0.0.1"
+                    port = cp.getint(section, "port", fallback=5038)
+                    return host, port, user, secret
+        except Exception as e:
+            log_warn(f"Could not parse {allmon3_ini}: {e}")
+
+    manager_conf = "/etc/asterisk/manager.conf"
+    if os.path.exists(manager_conf):
+        try:
+            cp = configparser.ConfigParser()
+            cp.read(manager_conf)
+            host = cp.get("general", "bindaddr", fallback="127.0.0.1")
+            if host in ("0.0.0.0", "::"):
+                host = "127.0.0.1"
+            port = cp.getint("general", "port", fallback=5038)
+            for section in cp.sections():
+                if section.lower() == "general":
+                    continue
+                secret = cp.get(section, "secret", fallback=None)
+                if secret:
+                    return host, port, section, secret
+        except Exception as e:
+            log_warn(f"Could not parse {manager_conf}: {e}")
+
+    return None, None, None, None
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -433,11 +484,6 @@ def extract_config(config):
 
     scheduled = config.get("Scheduled", []) or []
 
-    ami_host   = str(config.get("AmiHost",   "127.0.0.1"))
-    ami_port   = int(config.get("AmiPort",   5038))
-    ami_user   = str(config.get("AmiUser",   "")).strip()
-    ami_secret = str(config.get("AmiSecret", "")).strip()
-
     return {
         "node":            node,
         "debug":           debug,
@@ -449,10 +495,6 @@ def extract_config(config):
         "swp_file":        swp_file,
         "swp_thr":         swp_thr,
         "scheduled":       scheduled,
-        "ami_host":        ami_host,
-        "ami_port":        ami_port,
-        "ami_user":        ami_user,
-        "ami_secret":      ami_secret,
     }
 
 # ── CLI subcommands (used by the `herald` bash CLI and the web UI) ────────────
@@ -770,11 +812,6 @@ def cmd_update_settings(config, args):
     if args.swp_threshold is not None:
         swp["SilenceThreshold"] = args.swp_threshold
 
-    if args.ami_user is not None:
-        config["AmiUser"] = args.ami_user
-    if args.ami_secret is not None:
-        config["AmiSecret"] = args.ami_secret
-
     save_config(config)
     print(json.dumps({"success": True, "message": "Settings updated"}))
 
@@ -856,8 +893,6 @@ def build_arg_parser():
     p_settings.add_argument("--swp-enable",    dest="swp_enable",    choices=["true", "false"])
     p_settings.add_argument("--swp-wxfile",    dest="swp_wxfile")
     p_settings.add_argument("--swp-threshold", dest="swp_threshold", type=int)
-    p_settings.add_argument("--ami-user",      dest="ami_user")
-    p_settings.add_argument("--ami-secret",    dest="ami_secret")
 
     return parser
 
@@ -938,10 +973,6 @@ def main():
     swp_file        = cfg["swp_file"]
     swp_thr         = cfg["swp_thr"]
     scheduled       = cfg["scheduled"]
-    ami_host        = cfg["ami_host"]
-    ami_port        = cfg["ami_port"]
-    ami_user        = cfg["ami_user"]
-    ami_secret      = cfg["ami_secret"]
 
     if not node:
         log_error("Node not set in config. Exiting.")
@@ -950,6 +981,9 @@ def main():
     state = load_state()
 
     # ── AMI setup ──────────────────────────────────────────────────────────
+    # Credentials are read from /etc/allmon3/allmon3.ini or
+    # /etc/asterisk/manager.conf — never stored in asl3-herald.conf.
+    ami_host, ami_port, ami_user, ami_secret = load_ami_credentials()
     ami = None
     if ami_user:
         log_info(f"Connecting to AMI at {ami_host}:{ami_port} as '{ami_user}' ...")
@@ -961,8 +995,8 @@ def main():
         else:
             log_warn("AMI unavailable — falling back to CLI kerchunk counter (local RF only)")
     else:
-        log_info("AmiUser not configured — using CLI kerchunk counter (local RF only)")
-        log_info("Set AmiUser/AmiSecret in asl3-herald.conf to enable AMI-based detection")
+        log_warn("No AMI credentials found in allmon3.ini or manager.conf")
+        log_warn("Falling back to CLI kerchunk counter (local RF unkeys only)")
 
     # CLI fallback: seed kerchunk counter for midnight-rollover detection
     last_kerchunks = 0
@@ -1016,20 +1050,18 @@ def main():
                 swp_file        = cfg["swp_file"]
                 swp_thr         = cfg["swp_thr"]
                 scheduled       = cfg["scheduled"]
-                new_ami_user    = cfg["ami_user"]
-                new_ami_secret  = cfg["ami_secret"]
-                new_ami_host    = cfg["ami_host"]
-                new_ami_port    = cfg["ami_port"]
-                # Reconnect AMI if credentials changed
-                if (new_ami_user != ami_user or new_ami_secret != ami_secret
-                        or new_ami_host != ami_host or new_ami_port != ami_port):
+                # Re-read AMI credentials from system files on SIGHUP so changes
+                # to allmon3.ini or manager.conf are picked up automatically.
+                new_host, new_port, new_user, new_secret = load_ami_credentials()
+                if (new_user != ami_user or new_secret != ami_secret
+                        or new_host != ami_host or new_port != ami_port):
                     if ami:
                         ami.close()
                         ami = None
-                    ami_user   = new_ami_user
-                    ami_secret = new_ami_secret
-                    ami_host   = new_ami_host
-                    ami_port   = new_ami_port
+                    ami_host   = new_host
+                    ami_port   = new_port
+                    ami_user   = new_user
+                    ami_secret = new_secret
                     if ami_user:
                         ami = _ami_connect(ami_host, ami_port, ami_user, ami_secret)
                         if ami:
