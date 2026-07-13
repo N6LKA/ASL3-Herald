@@ -151,15 +151,18 @@ if [[ -x "$PIPER_BIN" ]]; then
         # --retry handles transient network errors (HTTP/2 stream cancellations
         # from Hugging Face are common); || true keeps a single failed voice
         # from aborting the whole install under set -e.
-        curl -fsSL --retry 3 --retry-delay 2 --http1.1 \
+        curl -fsSL --retry 3 --retry-delay 3 --http1.1 \
+            -A "Mozilla/5.0 (compatible; asl3-herald-installer)" \
             "$BASE_URL/$model_path" -o "$PIPER_VOICE_DIR/$onnx_file" || {
-            warn "Failed to download voice $onnx_file — skipping (you can re-run the installer to retry)"
+            warn "Failed to download voice $onnx_file — skipping (re-run installer to retry)"
+            rm -f "$PIPER_VOICE_DIR/$onnx_file"
             return
         }
-        curl -fsSL --retry 3 --retry-delay 2 --http1.1 \
+        curl -fsSL --retry 3 --retry-delay 3 --http1.1 \
+            -A "Mozilla/5.0 (compatible; asl3-herald-installer)" \
             "$BASE_URL/$json_path" -o "$PIPER_VOICE_DIR/$onnx_file.json" || {
-            warn "Failed to download voice config $onnx_file.json — removing partial download"
-            rm -f "$PIPER_VOICE_DIR/$onnx_file"
+            warn "Failed to download voice config for $onnx_file — removing partial download"
+            rm -f "$PIPER_VOICE_DIR/$onnx_file" "$PIPER_VOICE_DIR/$onnx_file.json"
             return
         }
     }
