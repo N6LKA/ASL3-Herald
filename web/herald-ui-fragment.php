@@ -353,7 +353,13 @@
     <label><input type="checkbox" id="set-debug"> Enable debug logging</label>
 
     <h3 style="margin-top: 20px;">SkywarnPlus</h3>
-    <label><input type="checkbox" id="set-swp-enable"> Enable SkywarnPlus WX tail integration</label>
+    <div class="toggle-row" style="margin-top: 8px;">
+      <label class="toggle-switch">
+        <input type="checkbox" id="set-swp-enable">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Enable SkywarnPlus WX tail integration</span>
+    </div>
 
     <label>WX Tail File Path</label>
     <input type="text" id="set-swp-wxfile" style="width: 100%;">
