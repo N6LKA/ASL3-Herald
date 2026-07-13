@@ -373,7 +373,13 @@
     </div>
     <p class="muted" style="margin-top: 6px; margin-bottom: 0;">Off: tail messages play after a local RF unkey only. On: tail messages also play after a connected AllStar node unkeys.</p>
 
-    <label><input type="checkbox" id="set-debug"> Enable debug logging</label>
+    <div class="toggle-row" style="margin-top: 16px;">
+      <label class="toggle-switch">
+        <input type="checkbox" id="set-debug">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Enable debug logging</span>
+    </div>
 
     <h3 style="margin-top: 20px;">SkywarnPlus</h3>
     <div class="toggle-row" style="margin-top: 8px;">
