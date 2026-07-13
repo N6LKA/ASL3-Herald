@@ -1,7 +1,7 @@
 ![asl3-herald](web/img/asl3-herald-banner.svg)
 
-![Version](https://img.shields.io/badge/version-1.4.0-blue)
-![Release Date](https://img.shields.io/badge/released-2026--07--12-green)
+![Version](https://img.shields.io/badge/version-1.5.0-blue)
+![Release Date](https://img.shields.io/badge/released-2026--07--13-green)
 ![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
 
 **Enhanced tail message daemon for ASL3/app_rpt with advanced announcement features.**
