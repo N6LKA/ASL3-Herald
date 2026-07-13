@@ -138,7 +138,6 @@
     document.getElementById('set-herald-version').textContent = data.version || 'unknown';
 
     document.getElementById('set-node').value = data.node || '';
-    document.getElementById('set-poll-interval').value = data.poll_interval;
     document.getElementById('set-min-interval').value = data.tail_message.min_interval;
     document.getElementById('set-debug').checked = !!data.debug;
     document.getElementById('set-network-keyup-trigger').checked = !!data.tail_message.network_keyup_trigger;
@@ -406,7 +405,6 @@
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         node: document.getElementById('set-node').value.trim(),
-        poll_interval: document.getElementById('set-poll-interval').value,
         min_interval: document.getElementById('set-min-interval').value,
         debug: document.getElementById('set-debug').checked,
         network_keyup_trigger: document.getElementById('set-network-keyup-trigger').checked,
