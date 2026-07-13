@@ -66,14 +66,21 @@ ANNOUNCE_DIR="$CONFIG_DIR/announcements"
 SERVICE_FILE="/etc/systemd/system/asl3-herald.service"
 HERALD_BIN="/usr/local/bin/herald"
 
-# Captured before anything is touched: if the service was already running,
-# it's an update/reinstall (not a fresh install), so we restart it at the end
-# to actually load the new code - `herald reload` (SIGHUP) only re-reads the
-# YAML config into an already-running process, it can never pick up changes
-# to asl3-herald.py itself. Re-running this installer alone was never enough
-# to apply a code update; only a restart (or reboot) does.
+# Captured before anything is touched so we know how to handle service startup
+# at the end:
+#   WAS_ACTIVE=true  → already running; restart to pick up code changes
+#   HAS_CONFIG=true  → existing configured install (reinstall after uninstall);
+#                      start automatically rather than showing "Next steps"
+#   both false       → genuinely fresh install; leave stopped, show Next steps
 WAS_ACTIVE=false
 systemctl is-active --quiet asl3-herald 2>/dev/null && WAS_ACTIVE=true
+
+HAS_CONFIG=false
+CONFIG_DIR_EARLY="/etc/asterisk/scripts/asl3-herald"
+if [[ -f "$CONFIG_DIR_EARLY/asl3-herald.conf" ]] && \
+   grep -qE '^Node:[[:space:]]+"[0-9]+"' "$CONFIG_DIR_EARLY/asl3-herald.conf" 2>/dev/null; then
+    HAS_CONFIG=true
+fi
 
 if [[ $EUID -ne 0 ]]; then
     error "This installer must be run as root. Use: curl -fsSL ... | sudo bash"
@@ -85,7 +92,7 @@ echo "  https://github.com/N6LKA/asl3-herald"
 [[ "$BRANCH" != "main" ]] && warn "Installing from branch: $BRANCH (not main)"
 echo ""
 
-# ── Dependencies ───────────────────────────────────────────────────────────────
+# ── Dependencies ───────────────────────────────────────────────────────────────────────────────
 
 info "Checking dependencies..."
 apt-get update -qq
@@ -101,7 +108,7 @@ if [[ ${#PKGS[@]} -gt 0 ]]; then
     apt-get install -y -qq "${PKGS[@]}"
 fi
 
-# ── Piper TTS (neural voices, preferred) ───────────────────────────────────────
+# ── Piper TTS (neural voices, preferred) ─────────────────────────────────────────────────────
 
 PIPER_BIN="/opt/piper/bin/piper/piper"
 PIPER_VOICE_DIR="/opt/piper/voices"
@@ -160,7 +167,7 @@ else
     warn "           or: sudo apt install espeak-ng sox"
 fi
 
-# ── Install daemon files ───────────────────────────────────────────────────────
+# ── Install daemon files ──────────────────────────────────────────────────────────────────────────────
 
 info "Installing daemon to $INSTALL_DIR ..."
 mkdir -p "$INSTALL_DIR"
@@ -169,13 +176,13 @@ fetch_repo_file "asl3-herald.py" "$INSTALL_DIR/asl3-herald.py"
 fetch_repo_file "version.txt"    "$INSTALL_DIR/version.txt"
 chmod +x "$INSTALL_DIR/asl3-herald.py"
 
-# ── Herald management command ──────────────────────────────────────────────────
+# ── Herald management command ────────────────────────────────────────────────────────────────────────────
 
 info "Installing herald command to $HERALD_BIN ..."
 fetch_repo_file "herald" "$HERALD_BIN"
 chmod +x "$HERALD_BIN"
 
-# ── Config directory ───────────────────────────────────────────────────────────
+# ── Config directory ────────────────────────────────────────────────────────────────────────────────
 
 mkdir -p "$CONFIG_DIR" "$ANNOUNCE_DIR"
 
@@ -226,14 +233,14 @@ else
     warn "Review the rest of the config before starting: $CONFIG_DIR/asl3-herald.conf"
 fi
 
-# ── systemd service ────────────────────────────────────────────────────────────
+# ── systemd service ───────────────────────────────────────────────────────────────────────────────
 
 info "Installing systemd service ..."
 fetch_repo_file "asl3-herald.service" "$SERVICE_FILE"
 systemctl daemon-reload
 systemctl enable asl3-herald
 
-# ── Web UI ─────────────────────────────────────────────────────────────────────
+# ── Web UI ─────────────────────────────────────────────────────────────────────────────────────
 
 WEB_DIR="/var/www/html/asl3-herald"
 SUDOERS_WEB="/etc/sudoers.d/asl3-herald-web"
@@ -399,25 +406,28 @@ if [[ -f "$SUPERMON_FOOTER" ]]; then
     fi
 fi
 
-# ── Restart if this was an update to an already-running install ────────────────
+# ── Start / restart the service ──────────────────────────────────────────────────────────────────────────
 # `herald reload` (SIGHUP) only re-reads the YAML config, never the daemon's
-# own code - a code update (like this one) needs an actual process restart to
-# take effect. Only done when the service was already active before this run,
-# so a genuinely fresh install still starts with an unedited example config
-# only once the user is ready (per "Next steps" below).
+# own code - a code update needs an actual process restart.
 if $WAS_ACTIVE; then
     info "asl3-herald was already running — restarting to load the updated code ..."
     systemctl restart asl3-herald
+elif $HAS_CONFIG; then
+    info "Existing configured install detected — starting asl3-herald ..."
+    systemctl start asl3-herald
 fi
 
-# ── Summary ────────────────────────────────────────────────────────────────────
+# ── Summary ──────────────────────────────────────────────────────────────────────────────────────
 
 VERSION=$(cat "$INSTALL_DIR/version.txt" 2>/dev/null || echo "unknown")
 echo ""
 echo -e "  ${GREEN}asl3-herald v${VERSION} installed successfully.${NC}"
 echo ""
 if $WAS_ACTIVE; then
-    echo "  Service was already running and has been restarted to pick up this update."
+    echo "  Service restarted to pick up the updated code."
+    echo "  Check status:  herald status"
+elif $HAS_CONFIG; then
+    echo "  Existing configuration preserved — service started."
     echo "  Check status:  herald status"
 else
     echo "  Next steps:"
