@@ -361,55 +361,57 @@
     <div class="msg" id="herald-daemon-msg"></div>
   </div>
 
-  <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
-    <div class="card" style="flex:1 1 300px;">
-      <h3>General Settings</h3>
-      <label>Node</label>
-      <input type="text" id="set-node" style="width: 200px;">
+  <div class="card">
+    <div style="display:flex; gap:32px; flex-wrap:wrap;">
+      <div style="flex:1 1 280px;">
+        <h3 style="margin-top:0;">General Settings</h3>
+        <label>Node</label>
+        <input type="text" id="set-node" style="width: 200px;">
 
-      <label>Min Interval Between Tail Messages (seconds)</label>
-      <input type="text" id="set-min-interval" style="width: 100px;">
-      <span class="muted" style="margin-left: 8px;">e.g. 300 = 5 min, 600 = 10 min, 900 = 15 min</span>
+        <label>Min Interval Between Tail Messages (seconds)</label>
+        <input type="text" id="set-min-interval" style="width: 100px;">
+        <span class="muted" style="margin-left: 8px;">e.g. 300 = 5 min, 600 = 10 min, 900 = 15 min</span>
 
-      <div class="toggle-row">
-        <span class="toggle-label">RF activation only</span>
-        <label class="toggle-switch">
-          <input type="checkbox" id="set-network-keyup-trigger">
-          <span class="toggle-slider"></span>
-        </label>
-        <span class="toggle-label">RF and Network activation</span>
+        <div class="toggle-row">
+          <span class="toggle-label">RF activation only</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="set-network-keyup-trigger">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">RF and Network activation</span>
+        </div>
+        <p class="muted" style="margin-top: 6px; margin-bottom: 0;">Off: tail messages play after a local RF unkey only.<br>On: tail messages also play after a connected AllStar node unkeys.</p>
+
+        <div class="toggle-row" style="margin-top: 16px;">
+          <label class="toggle-switch">
+            <input type="checkbox" id="set-debug">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">Enable debug logging</span>
+        </div>
       </div>
-      <p class="muted" style="margin-top: 6px; margin-bottom: 0;">Off: tail messages play after a local RF unkey only.<br>On: tail messages also play after a connected AllStar node unkeys.</p>
 
-      <div class="toggle-row" style="margin-top: 16px;">
-        <label class="toggle-switch">
-          <input type="checkbox" id="set-debug">
-          <span class="toggle-slider"></span>
-        </label>
-        <span class="toggle-label">Enable debug logging</span>
+      <div style="flex:1 1 240px;">
+        <h3 style="margin-top:0;">SkywarnPlus</h3>
+        <div class="toggle-row" style="margin-top: 8px;">
+          <label class="toggle-switch">
+            <input type="checkbox" id="set-swp-enable">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">Enable SkywarnPlus WX tail integration</span>
+        </div>
+
+        <label>WX Tail File Path</label>
+        <input type="text" id="set-swp-wxfile" style="width: 100%;">
+
+        <label>Silence Threshold (bytes)</label>
+        <input type="text" id="set-swp-threshold" style="width: 100px;">
       </div>
-
-      <br><br>
-      <button class="btn-primary" id="btn-save-settings">Save &amp; Reload</button>
-      <div class="msg" id="settings-msg"></div>
     </div>
 
-    <div class="card" style="flex:1 1 280px;">
-      <h3>SkywarnPlus</h3>
-      <div class="toggle-row" style="margin-top: 8px;">
-        <label class="toggle-switch">
-          <input type="checkbox" id="set-swp-enable">
-          <span class="toggle-slider"></span>
-        </label>
-        <span class="toggle-label">Enable SkywarnPlus WX tail integration</span>
-      </div>
-
-      <label>WX Tail File Path</label>
-      <input type="text" id="set-swp-wxfile" style="width: 100%;">
-
-      <label>Silence Threshold (bytes)</label>
-      <input type="text" id="set-swp-threshold" style="width: 100px;">
-    </div>
+    <br>
+    <button class="btn-primary" id="btn-save-settings">Save &amp; Reload</button>
+    <div class="msg" id="settings-msg"></div>
   </div>
 
   <div class="card">
