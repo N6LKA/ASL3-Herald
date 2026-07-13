@@ -151,7 +151,8 @@ if [[ -x "$PIPER_BIN" ]]; then
     HF_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main"
 
     HAVE_HF_HUB=false
-    if python3 -m pip install -q huggingface_hub 2>/dev/null; then
+    if python3 -c "from huggingface_hub import hf_hub_download" 2>/dev/null || \
+       python3 -m pip install -q --break-system-packages huggingface_hub 2>/dev/null; then
         python3 -c "from huggingface_hub import hf_hub_download" 2>/dev/null && HAVE_HF_HUB=true
     fi
 
