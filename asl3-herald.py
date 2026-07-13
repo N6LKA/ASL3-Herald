@@ -475,7 +475,7 @@ def extract_config(config):
     tm_on    = tm.get("Enable", True)
     min_int  = tm.get("MinInterval", 300)
     rotation = tm.get("Rotation", []) or []
-    network_trigger = tm.get("NetworkKeyupTrigger", False)
+    network_trigger = tm.get("NetworkKeyupTrigger", True)
 
     swp      = tm.get("SkywarnPlus", {}) or {}
     swp_on   = swp.get("Enable", True)
