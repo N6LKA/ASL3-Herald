@@ -184,7 +184,7 @@
     <div class="add-form">
       <h3 id="tail-form-heading">Add a Tail Message</h3>
 
-      <label>Name (letters, numbers, hyphens only)</label>
+      <label>Name (letters, numbers, hyphens only — no spaces)</label>
       <input type="text" id="tail-name" placeholder="e.g. weekend-notice">
 
       <div class="field-row" style="margin-top: 8px;">
@@ -257,7 +257,7 @@
     <div class="add-form">
       <h3 id="sched-form-heading">Add a Scheduled Announcement</h3>
 
-      <label>Name</label>
+      <label>Name (letters, numbers, hyphens only — no spaces)</label>
       <input type="text" id="sched-name" placeholder="e.g. arrl-news">
 
       <div class="field-row" style="margin-top: 8px;">
