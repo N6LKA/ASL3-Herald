@@ -13,11 +13,9 @@ import sys
 import time
 import json
 import signal
-import socket
 import argparse
 import subprocess
 import traceback
-import configparser
 from datetime import datetime
 from pathlib import Path
 
@@ -27,7 +25,7 @@ except ImportError:
     print("ERROR: PyYAML not installed. Run: sudo apt install python3-yaml", flush=True)
     sys.exit(1)
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# ── Paths ────────────────────────────────────────────────────────────────────────────────
 
 INSTALL_DIR  = "/etc/asterisk/scripts/asl3-herald"
 CONF_FILE    = os.path.join(INSTALL_DIR, "asl3-herald.conf")
@@ -44,204 +42,22 @@ except FileNotFoundError:
 DEBUG = False
 
 # Fallback estimate (seconds) for how long a scheduled announcement's audio
-# takes to play, used only if `soxi` can't determine the real duration.
+# takes to play, used only if `soxi` can't determine the real duration -
+# governs how long tail messages are held off after a scheduled announcement
+# starts (see scheduled_busy_until in state).
 DEFAULT_ANNOUNCEMENT_DURATION = 8.0
 BUSY_GRACE_SECONDS = 1.5
 # Hard ceiling on how long a single scheduled announcement can hold off tail
-# messages — a corrupt file or bad soxi reading must never wedge playback silent.
+# messages, regardless of its real/estimated duration - a corrupt file or a
+# bad soxi reading must never be able to wedge scheduled_busy_until far into
+# the future and silence tail messages (and SkywarnPlus) indefinitely.
 MAX_BUSY_SECONDS = 60.0
 
-# How many playback events to keep in state["playback_history"].
+# How many playback events to keep in state["playback_history"] - old entries
+# are trimmed off the front so the state file can't grow unbounded.
 MAX_PLAYBACK_HISTORY = 200
 
-# Fixed internal poll interval — replaces the old user-configured PollInterval.
-# AMI connections are persistent sockets so 0.5s polling has negligible CPU cost
-# even on a Raspberry Pi; it also gives faster unkey-to-play response than the
-# previous 1s subprocess-based poll.
-POLL_INTERVAL = 0.5
-
-# ── AMI state (module-level, refreshed every POLL_INTERVAL by main()) ─────────
-# These are read by node_is_keyed() so scheduled-announcement gating always
-# reflects the most recent poll without making extra AMI calls.
-
-_ami_rx_keyed   = False  # RPT_RXKEYED from XStat (local RF receiving)
-_ami_conn_keyed = False  # any Conn PTT=1 from SawStat (network audio active)
-_ami_up         = False  # True when AMI is available and last poll succeeded
-
-# ── AMI connection ────────────────────────────────────────────────────────────
-
-class AmiConn:
-    """
-    Minimal synchronous Asterisk Manager Interface client.
-    Supports the RptStatus XStat and SawStat commands used for keyup detection.
-    """
-
-    def __init__(self, host, port, user, secret):
-        self._host   = host
-        self._port   = int(port)
-        self._user   = user
-        self._secret = secret
-        self._sock   = None
-
-    def connect(self):
-        """Open connection and authenticate. Returns True on success."""
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(5)
-            s.connect((self._host, self._port))
-
-            # Read the AMI banner (single line ending \r\n, not \r\n\r\n)
-            banner = b""
-            while not banner.endswith(b"\r\n"):
-                chunk = s.recv(256)
-                if not chunk:
-                    raise ConnectionError("Connection closed reading banner")
-                banner += chunk
-
-            if b"Asterisk Call Manager" not in banner:
-                raise ConnectionError(f"Unexpected banner: {banner!r}")
-
-            self._sock = s
-            resp = self._action([
-                "ACTION: LOGIN",
-                f"USERNAME: {self._user}",
-                f"SECRET: {self._secret}",
-                "EVENTS: 0",
-            ])
-            if "Response: Success" not in resp:
-                raise ConnectionError(f"AMI login failed: {resp!r}")
-            return True
-
-        except Exception as e:
-            log_warn(f"AMI connect failed: {e}")
-            self.close()
-            return False
-
-    def _action(self, lines):
-        """Send an AMI action block and read the response (ends with \\r\\n\\r\\n)."""
-        if self._sock is None:
-            raise ConnectionError("Not connected to AMI")
-        cmd = "\r\n".join(lines) + "\r\n\r\n"
-        self._sock.sendall(cmd.encode("utf-8"))
-        buf = b""
-        while not buf.endswith(b"\r\n\r\n"):
-            chunk = self._sock.recv(4096)
-            if not chunk:
-                raise ConnectionError("AMI connection closed mid-response")
-            buf += chunk
-        return buf.decode("utf-8", errors="replace")
-
-    def xstat(self, node):
-        """
-        Query XStat for RPT_RXKEYED / RPT_TXKEYED state.
-        Returns dict with boolean RXKEYED, TXKEYED, TXEKEYED keys.
-        """
-        resp = self._action([
-            "ACTION: RptStatus",
-            "COMMAND: XStat",
-            f"NODE: {node}",
-        ])
-        result = {"RXKEYED": False, "TXKEYED": False, "TXEKEYED": False}
-        for line in resp.splitlines():
-            line = line.strip()
-            if line == "Var: RPT_RXKEYED=1":
-                result["RXKEYED"] = True
-            elif line == "Var: RPT_TXKEYED=1":
-                result["TXKEYED"] = True
-            elif line == "Var: RPT_TXEKEYED=1":
-                result["TXEKEYED"] = True
-        return result
-
-    def sawstat(self, node):
-        """
-        Query SawStat for per-connected-node PTT state.
-        Returns dict with CONNKEYED (bool) and CONNKEYEDNODE (str or None).
-        """
-        resp = self._action([
-            "ACTION: RptStatus",
-            "COMMAND: SawStat",
-            f"NODE: {node}",
-        ])
-        result = {"CONNKEYED": False, "CONNKEYEDNODE": None}
-        for line in resp.splitlines():
-            line = line.strip()
-            if line.startswith("Conn:"):
-                # Conn: NODE PTT SEC_SINCE_KEY SEC_SINCE_UNKEY
-                parts = line.split()
-                if len(parts) >= 3:
-                    try:
-                        if int(parts[2]) == 1:
-                            result["CONNKEYED"] = True
-                            result["CONNKEYEDNODE"] = parts[1]
-                    except (ValueError, IndexError):
-                        pass
-        return result
-
-    def close(self):
-        """Attempt a clean logoff then close the socket."""
-        try:
-            if self._sock:
-                self._sock.sendall(b"ACTION: Logoff\r\n\r\n")
-        except Exception:
-            pass
-        try:
-            if self._sock:
-                self._sock.close()
-        except Exception:
-            pass
-        self._sock = None
-
-# ── AMI credential discovery ──────────────────────────────────────────────────
-
-def load_ami_credentials():
-    """
-    Read AMI host/port/user/secret from the system — never from asl3-herald.conf.
-    Tries /etc/allmon3/allmon3.ini first (preferred: already configured if
-    Allmon3 is installed and stays in sync automatically when Allmon3 changes).
-    Falls back to /etc/asterisk/manager.conf.
-    Returns (host, port, user, secret) or (None, None, None, None) if not found.
-    """
-    allmon3_ini = "/etc/allmon3/allmon3.ini"
-    if os.path.exists(allmon3_ini):
-        try:
-            cp = configparser.ConfigParser()
-            cp.read(allmon3_ini)
-            for section in cp.sections():
-                user   = cp.get(section, "user", fallback=None)
-                secret = cp.get(section, "pass", fallback=None)
-                if user and secret:
-                    host = cp.get(section, "host", fallback="127.0.0.1")
-                    # "localhost" → loopback; any non-loopback bind is unusual
-                    # but we leave it as-is and let the connect attempt fail with
-                    # a clear error if it can't reach the AMI port.
-                    if host.lower() == "localhost":
-                        host = "127.0.0.1"
-                    port = cp.getint(section, "port", fallback=5038)
-                    return host, port, user, secret
-        except Exception as e:
-            log_warn(f"Could not parse {allmon3_ini}: {e}")
-
-    manager_conf = "/etc/asterisk/manager.conf"
-    if os.path.exists(manager_conf):
-        try:
-            cp = configparser.ConfigParser()
-            cp.read(manager_conf)
-            host = cp.get("general", "bindaddr", fallback="127.0.0.1")
-            if host in ("0.0.0.0", "::"):
-                host = "127.0.0.1"
-            port = cp.getint("general", "port", fallback=5038)
-            for section in cp.sections():
-                if section.lower() == "general":
-                    continue
-                secret = cp.get(section, "secret", fallback=None)
-                if secret:
-                    return host, port, section, secret
-        except Exception as e:
-            log_warn(f"Could not parse {manager_conf}: {e}")
-
-    return None, None, None, None
-
-# ── Logging ───────────────────────────────────────────────────────────────────
+# ── Logging ──────────────────────────────────────────────────────────────────────────────
 
 def log(level, msg):
     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} [{level}] {msg}", flush=True)
@@ -253,7 +69,7 @@ def log_debug(msg):
     if DEBUG:
         log("DEBUG", msg)
 
-# ── Config ────────────────────────────────────────────────────────────────────
+# ── Config ────────────────────────────────────────────────────────────────────────────────
 
 def load_config():
     if not os.path.exists(CONF_FILE):
@@ -263,11 +79,13 @@ def load_config():
         return yaml.safe_load(f)
 
 def save_config(config):
-    # NOTE: round-trips through PyYAML — does not preserve comments.
+    # NOTE: this round-trips through PyYAML, which does not preserve comments.
+    # Config files edited via the CLI/web UI will lose the explanatory
+    # comments present in asl3-herald.conf.example after their first edit.
     with open(CONF_FILE, "w") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
-# ── State ─────────────────────────────────────────────────────────────────────
+# ── State ────────────────────────────────────────────────────────────────────────────────
 
 def load_state():
     defaults = {
@@ -295,7 +113,7 @@ def save_state(state):
     except Exception as e:
         log_error(f"Failed to save state: {e}")
 
-# ── Asterisk ──────────────────────────────────────────────────────────────────
+# ── Asterisk ──────────────────────────────────────────────────────────────────────────────
 
 def asterisk_cmd(cmd):
     try:
@@ -311,31 +129,38 @@ def asterisk_cmd(cmd):
 def asterisk_available():
     return "Asterisk" in asterisk_cmd("core show version")
 
-def node_is_keyed(node):
-    """
-    Returns True if the node is currently keyed (receiving audio from any source),
-    False if idle, or None if the state cannot be determined.
+def get_kerchunk_count(node):
+    out = asterisk_cmd(f"rpt stats {node}")
+    for line in out.splitlines():
+        if "Kerchunks today" in line:
+            try:
+                return int(line.split(":")[-1].strip())
+            except ValueError:
+                pass
+    return None
 
-    When AMI is active (_ami_up), uses the module-level cache populated by the
-    most recent poll cycle — both local RF (RPT_RXKEYED) and active network audio
-    (any connected node with PTT=1) count as "keyed" for scheduled-announcement
-    gating. Falls back to the `rpt stats` CLI on Signal-on-input when AMI is
-    unavailable (local RF only, same as pre-AMI behavior).
-    """
-    global _ami_up, _ami_rx_keyed, _ami_conn_keyed
-    if _ami_up:
-        return _ami_rx_keyed or _ami_conn_keyed
-    # CLI fallback — local RF only
+def node_is_keyed(node):
+    # Best-effort real-time carrier/keyed detection via `rpt stats`'s
+    # "Signal on input" field (reflects live COS/carrier state, distinct from
+    # the Kerchunks counter which only increments after an unkey completes).
+    # Returns True/False, or None if the field can't be found (parsing
+    # failure, unexpected app_rpt version, etc.) - callers should treat None
+    # as "unknown, don't block" so a missing field fails open rather than
+    # wedging scheduled playback indefinitely.
     out = asterisk_cmd(f"rpt stats {node}")
     for line in out.splitlines():
         if "Signal on input" in line:
-            return line.split(":")[-1].strip().upper().startswith("YES")
+            value = line.split(":")[-1].strip().upper()
+            return value.startswith("YES")
     return None
 
 def audio_duration(filepath):
     try:
         r = subprocess.run(["soxi", "-D", filepath], capture_output=True, text=True, timeout=5)
         duration = float(r.stdout.strip())
+        # A corrupt/garbage file could make soxi report 0, negative, or an
+        # absurdly large number - fall back to the default rather than
+        # trusting it, same reasoning as MAX_BUSY_SECONDS below.
         if duration <= 0 or duration > 300:
             return None
         return duration
@@ -348,9 +173,12 @@ def play_file(node, filepath, play_mode="local"):
     log_info(f"Playing ({play_mode}): {Path(filepath).name} on node {node}")
     asterisk_cmd(f"{cmd} {node} {path_no_ext}")
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers ──────────────────────────────────────────────────────────────────────────────
 
 def rotation_entry_file(entry):
+    # Rotation entries were originally plain filepath strings; entries added
+    # or edited since also carry Text/Voice metadata (for re-editing TTS
+    # announcements) as a dict. Both forms can coexist in one config.
     return entry if isinstance(entry, str) else entry.get("File", "")
 
 def wx_is_active(wx_file, threshold):
@@ -359,6 +187,7 @@ def wx_is_active(wx_file, threshold):
     return os.path.getsize(wx_file) > threshold
 
 def week_of_month_range(week):
+    # week: 1-5 (5 = last week, runs through end of month)
     low = (week - 1) * 7 + 1
     high = 31 if week == 5 else low + 6
     return low, high
@@ -371,22 +200,28 @@ def entry_days_ok(entry, now):
     return now.strftime("%A").lower() in day_list
 
 def entry_time_window_ok(entry, now):
+    # Optional HH:MM-HH:MM eligibility window for rotation entries (Days is
+    # the same idea but for day-of-week rather than time-of-day). Absent
+    # Start/End means "always eligible", matching plain legacy string entries.
     if not isinstance(entry, dict):
         return True
     start = entry.get("TimeStart")
-    end   = entry.get("TimeEnd")
+    end = entry.get("TimeEnd")
     if not start and not end:
         return True
     hhmm = now.strftime("%H:%M")
     if start and end:
         if start <= end:
             return start <= hhmm <= end
-        return hhmm >= start or hhmm <= end
+        return hhmm >= start or hhmm <= end  # window wraps past midnight
     if start:
         return hhmm >= start
     return hhmm <= end
 
 def rotation_entry_eligible(entry, now):
+    # Node is a playback-target override (see rotation_entry_node()), not an
+    # eligibility gate - an entry with Node set still plays on its normal
+    # schedule, just directed at a different node number.
     if not entry_days_ok(entry, now):
         return False
     if not entry_time_window_ok(entry, now):
@@ -398,6 +233,9 @@ def rotation_entry_node(entry, node):
     return str(entry_node) if entry_node else node
 
 def log_playback(state, entry_type, name, filepath, node, play_mode="local"):
+    # entry_type: "rotation" | "wx" | "scheduled" | "test" (manual play from
+    # the CLI/web UI). Kept in state (not a separate file) since writes only
+    # happen on actual play events, not every poll cycle.
     history = state.setdefault("playback_history", [])
     history.append({
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -433,6 +271,11 @@ def scheduled_time_matches(sched, now):
     return True
 
 def should_play_scheduled(sched, state, node, now):
+    # Once an entry's Time/Days/Week condition matches but the node is
+    # keyed (someone's actively transmitting), it goes "pending" instead of
+    # being skipped outright - it keeps getting re-checked every poll cycle
+    # (even after the matching minute has passed) until it can finally play,
+    # rather than silently missing the announcement for the day.
     name = sched.get("Name", "")
     date = now.strftime("%Y-%m-%d")
 
@@ -465,17 +308,17 @@ def should_play_scheduled(sched, state, node, now):
 
     return True
 
-# ── Config extraction helper ──────────────────────────────────────────────────
+# ── Config extraction helper ──────────────────────────────────────────────────────────────────────
 
 def extract_config(config):
-    node  = str(config.get("Node", "")).strip()
+    node = str(config.get("Node", "")).strip()
+    poll = config.get("PollInterval", 1)
     debug = config.get("Debug", False)
 
     tm       = config.get("TailMessage", {}) or {}
     tm_on    = tm.get("Enable", True)
     min_int  = tm.get("MinInterval", 300)
     rotation = tm.get("Rotation", []) or []
-    network_trigger = tm.get("NetworkKeyupTrigger", False)
 
     swp      = tm.get("SkywarnPlus", {}) or {}
     swp_on   = swp.get("Enable", True)
@@ -484,20 +327,10 @@ def extract_config(config):
 
     scheduled = config.get("Scheduled", []) or []
 
-    return {
-        "node":            node,
-        "debug":           debug,
-        "tm_on":           tm_on,
-        "min_int":         min_int,
-        "rotation":        rotation,
-        "network_trigger": network_trigger,
-        "swp_on":          swp_on,
-        "swp_file":        swp_file,
-        "swp_thr":         swp_thr,
-        "scheduled":       scheduled,
-    }
+    return (node, poll, debug, tm_on, min_int, rotation,
+            swp_on, swp_file, swp_thr, scheduled)
 
-# ── CLI subcommands (used by the `herald` bash CLI and the web UI) ────────────
+# ── CLI subcommands (used by the `herald` bash CLI and the web UI) ──────────────────────
 
 def normalize_rotation(rotation):
     out = []
@@ -529,25 +362,27 @@ def scheduled_with_health(scheduled):
     return out
 
 def cmd_list_json(config):
-    cfg = extract_config(config)
+    (node, poll, debug, tm_on, min_int, rotation,
+     swp_on, swp_file, swp_thr, scheduled) = extract_config(config)
+    tm = config.get("TailMessage") or {}
     out = {
-        "node":    cfg["node"],
-        "debug":   cfg["debug"],
+        "node": node,
+        "poll_interval": poll,
+        "debug": debug,
         "herald_enabled": not os.path.exists(DISABLE_FLAG),
         "version": VERSION,
-        "ami_connected": _ami_up,
         "tail_message": {
-            "enable":           cfg["tm_on"],
-            "min_interval":     cfg["min_int"],
-            "network_keyup_trigger": cfg["network_trigger"],
-            "rotation":         normalize_rotation(cfg["rotation"]),
+            "enable": tm_on,
+            "min_interval": min_int,
+            "network_keyup_trigger": tm.get("NetworkKeyupTrigger", False),
+            "rotation": normalize_rotation(rotation),
             "skywarnplus": {
-                "enable":           cfg["swp_on"],
-                "wx_tail_file":     cfg["swp_file"],
-                "silence_threshold": cfg["swp_thr"],
+                "enable": swp_on,
+                "wx_tail_file": swp_file,
+                "silence_threshold": swp_thr,
             },
         },
-        "scheduled": scheduled_with_health(cfg["scheduled"]),
+        "scheduled": scheduled_with_health(scheduled),
     }
     print(json.dumps(out, indent=2))
 
@@ -621,7 +456,7 @@ def cmd_edit_rotation(config, args):
 
     rotation[idx] = entry
     save_config(config)
-    print(json.dumps({"success": True, "message": f"Updated rotation entry: {os.path.basename(entry.get('File', ''))}"}))
+    print(json.dumps({"success": True, "message": f"Updated rotation entry: {os.path.basename(entry.get('File', ''))"}))
 
 def cmd_add_scheduled(config, args):
     scheduled = config.setdefault("Scheduled", [])
@@ -674,21 +509,18 @@ def cmd_edit_scheduled(config, args):
     if args.days is not None:
         entry["Days"] = "daily" if args.days == "daily" else [d.strip().lower() for d in args.days.split(",")]
     if args.week is not None:
-        if args.week == "":
-            entry.pop("Week", None)
+        if args.week:
+            entry["Week"] = int(args.week)
         else:
-            try:
-                entry["Week"] = int(args.week)
-            except ValueError:
-                pass
+            entry.pop("Week", None)
     if args.play_mode is not None:
         entry["PlayMode"] = args.play_mode
+    if args.file is not None:
+        entry["File"] = args.file
     if args.text is not None:
         entry["Text"] = args.text
     if args.voice is not None:
         entry["Voice"] = args.voice
-    if args.file is not None:
-        entry["File"] = args.file
     if args.node is not None:
         if args.node:
             entry["Node"] = args.node
@@ -700,59 +532,59 @@ def cmd_edit_scheduled(config, args):
     print(json.dumps({"success": True, "message": f"Updated scheduled announcement: {new_name}"}))
 
 def cmd_remove(config, identifier):
-    tm = config.setdefault("TailMessage", {})
-    rotation = tm.setdefault("Rotation", [])
-    scheduled = config.setdefault("Scheduled", [])
+    tm = config.get("TailMessage", {}) or {}
+    rotation = tm.get("Rotation", []) or []
+    scheduled = config.get("Scheduled", []) or []
+
+    for i, s in enumerate(scheduled):
+        if s.get("Name") == identifier:
+            del scheduled[i]
+            save_config(config)
+            print(json.dumps({"success": True, "type": "scheduled",
+                               "message": f"Removed scheduled announcement: {identifier}"}))
+            return
 
     target = os.path.basename(identifier)
     target_noext = os.path.splitext(target)[0]
-
-    new_rotation = []
-    removed_rotation = False
-    for e in rotation:
-        base = os.path.basename(rotation_entry_file(e))
+    for i, entry in enumerate(rotation):
+        filepath = rotation_entry_file(entry)
+        base = os.path.basename(filepath)
         base_noext = os.path.splitext(base)[0]
         if base == target or base_noext == target_noext:
-            removed_rotation = True
-        else:
-            new_rotation.append(e)
+            rotation.pop(i)
+            save_config(config)
+            print(json.dumps({"success": True, "type": "rotation",
+                               "message": f"Removed from rotation: {filepath}"}))
+            return
 
-    new_scheduled = [s for s in scheduled if s.get("Name") != identifier]
-    removed_scheduled = len(new_scheduled) < len(scheduled)
-
-    if not removed_rotation and not removed_scheduled:
-        print(json.dumps({"success": False, "message": f"Not found: {identifier}"}))
-        return
-
-    tm["Rotation"] = new_rotation
-    config["Scheduled"] = new_scheduled
-    save_config(config)
-    print(json.dumps({"success": True, "message": f"Removed: {identifier}"}))
+    print(json.dumps({"success": False, "message": f"No match found for: {identifier}"}))
 
 def cmd_reorder_rotation(config, args):
     tm = config.setdefault("TailMessage", {})
     rotation = tm.setdefault("Rotation", [])
 
-    target = args.name
+    target = os.path.basename(args.name)
+    target_noext = os.path.splitext(target)[0]
     idx = None
     for i, e in enumerate(rotation):
-        base_noext = os.path.splitext(os.path.basename(rotation_entry_file(e)))[0]
-        if base_noext == target or rotation_entry_file(e) == target:
+        base = os.path.basename(rotation_entry_file(e))
+        base_noext = os.path.splitext(base)[0]        
+        if base == target or base_noext == target_noext:
             idx = i
             break
 
     if idx is None:
-        print(json.dumps({"success": False, "message": f"Not found: {target}"}))
+        print(json.dumps({"success": False, "message": f"No rotation entry found for: {args.name}"}))
         return
 
     if args.direction == "up":
         if idx == 0:
-            print(json.dumps({"success": False, "message": "Already at top"}))
+            print(json.dumps({"success": False, "message": "Already first in rotation"}))
             return
         rotation[idx - 1], rotation[idx] = rotation[idx], rotation[idx - 1]
     else:
         if idx == len(rotation) - 1:
-            print(json.dumps({"success": False, "message": "Already at bottom"}))
+            print(json.dumps({"success": False, "message": "Already last in rotation"}))
             return
         rotation[idx + 1], rotation[idx] = rotation[idx], rotation[idx + 1]
 
@@ -795,6 +627,8 @@ def cmd_import_config(args):
 def cmd_update_settings(config, args):
     if args.node is not None:
         config["Node"] = args.node
+    if args.poll_interval is not None:
+        config["PollInterval"] = args.poll_interval
     if args.debug is not None:
         config["Debug"] = (args.debug == "true")
 
@@ -825,10 +659,10 @@ def build_arg_parser():
     p_add_rot.add_argument("filepath")
     p_add_rot.add_argument("--text", default=None)
     p_add_rot.add_argument("--voice", default=None)
-    p_add_rot.add_argument("--days", default="daily")
-    p_add_rot.add_argument("--time-start", dest="time_start", default=None)
-    p_add_rot.add_argument("--time-end", dest="time_end", default=None)
-    p_add_rot.add_argument("--node", default=None)
+    p_add_rot.add_argument("--days", default="daily", help='"daily" or comma-separated day names')
+    p_add_rot.add_argument("--time-start", dest="time_start", default=None, help="HH:MM - only eligible at/after this time")
+    p_add_rot.add_argument("--time-end", dest="time_end", default=None, help="HH:MM - only eligible at/before this time")
+    p_add_rot.add_argument("--node", default=None, help="Target a specific node number instead of the daemon's configured Node")
 
     p_edit_rot = sub.add_parser("edit-rotation", help="Edit an existing tail message rotation entry")
     p_edit_rot.add_argument("old_name")
@@ -836,33 +670,33 @@ def build_arg_parser():
     p_edit_rot.add_argument("--text", default=None)
     p_edit_rot.add_argument("--voice", default=None)
     p_edit_rot.add_argument("--file", default=None)
-    p_edit_rot.add_argument("--days", default=None)
-    p_edit_rot.add_argument("--time-start", dest="time_start", default=None)
-    p_edit_rot.add_argument("--time-end", dest="time_end", default=None)
-    p_edit_rot.add_argument("--node", default=None)
+    p_edit_rot.add_argument("--days", default=None, help='"daily" (or empty) clears it, or comma-separated day names')
+    p_edit_rot.add_argument("--time-start", dest="time_start", default=None, help="HH:MM, empty string clears it")
+    p_edit_rot.add_argument("--time-end", dest="time_end", default=None, help="HH:MM, empty string clears it")
+    p_edit_rot.add_argument("--node", default=None, help="Node number override, empty string clears it")
 
     p_add_sched = sub.add_parser("add-scheduled", help="Add a scheduled announcement")
     p_add_sched.add_argument("--name", required=True)
-    p_add_sched.add_argument("--time", required=True)
-    p_add_sched.add_argument("--days", default="daily")
-    p_add_sched.add_argument("--week", default=None)
+    p_add_sched.add_argument("--time", required=True, help="HH:MM 24-hour")
+    p_add_sched.add_argument("--days", default="daily", help='"daily" or comma-separated day names')
+    p_add_sched.add_argument("--week", default=None, help="1-5 (5 = last week of month)")
     p_add_sched.add_argument("--file", required=True)
     p_add_sched.add_argument("--play-mode", dest="play_mode", choices=["local", "global"], default="local")
     p_add_sched.add_argument("--text", default=None)
     p_add_sched.add_argument("--voice", default=None)
-    p_add_sched.add_argument("--node", default=None)
+    p_add_sched.add_argument("--node", default=None, help="Target a specific node number instead of the daemon's configured Node")
 
     p_edit_sched = sub.add_parser("edit-scheduled", help="Edit an existing scheduled announcement")
     p_edit_sched.add_argument("old_name")
     p_edit_sched.add_argument("--new-name", dest="new_name", default=None)
     p_edit_sched.add_argument("--time", default=None)
     p_edit_sched.add_argument("--days", default=None)
-    p_edit_sched.add_argument("--week", default=None)
+    p_edit_sched.add_argument("--week", default=None, help="1-5 (5 = last week of month), empty string clears it")
     p_edit_sched.add_argument("--play-mode", dest="play_mode", choices=["local", "global"], default=None)
     p_edit_sched.add_argument("--text", default=None)
     p_edit_sched.add_argument("--voice", default=None)
     p_edit_sched.add_argument("--file", default=None)
-    p_edit_sched.add_argument("--node", default=None)
+    p_edit_sched.add_argument("--node", default=None, help="Node number override, empty string clears it")
 
     p_remove = sub.add_parser("remove", help="Remove a rotation file or scheduled announcement by name")
     p_remove.add_argument("identifier")
@@ -879,20 +713,23 @@ def build_arg_parser():
     p_log_play.add_argument("--play-mode", dest="play_mode", default="local")
 
     sub.add_parser("playback-history", help="Print playback history as JSON")
-    sub.add_parser("clear-history",    help="Clear the playback history")
-    sub.add_parser("export-config",    help="Export the full daemon config as JSON (for backup)")
+
+    sub.add_parser("clear-history", help="Clear the playback history")
+
+    sub.add_parser("export-config", help="Export the full daemon config as JSON (for backup)")
 
     p_import = sub.add_parser("import-config", help="Restore the full daemon config from an exported JSON file")
     p_import.add_argument("file")
 
     p_settings = sub.add_parser("update-settings", help="Update general daemon settings")
     p_settings.add_argument("--node")
+    p_settings.add_argument("--poll-interval", type=int)
     p_settings.add_argument("--debug", choices=["true", "false"])
-    p_settings.add_argument("--min-interval", dest="min_interval", type=int)
-    p_settings.add_argument("--network-keyup-trigger", dest="network_keyup_trigger", choices=["true", "false"])
-    p_settings.add_argument("--swp-enable",    dest="swp_enable",    choices=["true", "false"])
-    p_settings.add_argument("--swp-wxfile",    dest="swp_wxfile")
-    p_settings.add_argument("--swp-threshold", dest="swp_threshold", type=int)
+    p_settings.add_argument("--min-interval", type=int)
+    p_settings.add_argument("--network-keyup-trigger", choices=["true", "false"])
+    p_settings.add_argument("--swp-enable", choices=["true", "false"])
+    p_settings.add_argument("--swp-wxfile")
+    p_settings.add_argument("--swp-threshold", type=int)
 
     return parser
 
@@ -933,46 +770,16 @@ def cli_main():
     elif args.command == "update-settings":
         cmd_update_settings(config, args)
 
-# ── Main ──────────────────────────────────────────────────────────────────────
-
-def _ami_connect(host, port, user, secret):
-    """Create and connect an AmiConn, return it on success or None on failure."""
-    conn = AmiConn(host, port, user, secret)
-    if conn.connect():
-        return conn
-    return None
-
-def _poll_ami(ami, node):
-    """
-    Poll XStat + SawStat and update module-level AMI state cache.
-    Returns (rx_keyed, conn_keyed) on success, raises on failure.
-    """
-    global _ami_rx_keyed, _ami_conn_keyed, _ami_up
-    xstat = ami.xstat(node)
-    saw   = ami.sawstat(node)
-    _ami_rx_keyed   = xstat["RXKEYED"]
-    _ami_conn_keyed = saw["CONNKEYED"]
-    _ami_up = True
-    return _ami_rx_keyed, _ami_conn_keyed
+# ── Main ────────────────────────────────────────────────────────────────────────────────
 
 def main():
-    global DEBUG, _ami_up, _ami_rx_keyed, _ami_conn_keyed
+    global DEBUG
 
     log_info(f"asl3-herald v{VERSION} starting")
 
     config = load_config()
-    cfg    = extract_config(config)
-
-    node            = cfg["node"]
-    DEBUG           = cfg["debug"]
-    tm_on           = cfg["tm_on"]
-    min_int         = cfg["min_int"]
-    rotation        = cfg["rotation"]
-    network_trigger = cfg["network_trigger"]
-    swp_on          = cfg["swp_on"]
-    swp_file        = cfg["swp_file"]
-    swp_thr         = cfg["swp_thr"]
-    scheduled       = cfg["scheduled"]
+    (node, poll, DEBUG, tm_on, min_int, rotation,
+     swp_on, swp_file, swp_thr, scheduled) = extract_config(config)
 
     if not node:
         log_error("Node not set in config. Exiting.")
@@ -980,49 +787,15 @@ def main():
 
     state = load_state()
 
-    # ── AMI setup ──────────────────────────────────────────────────────────
-    # Credentials are read from /etc/allmon3/allmon3.ini or
-    # /etc/asterisk/manager.conf — never stored in asl3-herald.conf.
-    ami_host, ami_port, ami_user, ami_secret = load_ami_credentials()
-    ami = None
-    if ami_user:
-        log_info(f"Connecting to AMI at {ami_host}:{ami_port} as '{ami_user}' ...")
-        ami = _ami_connect(ami_host, ami_port, ami_user, ami_secret)
-        if ami:
-            log_info("AMI connected — using event-driven unkey detection")
-            if network_trigger:
-                log_info("NetworkKeyupTrigger enabled — tail messages fire on network unkeys too")
-        else:
-            log_warn("AMI unavailable — falling back to CLI kerchunk counter (local RF only)")
-    else:
-        log_warn("No AMI credentials found in allmon3.ini or manager.conf")
-        log_warn("Falling back to CLI kerchunk counter (local RF unkeys only)")
-
-    # CLI fallback: seed kerchunk counter for midnight-rollover detection
-    last_kerchunks = 0
-    if ami is None:
-        out = asterisk_cmd(f"rpt stats {node}")
-        for line in out.splitlines():
-            if "Kerchunks today" in line:
-                try:
-                    last_kerchunks = int(line.split(":")[-1].strip())
-                except ValueError:
-                    pass
-        log_info(f"Node: {node} | Poll: {POLL_INTERVAL}s | Min interval: {min_int}s")
-        log_info(f"Initial kerchunk count: {last_kerchunks}")
-    else:
-        log_info(f"Node: {node} | Poll: {POLL_INTERVAL}s | Min interval: {min_int}s")
-
+    last_kerchunks = get_kerchunk_count(node) or 0
+    log_info(f"Node: {node} | Poll: {poll}s | Min interval: {min_int}s")
+    log_info(f"Initial kerchunk count: {last_kerchunks}")
     if swp_on:
         log_info(f"SkywarnPlus integration enabled ({swp_file})")
     if rotation:
         log_info(f"Rotation: {len(rotation)} message(s)")
     if scheduled:
         log_info(f"Scheduled: {len(scheduled)} announcement(s)")
-
-    # AMI-based unkey detection: track keyed state transitions
-    last_rx_keyed   = False
-    last_conn_keyed = False
 
     disabled_logged = False
     reload_flag = [False]
@@ -1034,54 +807,27 @@ def main():
 
     while True:
         try:
-            # ── Config reload (SIGHUP) ────────────────────────────────────
+            # ── Config reload (SIGHUP) ────────────────────────────────────────────────
             if reload_flag[0]:
                 reload_flag[0] = False
                 log_info("Reloading config (SIGHUP)")
                 config = load_config()
-                cfg    = extract_config(config)
-                node            = cfg["node"]
-                DEBUG           = cfg["debug"]
-                tm_on           = cfg["tm_on"]
-                min_int         = cfg["min_int"]
-                rotation        = cfg["rotation"]
-                network_trigger = cfg["network_trigger"]
-                swp_on          = cfg["swp_on"]
-                swp_file        = cfg["swp_file"]
-                swp_thr         = cfg["swp_thr"]
-                scheduled       = cfg["scheduled"]
-                # Re-read AMI credentials from system files on SIGHUP so changes
-                # to allmon3.ini or manager.conf are picked up automatically.
-                new_host, new_port, new_user, new_secret = load_ami_credentials()
-                if (new_user != ami_user or new_secret != ami_secret
-                        or new_host != ami_host or new_port != ami_port):
-                    if ami:
-                        ami.close()
-                        ami = None
-                    ami_host   = new_host
-                    ami_port   = new_port
-                    ami_user   = new_user
-                    ami_secret = new_secret
-                    if ami_user:
-                        ami = _ami_connect(ami_host, ami_port, ami_user, ami_secret)
-                        if ami:
-                            log_info("AMI reconnected after credential change")
-                        else:
-                            log_warn("AMI reconnect failed — continuing in CLI fallback mode")
+                (node, poll, DEBUG, tm_on, min_int, rotation,
+                 swp_on, swp_file, swp_thr, scheduled) = extract_config(config)
                 log_info("Config reloaded")
 
-            # ── Disabled flag ─────────────────────────────────────────────
+            # ── Disabled flag ───────────────────────────────────────────────────────────────
             if os.path.exists(DISABLE_FLAG):
                 if not disabled_logged:
                     log_info("Herald disabled - tail messages suppressed")
                     disabled_logged = True
-                time.sleep(POLL_INTERVAL)
+                time.sleep(poll)
                 continue
             elif disabled_logged:
                 log_info("Herald re-enabled")
                 disabled_logged = False
 
-            # ── Asterisk availability ─────────────────────────────────────
+            # ── Asterisk availability ────────────────────────────────────────────────────────
             if not asterisk_available():
                 log_warn("Asterisk not responding - waiting")
                 time.sleep(10)
@@ -1090,69 +836,20 @@ def main():
             now    = time.time()
             now_dt = datetime.now()
 
-            # ── Poll AMI / CLI for keyup state ────────────────────────────
-            unkey_detected = False
-
-            if ami is not None:
-                try:
-                    rx_keyed, conn_keyed = _poll_ami(ami, node)
-
-                    # Local RF unkey: RPT_RXKEYED 1 → 0
-                    local_unkey = last_rx_keyed and not rx_keyed
-                    # Network unkey: any connected node PTT 1 → 0
-                    net_unkey = network_trigger and last_conn_keyed and not conn_keyed
-
-                    if local_unkey:
-                        log_debug("Local RF unkey detected (RPT_RXKEYED 1→0)")
-                    if net_unkey:
-                        log_debug("Network unkey detected (CONNKEYED 1→0)")
-
-                    last_rx_keyed   = rx_keyed
-                    last_conn_keyed = conn_keyed
-                    unkey_detected  = local_unkey or net_unkey
-
-                except Exception as e:
-                    log_warn(f"AMI poll error: {e} — reconnecting")
-                    _ami_up = False
-                    try:
-                        ami.close()
-                    except Exception:
-                        pass
-                    ami = _ami_connect(ami_host, ami_port, ami_user, ami_secret)
-                    if ami:
-                        log_info("AMI reconnected")
-                    else:
-                        log_warn("AMI reconnect failed — skipping unkey detection this cycle")
-                    unkey_detected = False
-
-            else:
-                # CLI fallback — kerchunk counter (local RF unkey only)
-                _ami_up = False
-                out = asterisk_cmd(f"rpt stats {node}")
-                cur = None
-                for line in out.splitlines():
-                    if "Kerchunks today" in line:
-                        try:
-                            cur = int(line.split(":")[-1].strip())
-                        except ValueError:
-                            pass
-
-                if cur is not None:
-                    if cur < last_kerchunks:
-                        log_debug("Kerchunk counter rolled over at midnight - reseeding")
-                        last_kerchunks = cur
-                    if cur > last_kerchunks:
-                        last_kerchunks = cur
-                        log_debug(f"Unkey detected (kerchunks now {cur})")
-                        unkey_detected = True
-
-            # ── Scheduled announcements (time-driven) ─────────────────────
+            # ── Scheduled announcements (time-driven) ─────────────────────────────────────────
+            # Checked before tail messages every iteration: a scheduled
+            # announcement takes precedence if both would fire at once. Once
+            # one plays, scheduled_busy_until holds off the tail-message
+            # block below for the announcement's (estimated) duration, so a
+            # simultaneous unkey doesn't overlap it - the tail message just
+            # doesn't update last_tail_played, so it naturally retries on
+            # the next unkey once MinInterval allows, with no penalty.
             for sched in scheduled:
                 if should_play_scheduled(sched, state, node, now_dt):
                     name = sched.get("Name", sched.get("File", ""))
                     log_info(f"Scheduled announcement: {name}")
                     target_node = str(sched["Node"]) if sched.get("Node") else node
-                    play_mode   = sched.get("PlayMode", "local")
+                    play_mode = sched.get("PlayMode", "local")
                     play_file(target_node, sched["File"], play_mode)
                     log_playback(state, "scheduled", name, sched["File"], target_node, play_mode)
                     state["scheduled_played"][sched.get("Name", "")] = now_dt.strftime("%Y-%m-%d")
@@ -1161,99 +858,126 @@ def main():
                     state["scheduled_busy_until"] = now + min(duration, MAX_BUSY_SECONDS) + BUSY_GRACE_SECONDS
                     save_state(state)
 
-            # ── Tail messages (unkey-driven) ───────────────────────────────
-            if tm_on and unkey_detected:
-                swp_active = swp_on and wx_is_active(swp_file, swp_thr)
-                if not swp_active:
-                    state["swp_next_is_rotation"] = False
-                    state["swp_last_mtime"] = None
+            # ── Kerchunk / tail message (unkey-driven) ─────────────────────────────────────────
+            if tm_on:
+                cur = get_kerchunk_count(node)
 
-                if (now - state["last_tail_played"]) < min_int:
-                    remaining = int(min_int - (now - state["last_tail_played"]))
-                    log_debug(f"Min interval not reached - {remaining}s remaining")
+                if cur is not None:
+                    # Midnight rollover
+                    if cur < last_kerchunks:
+                        log_debug("Kerchunk counter rolled over at midnight - reseeding")
+                        last_kerchunks = cur
 
-                elif now < state.get("scheduled_busy_until", 0):
-                    log_info("Scheduled announcement in progress - delaying tail message to next unkey")
+                    if cur > last_kerchunks:
+                        last_kerchunks = cur
+                        log_debug(f"Unkey detected (kerchunks now {cur})")
 
-                elif swp_active:
-                    try:
-                        swp_mtime = os.path.getmtime(swp_file)
-                    except OSError:
-                        swp_mtime = None
-                    is_new_alert = swp_mtime is not None and swp_mtime != state.get("swp_last_mtime")
+                        # A persistent WX alert would otherwise starve the rotation
+                        # entirely (constant alerts are common for some users, e.g.
+                        # in summer heat-warning season). Reset the alternation
+                        # state as soon as there's no active alert, so a future
+                        # alert always plays immediately the first time it appears.
+                        swp_active = swp_on and wx_is_active(swp_file, swp_thr)
+                        if not swp_active:
+                            state["swp_next_is_rotation"] = False
+                            state["swp_last_mtime"] = None
 
-                    if is_new_alert:
-                        log_info("Playing SkywarnPlus WX tail message (new/changed alert)")
-                        play_file(node, swp_file)
-                        log_playback(state, "wx", "SkywarnPlus WX Alert", swp_file, node)
-                        state["swp_last_mtime"]     = swp_mtime
-                        state["swp_next_is_rotation"] = True
-                        state["last_tail_played"]   = now
-                        save_state(state)
+                        if (now - state["last_tail_played"]) < min_int:
+                            remaining = int(min_int - (now - state["last_tail_played"]))
+                            log_debug(f"Min interval not reached - {remaining}s remaining")
 
-                    elif rotation and state.get("swp_next_is_rotation"):
-                        eligible = [e for e in rotation if rotation_entry_eligible(e, now_dt)]
-                        if eligible:
-                            idx      = state["rotation_index"] % len(eligible)
-                            entry    = eligible[idx]
-                            filepath = rotation_entry_file(entry)
-                            if os.path.exists(filepath):
-                                log_info(f"Playing rotation [{idx + 1}/{len(eligible)}] (alternating with active WX alert): {Path(filepath).name}")
-                                target_node = rotation_entry_node(entry, node)
-                                play_file(target_node, filepath)
-                                log_playback(state, "rotation", Path(filepath).name, filepath, target_node)
-                                state["rotation_index"]       = (idx + 1) % len(eligible)
-                                state["swp_next_is_rotation"] = False
-                                state["last_tail_played"]     = now
-                                save_state(state)
-                            else:
-                                log_warn(f"Rotation file not found: {filepath} - playing WX alert instead")
+                        elif now < state.get("scheduled_busy_until", 0):
+                            # A scheduled announcement just started (or is about to,
+                            # having been checked earlier this same iteration) -
+                            # it takes precedence. Deliberately not touching
+                            # last_tail_played here, so this unkey doesn't cost
+                            # anything against MinInterval - it just tries again
+                            # on the next unkey once the announcement has finished.
+                            # Logged at INFO (not DEBUG) since this is a rare,
+                            # notable event worth seeing without enabling Debug.
+                            log_info("Scheduled announcement in progress - delaying tail message to next unkey")
+
+                        elif swp_active:
+                            try:
+                                swp_mtime = os.path.getmtime(swp_file)
+                            except OSError:
+                                swp_mtime = None
+                            is_new_alert = swp_mtime is not None and swp_mtime != state.get("swp_last_mtime")
+
+                            if is_new_alert:
+                                # New/changed alert always plays immediately,
+                                # regardless of whose turn it was.
+                                log_info("Playing SkywarnPlus WX tail message (new/changed alert)")
                                 play_file(node, swp_file)
                                 log_playback(state, "wx", "SkywarnPlus WX Alert", swp_file, node)
+                                state["swp_last_mtime"] = swp_mtime
+                                state["swp_next_is_rotation"] = True
                                 state["last_tail_played"] = now
                                 save_state(state)
+
+                            elif rotation and state.get("swp_next_is_rotation"):
+                                # Same alert as before - alternate with the rotation
+                                # instead of playing the WX tail on every unkey.
+                                eligible = [e for e in rotation if rotation_entry_eligible(e, now_dt)]
+                                if eligible:
+                                    idx      = state["rotation_index"] % len(eligible)
+                                    entry    = eligible[idx]
+                                    filepath = rotation_entry_file(entry)
+                                    if os.path.exists(filepath):
+                                        log_info(f"Playing rotation [{idx + 1}/{len(eligible)}] (alternating with active WX alert): {Path(filepath).name}")
+                                        target_node = rotation_entry_node(entry, node)
+                                        play_file(target_node, filepath)
+                                        log_playback(state, "rotation", Path(filepath).name, filepath, target_node)
+                                        state["rotation_index"]       = (idx + 1) % len(eligible)
+                                        state["swp_next_is_rotation"] = False
+                                        state["last_tail_played"]     = now
+                                        save_state(state)
+                                    else:
+                                        log_warn(f"Rotation file not found: {filepath} - playing WX alert instead")
+                                        play_file(node, swp_file)
+                                        log_playback(state, "wx", "SkywarnPlus WX Alert", swp_file, node)
+                                        state["last_tail_played"] = now
+                                        save_state(state)
+                                else:
+                                    log_debug("No rotation entries eligible right now (day/time-window gating) - playing WX alert instead")
+                                    play_file(node, swp_file)
+                                    log_playback(state, "wx", "SkywarnPlus WX Alert", swp_file, node)
+                                    state["last_tail_played"] = now
+                                    save_state(state)
+
+                            else:
+                                log_info("Playing SkywarnPlus WX tail message (alternating)")
+                                play_file(node, swp_file)
+                                log_playback(state, "wx", "SkywarnPlus WX Alert", swp_file, node)
+                                state["swp_next_is_rotation"] = True
+                                state["last_tail_played"] = now
+                                save_state(state)
+
+                        elif rotation:
+                            eligible = [e for e in rotation if rotation_entry_eligible(e, now_dt)]
+                            if eligible:
+                                idx      = state["rotation_index"] % len(eligible)
+                                entry    = eligible[idx]
+                                filepath = rotation_entry_file(entry)
+                                if os.path.exists(filepath):
+                                    log_info(f"Playing rotation [{idx + 1}/{len(eligible)}]: {Path(filepath).name}")
+                                    target_node = rotation_entry_node(entry, node)
+                                    play_file(target_node, filepath)
+                                    log_playback(state, "rotation", Path(filepath).name, filepath, target_node)
+                                    state["rotation_index"]   = (idx + 1) % len(eligible)
+                                    state["last_tail_played"] = now
+                                    save_state(state)
+                                else:
+                                    log_warn(f"Rotation file not found: {filepath}")
+                            else:
+                                log_debug("No rotation entries eligible right now (day/time-window gating)")
                         else:
-                            log_debug("No rotation entries eligible right now - playing WX alert instead")
-                            play_file(node, swp_file)
-                            log_playback(state, "wx", "SkywarnPlus WX Alert", swp_file, node)
-                            state["last_tail_played"] = now
-                            save_state(state)
+                            log_debug("No tail messages configured - skipping")
 
-                    else:
-                        log_info("Playing SkywarnPlus WX tail message (alternating)")
-                        play_file(node, swp_file)
-                        log_playback(state, "wx", "SkywarnPlus WX Alert", swp_file, node)
-                        state["swp_next_is_rotation"] = True
-                        state["last_tail_played"] = now
-                        save_state(state)
-
-                elif rotation:
-                    eligible = [e for e in rotation if rotation_entry_eligible(e, now_dt)]
-                    if eligible:
-                        idx      = state["rotation_index"] % len(eligible)
-                        entry    = eligible[idx]
-                        filepath = rotation_entry_file(entry)
-                        if os.path.exists(filepath):
-                            log_info(f"Playing rotation [{idx + 1}/{len(eligible)}]: {Path(filepath).name}")
-                            target_node = rotation_entry_node(entry, node)
-                            play_file(target_node, filepath)
-                            log_playback(state, "rotation", Path(filepath).name, filepath, target_node)
-                            state["rotation_index"]   = (idx + 1) % len(eligible)
-                            state["last_tail_played"] = now
-                            save_state(state)
-                        else:
-                            log_warn(f"Rotation file not found: {filepath}")
-                    else:
-                        log_debug("No rotation entries eligible right now (day/time-window gating)")
-                else:
-                    log_debug("No tail messages configured - skipping")
-
-            time.sleep(POLL_INTERVAL)
+            time.sleep(poll)
 
         except KeyboardInterrupt:
             log_info("Shutting down")
-            if ami:
-                ami.close()
             sys.exit(0)
         except Exception as e:
             log_error(f"Unexpected error: {e}")
