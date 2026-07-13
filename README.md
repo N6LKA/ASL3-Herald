@@ -59,10 +59,12 @@ curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/
 > ⚠️ **Warning:** `develop` may contain incomplete, untested, or broken features at any given time. Only use this on a system where you can tolerate things breaking (or reinstall from `main` to recover). Don't use it on a repeater you depend on for daily use.
 
 ```bash
-curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/develop/install.sh | sudo bash -s -- --branch develop
+curl -fsSL "https://github.com/N6LKA/asl3-herald/archive/refs/heads/develop.tar.gz" \
+  | tar -xzO asl3-herald-develop/install.sh \
+  | sudo bash -s -- --branch develop
 ```
 
-`--branch develop` must be passed as a script argument exactly as shown (not an environment variable — those don't reliably survive the `sudo` call on a piped command).
+This tarball form is used instead of the raw GitHub URL because `raw.githubusercontent.com` is CDN-cached and can serve a stale `install.sh` for an extended period — the tarball download goes through GitHub's codeload service, which always returns the current commit.
 
 The installer will:
 1. Install `python3-yaml`, `sox`, and `libsox-fmt-mp3` if not already present
@@ -70,14 +72,13 @@ The installer will:
 3. Copy `asl3-herald.py` to `/usr/local/bin/asl3-herald/`
 4. Install the `herald` management command to `/usr/local/bin/herald`
 5. Create `/etc/asterisk/scripts/asl3-herald/` with an example config (if no config exists)
-6. Install and enable the `asl3-herald` systemd service
+6. Install and enable the `asl3-herald` systemd service, and start it automatically
 7. Install the web UI to `/var/www/html/asl3-herald/` — installs `apache2` + `php` first if neither Allmon3 nor Supermon is already present, then installs a dedicated page directly into Allmon3's and/or Supermon's own directory (with a sidebar/footer link to it) for whichever is detected
 
 **After installation:**
 
 1. Edit the config: `sudo nano /etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
-2. Start the service: `sudo systemctl start asl3-herald`
-3. Check it's running: `herald status`
+2. Check it's running: `herald status`
 
 ---
 
