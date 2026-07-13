@@ -122,8 +122,8 @@
     document.getElementById('set-herald-version').textContent = data.version || 'unknown';
 
     document.getElementById('set-node').value = data.node || '';
-    document.getElementById('set-poll-interval').value = data.poll_interval;
     document.getElementById('set-min-interval').value = data.tail_message.min_interval;
+    document.getElementById('set-network-keyup-trigger').checked = !!data.tail_message.network_keyup_trigger;
     document.getElementById('set-debug').checked = !!data.debug;
     document.getElementById('set-swp-enable').checked = !!data.tail_message.skywarnplus.enable;
     document.getElementById('set-swp-wxfile').value = data.tail_message.skywarnplus.wx_tail_file || '';
@@ -389,8 +389,8 @@
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         node: document.getElementById('set-node').value.trim(),
-        poll_interval: document.getElementById('set-poll-interval').value,
         min_interval: document.getElementById('set-min-interval').value,
+        network_keyup_trigger: document.getElementById('set-network-keyup-trigger').checked,
         debug: document.getElementById('set-debug').checked,
         swp_enable: document.getElementById('set-swp-enable').checked,
         swp_wxfile: document.getElementById('set-swp-wxfile').value.trim(),
