@@ -23,6 +23,7 @@ General:
   list-json                               Print config as JSON (used by the web UI)
   voices [--json]                         List available TTS voices
   playback-history                        Print recent playback history as JSON
+  clear-history                           Clear the playback history
   export-config                           Print the full config as JSON (for backup)
   import-config <path>                    Restore the full config from an exported JSON file
   help                                    Show this message
@@ -486,6 +487,11 @@ cmd_playback_history() {
     python3 "$DAEMON_PY" playback-history 2>/dev/null
 }
 
+cmd_clear_history() {
+    need_root "$@"
+    python3 "$DAEMON_PY" clear-history 2>/dev/null
+}
+
 cmd_export_config() {
     # Read-only JSON passthrough for the web UI — no root required.
     python3 "$DAEMON_PY" export-config 2>/dev/null
@@ -701,6 +707,7 @@ case "$CMD" in
     edit-schedule)        cmd_edit_schedule      "$@" ;;
     update-settings)      cmd_update_settings    "$@" ;;
     playback-history)     cmd_playback_history   "$@" ;;
+    clear-history)        cmd_clear_history      "$@" ;;
     export-config)        cmd_export_config      "$@" ;;
     import-config)        cmd_import_config      "$@" ;;
     help|--help|-h) usage ;;
