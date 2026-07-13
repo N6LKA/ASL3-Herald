@@ -255,27 +255,11 @@
 
     <div class="add-form">
       <h3 id="sched-form-heading">Add a Scheduled Announcement</h3>
-      <div class="source-toggle">
-        <label><input type="radio" name="sched-source" value="tts" checked> Text-to-Speech</label>
-        <label><input type="radio" name="sched-source" value="file"> Upload File</label>
-      </div>
-
-      <div id="sched-tts-fields">
-        <label>Text</label>
-        <input type="text" id="sched-text" style="width: 100%;" placeholder="e.g. ARRL Audio News follows">
-        <label>Voice</label>
-        <select id="sched-voice"></select>
-      </div>
-      <div id="sched-file-fields" style="display:none;">
-        <label>Audio file (.wav or .mp3)</label>
-        <input type="file" id="sched-file" accept=".wav,.mp3">
-        <span class="muted" id="sched-file-keep-note" style="display:none;">Leave blank to keep the existing audio.</span>
-      </div>
 
       <label>Name</label>
       <input type="text" id="sched-name" placeholder="e.g. arrl-news">
 
-      <div class="field-row">
+      <div class="field-row" style="margin-top: 8px;">
         <div>
           <label>Time (24-hour)</label>
           <input type="time" id="sched-time">
@@ -320,7 +304,30 @@
         </div>
       </div>
 
-      <br><br>
+      <div class="source-toggle" style="margin-top: 16px;">
+        <label><input type="radio" name="sched-source" value="tts" checked> Text-to-Speech</label>
+        <label><input type="radio" name="sched-source" value="file"> Upload File</label>
+      </div>
+
+      <div id="sched-tts-fields">
+        <div class="tts-row">
+          <div class="tts-voice">
+            <label>Voice</label>
+            <select id="sched-voice" style="display: block;"></select>
+          </div>
+          <div class="tts-text">
+            <label>Text</label>
+            <textarea id="sched-text" rows="3" placeholder="e.g. ARRL Audio News follows" style="width: 100%;"></textarea>
+          </div>
+        </div>
+      </div>
+      <div id="sched-file-fields" style="display:none;">
+        <label>Audio file (.wav or .mp3)</label>
+        <input type="file" id="sched-file" accept=".wav,.mp3">
+        <span class="muted" id="sched-file-keep-note" style="display:none;">Leave blank to keep the existing audio.</span>
+      </div>
+
+      <br>
       <button class="btn-primary" id="btn-add-sched">Add Scheduled Announcement</button>
       <button id="sched-edit-cancel" style="display:none;">Cancel Edit</button>
       <div class="msg" id="sched-msg"></div>
@@ -354,51 +361,55 @@
     <div class="msg" id="herald-daemon-msg"></div>
   </div>
 
-  <div class="card">
-    <h3>General Settings</h3>
-    <label>Node</label>
-    <input type="text" id="set-node" style="width: 200px;">
+  <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+    <div class="card" style="flex:1 1 300px;">
+      <h3>General Settings</h3>
+      <label>Node</label>
+      <input type="text" id="set-node" style="width: 200px;">
 
-    <label>Min Interval Between Tail Messages (seconds)</label>
-    <input type="text" id="set-min-interval" style="width: 100px;">
-    <span class="muted" style="margin-left: 8px;">e.g. 300 = 5 min, 600 = 10 min, 900 = 15 min</span>
+      <label>Min Interval Between Tail Messages (seconds)</label>
+      <input type="text" id="set-min-interval" style="width: 100px;">
+      <span class="muted" style="margin-left: 8px;">e.g. 300 = 5 min, 600 = 10 min, 900 = 15 min</span>
 
-    <div class="toggle-row">
-      <span class="toggle-label">RF activation only</span>
-      <label class="toggle-switch">
-        <input type="checkbox" id="set-network-keyup-trigger">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">RF and Network activation</span>
-    </div>
-    <p class="muted" style="margin-top: 6px; margin-bottom: 0;">Off: tail messages play after a local RF unkey only. On: tail messages also play after a connected AllStar node unkeys.</p>
+      <div class="toggle-row">
+        <span class="toggle-label">RF activation only</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="set-network-keyup-trigger">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">RF and Network activation</span>
+      </div>
+      <p class="muted" style="margin-top: 6px; margin-bottom: 0;">Off: tail messages play after a local RF unkey only.<br>On: tail messages also play after a connected AllStar node unkeys.</p>
 
-    <div class="toggle-row" style="margin-top: 16px;">
-      <label class="toggle-switch">
-        <input type="checkbox" id="set-debug">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">Enable debug logging</span>
-    </div>
+      <div class="toggle-row" style="margin-top: 16px;">
+        <label class="toggle-switch">
+          <input type="checkbox" id="set-debug">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Enable debug logging</span>
+      </div>
 
-    <h3 style="margin-top: 20px;">SkywarnPlus</h3>
-    <div class="toggle-row" style="margin-top: 8px;">
-      <label class="toggle-switch">
-        <input type="checkbox" id="set-swp-enable">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">Enable SkywarnPlus WX tail integration</span>
+      <br><br>
+      <button class="btn-primary" id="btn-save-settings">Save &amp; Reload</button>
+      <div class="msg" id="settings-msg"></div>
     </div>
 
-    <label>WX Tail File Path</label>
-    <input type="text" id="set-swp-wxfile" style="width: 100%;">
+    <div class="card" style="flex:1 1 280px;">
+      <h3>SkywarnPlus</h3>
+      <div class="toggle-row" style="margin-top: 8px;">
+        <label class="toggle-switch">
+          <input type="checkbox" id="set-swp-enable">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Enable SkywarnPlus WX tail integration</span>
+      </div>
 
-    <label>Silence Threshold (bytes)</label>
-    <input type="text" id="set-swp-threshold" style="width: 100px;">
+      <label>WX Tail File Path</label>
+      <input type="text" id="set-swp-wxfile" style="width: 100%;">
 
-    <br><br>
-    <button class="btn-primary" id="btn-save-settings">Save &amp; Reload</button>
-    <div class="msg" id="settings-msg"></div>
+      <label>Silence Threshold (bytes)</label>
+      <input type="text" id="set-swp-threshold" style="width: 100px;">
+    </div>
   </div>
 
   <div class="card">
