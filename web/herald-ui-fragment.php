@@ -298,7 +298,7 @@
     <span class="muted" style="margin-left: 8px;">e.g. 300 = 5 min, 600 = 10 min, 900 = 15 min</span>
 
     <label><input type="checkbox" id="set-network-keyup-trigger"> Fire tail messages on network unkeys too (requires AMI)</label>
-    <p class="muted" style="margin-top: 4px; margin-bottom: 0;">When enabled, tail messages play after a connected AllStar node unkeys, not just after local RF unkeys. AMI credentials must be set in <code>asl3-herald.conf</code>.</p>
+    <p class="muted" style="margin-top: 4px; margin-bottom: 0;">When enabled, tail messages play after a connected AllStar node unkeys, not just after local RF unkeys. Herald reads AMI credentials automatically from <code>/etc/allmon3/allmon3.ini</code> (Allmon3) or <code>/etc/asterisk/manager.conf</code> (Supermon / other frontends).</p>
 
     <label><input type="checkbox" id="set-debug"> Enable debug logging</label>
 
