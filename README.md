@@ -1,6 +1,6 @@
 ![asl3-herald](web/img/asl3-herald-banner.svg)
 
-![Version](https://img.shields.io/badge/version-1.6.5-blue)
+![Version](https://img.shields.io/badge/version-1.6.6-blue)
 ![Release Date](https://img.shields.io/badge/released-2026--07--14-green)
 ![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
 
@@ -313,6 +313,14 @@ No changes to SkywarnPlus are required. `asl3-herald` reads the existing `wx-tai
 Set `SilenceThreshold: 5000` (the default) to reliably distinguish between the two.
 
 **Note:** the original SkywarnPlus author, Mason (Mason10198), no longer maintains the project — [the original repo](https://github.com/Mason10198/SkywarnPlus) is archived and read-only. Larry (N6LKA) maintains an active fork that keeps SkywarnPlus working and up to date: **[github.com/N6LKA/SkywarnPlus](https://github.com/N6LKA/SkywarnPlus)**.
+
+---
+
+## Support the Project
+
+If asl3-herald has been useful on your repeater, please consider supporting its development!
+
+<p align="center"><a href="https://www.paypal.me/LarryAycock"><img src="https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png" width="300px" alt="Donate with PayPal"/></a></p>
 
 ---
 
