@@ -38,6 +38,7 @@
 
   // ── Countdown timer ────────────────────────────────────────────────────────────────────
   let _cdTimer = null;
+  let _cdPoller = null;
   let _cdMinInt = 300;
   let _cdLastPlayed = 0;
 
@@ -67,6 +68,17 @@
     clearInterval(_cdTimer);
     _tickCountdown();
     _cdTimer = setInterval(_tickCountdown, 1000);
+  }
+
+  // Polls the server every 10 s so the countdown resets automatically when a
+  // tail message plays, without requiring a page refresh.
+  async function _pollCountdown() {
+    const data = await api('list.php');
+    if (!data || !data.tail_message) return;
+    const newLastPlayed = data.tail_message.last_tail_played || 0;
+    if (newLastPlayed !== _cdLastPlayed) {
+      startCountdown(data.tail_message.min_interval, newLastPlayed);
+    }
   }
 
   // ── Tabs ───────────────────────────────────────────────────────────────────────────────
@@ -155,11 +167,15 @@
 
     document.getElementById('hs-node').textContent = data.node || '—';
     document.getElementById('hs-mininterval').textContent = data.tail_message.min_interval;
-    document.getElementById('hs-swp').textContent = data.tail_message.skywarnplus.enable ? 'enabled' : 'disabled';
+    const swpEnabled = !!data.tail_message.skywarnplus.enable;
+    const hsSwp = document.getElementById('hs-swp');
+    hsSwp.textContent = swpEnabled ? 'Enabled' : 'Disabled';
+    hsSwp.style.color = swpEnabled ? '#27ae60' : '#e74c3c';
+    hsSwp.style.fontWeight = 'bold';
     startCountdown(data.tail_message.min_interval, data.tail_message.last_tail_played || 0);
 
     const heraldEnabled = !!data.herald_enabled;
-    const heraldStatusText = heraldEnabled ? 'enabled' : 'DISABLED';
+    const heraldStatusText = heraldEnabled ? 'Enabled' : 'Disabled';
     const heraldStatusColor = heraldEnabled ? '#27ae60' : '#e74c3c';
     const hsEnabled = document.getElementById('hs-enabled');
     hsEnabled.textContent = heraldStatusText;
@@ -551,4 +567,5 @@
 
   loadVoices();
   loadAll();
+  _cdPoller = setInterval(_pollCountdown, 10000);
 })();
