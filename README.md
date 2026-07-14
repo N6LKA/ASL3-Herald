@@ -1,12 +1,12 @@
 ![asl3-herald](web/img/asl3-herald-banner.svg)
 
-![Version](https://img.shields.io/badge/version-1.6.3-blue)
+![Version](https://img.shields.io/badge/version-1.6.4-blue)
 ![Release Date](https://img.shields.io/badge/released-2026--07--14-green)
 ![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
 
 **Enhanced tail message daemon for ASL3/app_rpt with advanced announcement features.**
 
-`asl3-herald` is a drop-in replacement and enhancement for the native `app_rpt` tail message function. It provides reliable unkey detection, rotating messages, SkywarnPlus weather alert integration with priority playback, scheduled time-based announcements (including nth-week-of-month scheduling), neural TTS voices, and an optional web UI for Allmon3 and Supermon 7 — all things the built-in tail message either doesn't support or handles unreliably.
+`asl3-herald` is a drop-in replacement and enhancement for the native `app_rpt` tail message function. It provides reliable unkey detection, rotating messages, SkywarnPlus weather alert integration with priority playback, scheduled time-based announcements (including nth-week-of-month scheduling), neural TTS voices, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
 
 ---
 
@@ -34,7 +34,7 @@ Both Tail Messages and Scheduled Announcements can be edited in place (name, tex
 
 Plus:
 - **Piper neural TTS** — generate announcements from text with natural-sounding voices (6 included), with festival/espeak-ng as a fallback
-- **Web UI** — optional browser-based management linked from Allmon3 or Supermon 7, gated behind each app's own login
+- **Web UI** — optional browser-based management linked from Allmon3 or Supermon (v7.4+ and v8+), gated behind each app's own login
 - **Instant disable/enable** — `herald toggle` / `herald enable` / `herald disable`, no config edits or restarts needed
 - **Live config reload** — `herald reload` sends SIGHUP to pick up config changes immediately
 - **Reorderable rotation** — move a rotation entry earlier/later in the cycle from the web UI or CLI, no remove-and-re-add needed
@@ -205,16 +205,18 @@ A scheduled announcement waits for the node to unkey before playing (rather than
 
 `herald add` and `herald add-schedule` prefer **Piper** (neural TTS, installed by `install.sh`) for natural-sounding voices, and fall back to `festival` or `espeak-ng` if Piper isn't available.
 
-**Included Piper voices** (all American English unless noted):
+**Included Piper voices:**
 
 | Voice | Description |
 |---|---|
-| `en_US-lessac-medium` | Female (default) |
-| `en_US-joe-medium` | Male |
-| `en_US-amy-medium` | Female |
-| `en_US-kristin-medium` | Female |
-| `en_US-libritts_r-medium` | Female, British |
-| `en_US-ryan-low` | Male, British |
+| `en_US-lessac-medium` | US Female (default) |
+| `en_US-joe-medium` | US Male |
+| `en_US-amy-medium` | US Female |
+| `en_US-kristin-medium` | US Female |
+| `en_US-libritts_r-medium` | US Neutral |
+| `en_US-ryan-low` | US Male |
+| `en_GB-alan-medium` | British Male |
+| `en_GB-cori-high` | British Female |
 
 ```bash
 herald voices                                              # list installed voices
@@ -236,7 +238,7 @@ An optional browser-based UI for managing both Tail Messages and Scheduled Annou
 
 - **Allmon3**: `install.sh` installs `asl3-herald.html` directly into Allmon3's own web root (`/usr/share/allmon3/`, alongside `index.html`) and appends a `[Herald]` entry to the bottom of `/etc/allmon3/menu.ini` (Allmon3's own supported sidebar-customization mechanism) pointing at it. Because the page lives inside Allmon3's own directory, it loads Allmon3's real `functions.js`/`index.js` unmodified — same header/sidebar chrome as any other Allmon3 page, and a same-origin `master/auth/check` fetch for login detection. (A page living outside Allmon3's own directory can't reliably read Allmon3's session cookie server-side — its `Path` ends up scoped to Allmon3's own API prefix — which is why an earlier design based on a separate PHP page cookie-forwarding to Allmon3's internal port didn't reliably work.)
 - **Optional**: `install.sh` also appends a rule to `/etc/allmon3/custom.css` that hides the sidebar link entirely until you're logged into Allmon3, using Allmon3's own stock `body.logged-in`/`body.logged-out` class toggle. This is cosmetic only — the page itself still gates its content on real login status regardless of whether the link is visible.
-- **Supermon 7**: `install.sh` installs `asl3-herald.php` directly into Supermon's own directory (`/var/www/html/supermon/`) and adds a link at the bottom of the page after logging in (added to `footer.inc`, inside Supermon's own existing login-conditional block — so it's already hidden until logged in, natively). Because the page lives inside Supermon's own directory, it includes Supermon's real `session.inc`/`header.inc`/`footer.inc` unmodified — same nav and login dialog as any other Supermon page, and the same named session cookie (`supermon61`) Supermon itself uses, so login detection always matches Supermon's actual state.
+- **Supermon (v7.4+ and v8+)**: `install.sh` installs `asl3-herald.php` directly into Supermon's own directory (`/var/www/html/supermon/`) and adds a link at the bottom of the page after logging in (added to `footer.inc`, inside Supermon's own existing login-conditional block — so it's already hidden until logged in, natively). Because the page lives inside Supermon's own directory, it includes Supermon's real `session.inc`/`header.inc`/`footer.inc` unmodified — same nav and login dialog as any other Supermon page, and the same named session cookie (`supermon61`) Supermon itself uses, so login detection always matches Supermon's actual state.
 - Both pages support adding announcements via typed text (with Piper voice selection) or by uploading an existing `.wav`/`.mp3` file (auto-converted to 8kHz mono).
 - **Playback History tab** — the last 200 plays (rotation, WX, scheduled, manual test) with timestamp, node, and play mode.
 - **Settings tab** also shows the installed version with a "Check for Updates" button (compares against `main`'s `version.txt` via GitHub's API), plus a Backup & Restore card to download the full config as JSON or restore from a previously exported file.
