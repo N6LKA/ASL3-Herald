@@ -127,7 +127,8 @@
                 <hr>
                 <div class="text-center text-wrap">
                     <img src="img/asl-sidebar-logo.png" alt="asl-logo"><br>
-                    <b>Allmon v3</b>
+                    <b>Allmon v3</b><br>
+                    <span id="allmon-version" style="color:red"></span>
                 </div>
             </div>
         </nav>
@@ -190,6 +191,11 @@ window.addEventListener('pageshow', async function() {
     } else {
         gate.innerHTML = "<p>Please log in to Allmon3 (left menu) to manage announcements.</p>";
     }
+});
+
+fetch('index.html').then(r => r.text()).then(h => {
+    const m = h.match(/<span style="color:red">(.+?)<\/span>/);
+    if (m) document.getElementById('allmon-version').textContent = m[1];
 });
 </script>
 </body>
