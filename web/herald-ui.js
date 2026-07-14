@@ -38,6 +38,7 @@
 
   // ── Countdown timer ────────────────────────────────────────────────────────────────────
   let _cdTimer = null;
+  let _cdPoller = null;
   let _cdMinInt = 300;
   let _cdLastPlayed = 0;
 
@@ -67,6 +68,17 @@
     clearInterval(_cdTimer);
     _tickCountdown();
     _cdTimer = setInterval(_tickCountdown, 1000);
+  }
+
+  // Polls the server every 10 s so the countdown resets automatically when a
+  // tail message plays, without requiring a page refresh.
+  async function _pollCountdown() {
+    const data = await api('list.php');
+    if (!data || !data.tail_message) return;
+    const newLastPlayed = data.tail_message.last_tail_played || 0;
+    if (newLastPlayed !== _cdLastPlayed) {
+      startCountdown(data.tail_message.min_interval, newLastPlayed);
+    }
   }
 
   // ── Tabs ───────────────────────────────────────────────────────────────────────────────
@@ -551,4 +563,5 @@
 
   loadVoices();
   loadAll();
+  _cdPoller = setInterval(_pollCountdown, 10000);
 })();
