@@ -1,6 +1,6 @@
 ![asl3-herald](web/img/asl3-herald-banner.svg)
 
-![Version](https://img.shields.io/badge/version-1.6.4-blue)
+![Version](https://img.shields.io/badge/version-1.6.5-blue)
 ![Release Date](https://img.shields.io/badge/released-2026--07--14-green)
 ![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
 

@@ -112,14 +112,14 @@ generate_tts_file() {
     local outfile="$ANNOUNCE_DIR/${name}.wav"
 
     if [[ -x "$PIPER_BIN" ]]; then
-        local model="$PIPER_VOICE_DIR/en_US-lessac-medium.onnx"
+        local model="$PIPER_VOICE_DIR/en_US-amy-medium.onnx"
         if [[ -n "$voice" ]]; then
             if [[ -f "$PIPER_VOICE_DIR/${voice}.onnx" ]]; then
                 model="$PIPER_VOICE_DIR/${voice}.onnx"
             elif [[ -f "$voice" ]]; then
                 model="$voice"
             else
-                echo "WARNING: voice '$voice' not found, using default (lessac)" >&2
+                echo "WARNING: voice '$voice' not found, using default (amy)" >&2
             fi
         fi
         local tmp_wav
