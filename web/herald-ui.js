@@ -142,6 +142,7 @@
   }
 
   // ── Load voices ────────────────────────────────────────────────────────────────────────────
+  const DEFAULT_VOICE = 'en_US-amy-medium';
   const VOICE_LABELS = {
     'en_US-lessac-medium':     'Lessac (US Female, Medium)',
     'en_US-joe-medium':        'Joe (US Male, Medium)',
@@ -167,6 +168,7 @@
         opt.value = v; opt.textContent = VOICE_LABELS[v] || v;
         sel.appendChild(opt);
       });
+      if (voices.includes(DEFAULT_VOICE)) sel.value = DEFAULT_VOICE;
     });
   }
 
