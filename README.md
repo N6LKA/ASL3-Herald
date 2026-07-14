@@ -316,6 +316,14 @@ Set `SilenceThreshold: 5000` (the default) to reliably distinguish between the t
 
 ---
 
+## Support the Project
+
+If asl3-herald has been useful on your repeater, please consider supporting its development!
+
+<p align="center"><a href="https://www.paypal.me/LarryAycock"><img src="https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png" width="300px" alt="Donate with PayPal"/></a></p>
+
+---
+
 ## License
 
 GPLv3 © 2026 Larry Aycock (N6LKA)
