@@ -142,6 +142,16 @@
   }
 
   // ── Load voices ────────────────────────────────────────────────────────────────────────────
+  const VOICE_LABELS = {
+    'en_US-lessac-medium':     'Lessac (US Female, Medium)',
+    'en_US-joe-medium':        'Joe (US Male, Medium)',
+    'en_US-amy-medium':        'Amy (US Female, Medium)',
+    'en_US-kristin-medium':    'Kristin (US Female, Medium)',
+    'en_US-libritts_r-medium': 'LibriTTS (US Neutral, Medium)',
+    'en_US-ryan-low':          'Ryan (US Male, Low)',
+    'en_GB-alan-medium':       'Alan (British Male, Medium)',
+    'en_GB-cori-high':         'Cori (British Female, High)',
+  };
   async function loadVoices() {
     const data = await api('voices.php');
     const voices = (data && data.voices) || [];
@@ -154,7 +164,7 @@
       }
       voices.forEach(v => {
         const opt = document.createElement('option');
-        opt.value = v; opt.textContent = v;
+        opt.value = v; opt.textContent = VOICE_LABELS[v] || v;
         sel.appendChild(opt);
       });
     });
