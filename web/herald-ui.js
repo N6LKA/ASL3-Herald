@@ -167,11 +167,15 @@
 
     document.getElementById('hs-node').textContent = data.node || '—';
     document.getElementById('hs-mininterval').textContent = data.tail_message.min_interval;
-    document.getElementById('hs-swp').textContent = data.tail_message.skywarnplus.enable ? 'enabled' : 'disabled';
+    const swpEnabled = !!data.tail_message.skywarnplus.enable;
+    const hsSwp = document.getElementById('hs-swp');
+    hsSwp.textContent = swpEnabled ? 'Enabled' : 'Disabled';
+    hsSwp.style.color = swpEnabled ? '#27ae60' : '#e74c3c';
+    hsSwp.style.fontWeight = 'bold';
     startCountdown(data.tail_message.min_interval, data.tail_message.last_tail_played || 0);
 
     const heraldEnabled = !!data.herald_enabled;
-    const heraldStatusText = heraldEnabled ? 'enabled' : 'DISABLED';
+    const heraldStatusText = heraldEnabled ? 'Enabled' : 'Disabled';
     const heraldStatusColor = heraldEnabled ? '#27ae60' : '#e74c3c';
     const hsEnabled = document.getElementById('hs-enabled');
     hsEnabled.textContent = heraldStatusText;
