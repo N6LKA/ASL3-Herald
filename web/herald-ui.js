@@ -114,14 +114,13 @@
   wireSourceToggle('tail-source', 'tail-tts-fields', 'tail-file-fields');
   wireSourceToggle('sched-source', 'sched-tts-fields', 'sched-file-fields');
 
-  // "Daily" checkbox disables the individual day checkboxes
+  // "Daily" checkbox disables the individual day checkboxes (tail messages only)
   function wireDailyToggle(dailyId, containerId) {
     document.getElementById(dailyId).addEventListener('change', function () {
       document.querySelectorAll('#' + containerId + ' input[type=checkbox]:not(#' + dailyId + ')')
         .forEach(cb => { cb.disabled = this.checked; if (this.checked) cb.checked = false; });
     });
   }
-  wireDailyToggle('sched-day-daily', 'sched-days');
   wireDailyToggle('tail-day-daily', 'tail-days');
 
   function pickedDays(dailyId, containerId) {
@@ -240,18 +239,18 @@
     const stbody = document.querySelector('#sched-table tbody');
     stbody.innerHTML = '';
     (data.scheduled || []).forEach(s => {
-      const daysAttr = Array.isArray(s.Days) ? s.Days.join(',') : (s.Days || 'daily');
-      const daysDisplay = Array.isArray(s.Days) ? s.Days.join(', ') : s.Days;
       const playMode = s.PlayMode === 'global' ? 'global' : 'local';
       const fileMissing = !!s.FileMissing;
+      const cron = s.Cron || '?';
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + s.Name + '</td><td>' + s.Time + '</td><td>' + daysDisplay + '</td>' +
-        '<td>' + (s.Week || '—') + '</td><td>' + (playMode === 'global' ? 'Global' : 'Local') + '</td>' +
+      tr.innerHTML = '<td>' + escapeAttr(s.Name) + '</td>' +
+        '<td><code>' + escapeAttr(cron) + '</code></td>' +
+        '<td>' + (playMode === 'global' ? 'Global' : 'Local') + '</td>' +
         '<td>' + (s.Node || '—') + '</td>' +
         '<td>' + basename(s.File) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td><td>' +
-        '<button class="btn-play" data-name="' + s.Name + '">Test (local playback)</button>' +
-        '<button class="btn-edit" data-type="sched" data-name="' + s.Name + '" data-time="' + s.Time + '" data-days="' + daysAttr + '" data-week="' + (s.Week || '') + '" data-playmode="' + playMode + '" data-node="' + escapeAttr(s.Node) + '" data-text="' + escapeAttr(s.Text) + '" data-voice="' + escapeAttr(s.Voice) + '">Edit</button>' +
-        '<button class="btn-danger" data-name="' + s.Name + '">Remove</button></td>';
+        '<button class="btn-play" data-name="' + escapeAttr(s.Name) + '">Test (local playback)</button>' +
+        '<button class="btn-edit" data-type="sched" data-name="' + escapeAttr(s.Name) + '" data-cron="' + escapeAttr(cron) + '" data-playmode="' + playMode + '" data-node="' + escapeAttr(s.Node) + '" data-text="' + escapeAttr(s.Text) + '" data-voice="' + escapeAttr(s.Voice) + '">Edit</button>' +
+        '<button class="btn-danger" data-name="' + escapeAttr(s.Name) + '">Remove</button></td>';
       stbody.appendChild(tr);
     });
 
@@ -367,15 +366,31 @@
   // ── Edit scheduled announcement ─────────────────────────────────────────────────────────
   let editingSchedName = null;
 
+  function applyCronToPicker(cronExpr) {
+    const parts = String(cronExpr || '* * * * *').split(/\s+/);
+    document.getElementById('sched-cron-min').value  = parts[0] || '*';
+    document.getElementById('sched-cron-hour').value = parts[1] || '*';
+    document.getElementById('sched-cron-dom').value  = parts[2] || '*';
+    document.getElementById('sched-cron-mon').value  = parts[3] || '*';
+    document.getElementById('sched-cron-dow').value  = parts[4] || '*';
+  }
+
+  function readCronFromPicker() {
+    return [
+      document.getElementById('sched-cron-min').value.trim()  || '*',
+      document.getElementById('sched-cron-hour').value.trim() || '*',
+      document.getElementById('sched-cron-dom').value.trim()  || '*',
+      document.getElementById('sched-cron-mon').value.trim()  || '*',
+      document.getElementById('sched-cron-dow').value.trim()  || '*',
+    ].join(' ');
+  }
+
   function startEditSched(d) {
     editingSchedName = d.name;
     document.getElementById('sched-name').value = d.name;
-    document.getElementById('sched-time').value = d.time || '';
-    document.getElementById('sched-week').value = d.week || '';
+    applyCronToPicker(d.cron || '* * * * *');
     document.getElementById('sched-playmode').value = d.playmode || 'local';
     document.getElementById('sched-node').value = d.node || '';
-
-    applyDaysToPicker(d.days || 'daily', 'sched-day-daily', 'sched-days');
 
     const hasText = !!d.text;
     document.querySelector('input[name="sched-source"][value="' + (hasText ? 'tts' : 'file') + '"]').checked = true;
@@ -396,14 +411,12 @@
   function cancelEditSched() {
     editingSchedName = null;
     document.getElementById('sched-name').value = '';
-    document.getElementById('sched-time').value = '';
+    applyCronToPicker('* * * * *');
     document.getElementById('sched-text').value = '';
     document.getElementById('sched-file').value = '';
     document.getElementById('sched-file-keep-note').style.display = 'none';
-    document.getElementById('sched-week').value = '';
     document.getElementById('sched-playmode').value = 'local';
     document.getElementById('sched-node').value = '';
-    applyDaysToPicker('daily', 'sched-day-daily', 'sched-days');
     document.getElementById('sched-form-heading').textContent = 'Add a Scheduled Announcement';
     document.getElementById('btn-add-sched').textContent = 'Add Scheduled Announcement';
     document.getElementById('sched-edit-cancel').style.display = 'none';
@@ -525,19 +538,15 @@
   document.getElementById('btn-add-sched').addEventListener('click', async () => {
     const msgEl = document.getElementById('sched-msg');
     const name = document.getElementById('sched-name').value.trim();
-    const time = document.getElementById('sched-time').value;
-    const week = document.getElementById('sched-week').value;
+    const cron = readCronFromPicker();
     const playMode = document.getElementById('sched-playmode').value;
     const isTts = document.querySelector('input[name="sched-source"]:checked').value === 'tts';
-    const days = pickedDays('sched-day-daily', 'sched-days');
 
     const form = new FormData();
     form.append('name', name);
-    form.append('time', time);
-    form.append('days', days);
+    form.append('cron', cron);
     form.append('play_mode', playMode);
     form.append('node', document.getElementById('sched-node').value.trim());
-    if (week) form.append('week', week);
     if (isTts) {
       form.append('mode', 'tts');
       form.append('text', document.getElementById('sched-text').value);
