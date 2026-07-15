@@ -112,6 +112,7 @@
   #herald-ui .btn-edit    { background: #e67e22; color: #fff; border: none; border-radius: 4px; }
   #herald-ui tr.sched-disabled td { opacity: 0.5; }
   #herald-ui code { color: #333; background: #eee; padding: 1px 5px; border-radius: 3px; font-size: 0.95em; }
+  #herald-ui #sched-table th { white-space: normal; }
   #herald-ui .badge-missing {
     background: #e74c3c; color: #fff; font-size: 0.75em;
     padding: 2px 6px; border-radius: 4px; margin-left: 6px; white-space: nowrap;
@@ -291,7 +292,7 @@
     <h3>Scheduled Announcements</h3>
     <p class="muted">Plays on a cron schedule, independent of node activity or MinInterval.</p>
     <table id="sched-table">
-      <thead><tr><th>Name</th><th>Min</th><th>Hour</th><th>DOM</th><th>Mon</th><th>DOW</th><th>Play Mode</th><th>Node</th><th>File</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Minute</th><th>Hour</th><th>Day of Month</th><th>Month</th><th>Day of Week</th><th>Play Mode</th><th>Node</th><th>File</th><th>Status</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
 
