@@ -1,6 +1,6 @@
-![asl3-herald](web/img/asl3-herald-banner.svg)
+![ASL3-Herald](web/img/asl3-herald-banner.svg)
 
-![Release Version](https://img.shields.io/github/v/release/N6LKA/asl3-herald?label=Version&color=f15d24)
+![Release Version](https://img.shields.io/github/v/release/N6LKA/ASL3-Herald?label=Version&color=f15d24)
 ![Release Date](https://img.shields.io/badge/released-2026--07--15-green)
 ![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
 
@@ -52,7 +52,7 @@ Plus:
 **Stable (recommended):** installs from `main` — the tested, working release.
 
 ```bash
-curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/install.sh | sudo bash
+curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/ASL3-Herald/main/install.sh | sudo bash
 ```
 
 **Development (testing only):** installs from `develop` — whatever's currently being worked on ahead of the next release.
@@ -60,8 +60,8 @@ curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/
 > ⚠️ **Warning:** `develop` may contain incomplete, untested, or broken features at any given time. Only use this on a system where you can tolerate things breaking (or reinstall from `main` to recover). Don't use it on a repeater or node you depend on for daily use.
 
 ```bash
-curl -fsSL "https://github.com/N6LKA/asl3-herald/archive/refs/heads/develop.tar.gz" \
-  | tar -xzO asl3-herald-develop/install.sh \
+curl -fsSL "https://github.com/N6LKA/ASL3-Herald/archive/refs/heads/develop.tar.gz" \
+  | tar -xzO ASL3-Herald-develop/install.sh \
   | sudo bash -s -- --branch develop
 ```
 
@@ -86,13 +86,13 @@ The installer will:
 ## Uninstalling
 
 ```bash
-curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/uninstall.sh | sudo bash
+curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/ASL3-Herald/main/uninstall.sh | sudo bash
 ```
 
 By default this removes the daemon, `herald` CLI, systemd service, web UI, sudoers rule, and the Allmon3/Supermon integration lines it added — while **preserving** your config, announcements, state, and Piper TTS install so a future reinstall picks up where you left off. To also remove those:
 
 ```bash
-curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/asl3-herald/main/uninstall.sh | sudo bash -s -- --purge-all
+curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/ASL3-Herald/main/uninstall.sh | sudo bash -s -- --purge-all
 ```
 
 (`--purge-config` and `--purge-piper` are available individually too.)
