@@ -230,7 +230,7 @@
       const canMoveUp = i > 0;
       const canMoveDown = i < rotationList.length - 1;
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + (i + 1) + '</td><td>' + basename(file) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td><td>' + daysDisplay + '</td>' +
+      tr.innerHTML = '<td>' + (i + 1) + '</td><td class="col-wrap">' + basename(file) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td><td>' + daysDisplay + '</td>' +
         '<td>' + windowDisplay + '</td><td>' + (node || '—') + '</td><td>' +
         '<button class="btn-reorder" data-name="' + name + '" data-direction="up" title="Move up"' + (canMoveUp ? '' : ' disabled') + '>&uarr;</button>' +
         '<button class="btn-reorder" data-name="' + name + '" data-direction="down" title="Move down"' + (canMoveDown ? '' : ' disabled') + '>&darr;</button>' +
@@ -256,7 +256,7 @@
       const tr = document.createElement('tr');
       if (!enabled) tr.classList.add('sched-disabled');
       tr.innerHTML =
-        '<td>' + escapeAttr(s.Name) + '</td>' +
+        '<td class="col-wrap">' + escapeAttr(s.Name) + '</td>' +
         '<td><code>' + escapeAttr(cMin)  + '</code></td>' +
         '<td><code>' + escapeAttr(cHour) + '</code></td>' +
         '<td><code>' + escapeAttr(cDom)  + '</code></td>' +
@@ -264,7 +264,7 @@
         '<td><code>' + escapeAttr(cDow)  + '</code></td>' +
         '<td>' + (playMode === 'global' ? 'Global' : 'Local') + '</td>' +
         '<td>' + escapeAttr(s.Node || defaultNode) + '</td>' +
-        '<td>' + basename(s.File) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td>' +
+        '<td class="col-wrap">' + basename(s.File) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td>' +
         '<td><button class="' + (enabled ? 'btn-enable' : 'btn-disable') + ' btn-toggle-sched" data-name="' + escapeAttr(s.Name) + '">' + (enabled ? 'Enabled' : 'Disabled') + '</button></td>' +
         '<td>' +
         '<button class="btn-play" data-name="' + escapeAttr(s.Name) + '">Test (local playback)</button>' +
