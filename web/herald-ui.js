@@ -29,6 +29,10 @@
     return String(path || '').split('/').pop();
   }
 
+  function titleCase(s) {
+    return String(s || '').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
   async function api(path, options) {
     const res = await fetch(API + path, options || {});
     let data;
@@ -220,7 +224,7 @@
       const node = isObj ? entry.Node : null;
       const fileMissing = isObj && !!entry.FileMissing;
       const daysAttr = Array.isArray(days) ? days.join(',') : (days || 'daily');
-      const daysDisplay = Array.isArray(days) ? days.join(', ') : (days || 'Daily');
+      const daysDisplay = Array.isArray(days) ? days.map(titleCase).join(', ') : titleCase(days || 'daily');
       const windowDisplay = (timeStart || timeEnd) ? ((timeStart || '00:00') + '–' + (timeEnd || '23:59')) : '—';
       const name = basename(file).replace(/\.wav$/, '');
       const canMoveUp = i > 0;
