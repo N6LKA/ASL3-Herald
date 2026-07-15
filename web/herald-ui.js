@@ -221,6 +221,7 @@
     document.getElementById('set-swp-wxfile').value = data.tail_message.skywarnplus.wx_tail_file || '';
     document.getElementById('set-swp-threshold').value = data.tail_message.skywarnplus.silence_threshold;
 
+    const defaultNode = data.node || '—';
     const tbody = document.querySelector('#tail-table tbody');
     tbody.innerHTML = '';
     const rotationList = data.tail_message.rotation || [];
@@ -233,6 +234,7 @@
       const timeStart = isObj ? entry.TimeStart : null;
       const timeEnd = isObj ? entry.TimeEnd : null;
       const node = isObj ? entry.Node : null;
+      const enabled = isObj ? (entry.Enabled !== false) : true;
       const fileMissing = isObj && !!entry.FileMissing;
       const daysAttr = Array.isArray(days) ? days.join(',') : (days || 'daily');
       const daysDisplay = Array.isArray(days) ? days.map(titleCase).join(', ') : titleCase(days || 'daily');
@@ -241,8 +243,11 @@
       const canMoveUp = i > 0;
       const canMoveDown = i < rotationList.length - 1;
       const tr = document.createElement('tr');
+      if (!enabled) tr.classList.add('sched-disabled');
       tr.innerHTML = '<td>' + (i + 1) + '</td><td class="col-wrap">' + basename(file) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td><td>' + daysDisplay + '</td>' +
-        '<td>' + windowDisplay + '</td><td>' + (node || '—') + '</td><td>' +
+        '<td>' + windowDisplay + '</td><td>' + (node || defaultNode) + '</td>' +
+        '<td><button class="' + (enabled ? 'btn-enable' : 'btn-disable') + ' btn-toggle-rot" data-name="' + escapeAttr(name) + '">' + (enabled ? 'Enabled' : 'Disabled') + '</button></td>' +
+        '<td>' +
         '<button class="btn-reorder" data-name="' + name + '" data-direction="up" title="Move up"' + (canMoveUp ? '' : ' disabled') + '>&uarr;</button>' +
         '<button class="btn-reorder" data-name="' + name + '" data-direction="down" title="Move down"' + (canMoveDown ? '' : ' disabled') + '>&darr;</button>' +
         '<button class="btn-play" data-name="' + name + '">Test (local playback)</button>' +
@@ -250,8 +255,6 @@
         '<button class="btn-danger" data-name="' + name + '">Remove</button></td>';
       tbody.appendChild(tr);
     });
-
-    const defaultNode = data.node || '—';
     const stbody = document.querySelector('#sched-table tbody');
     stbody.innerHTML = '';
     (data.scheduled || []).forEach(s => {
@@ -353,6 +356,17 @@
     document.querySelectorAll('.btn-toggle-sched').forEach(btn => {
       btn.onclick = async () => {
         const data = await api('toggle_scheduled.php', { method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ name: btn.dataset.name }) });
+        if (data.success === false) {
+          alert(data.message || 'Toggle failed');
+          return;
+        }
+        loadAll();
+      };
+    });
+    document.querySelectorAll('.btn-toggle-rot').forEach(btn => {
+      btn.onclick = async () => {
+        const data = await api('toggle_rotation.php', { method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ name: btn.dataset.name }) });
         if (data.success === false) {
           alert(data.message || 'Toggle failed');
