@@ -109,6 +109,7 @@
   #herald-ui .btn-reorder:disabled { opacity: 0.3; cursor: default; }
   #herald-ui .btn-enable  { background: #27ae60; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-disable { background: #888;    color: #fff; border: none; border-radius: 4px; }
+  #herald-ui .btn-edit    { background: #e67e22; color: #fff; border: none; border-radius: 4px; }
   #herald-ui tr.sched-disabled td { opacity: 0.5; }
   #herald-ui .badge-missing {
     background: #e74c3c; color: #fff; font-size: 0.75em;
@@ -289,7 +290,7 @@
     <h3>Scheduled Announcements</h3>
     <p class="muted">Plays on a cron schedule, independent of node activity or MinInterval.</p>
     <table id="sched-table">
-      <thead><tr><th>Name</th><th>Min</th><th>Hour</th><th>DOM</th><th>Mon</th><th>DOW</th><th>Play Mode</th><th>Node</th><th>File</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Min</th><th>Hour</th><th>DOM</th><th>Mon</th><th>DOW</th><th>Play Mode</th><th>Node</th><th>File</th><th>Status</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
 
@@ -302,30 +303,20 @@
       <div style="margin-top: 12px;">
         <label style="margin-bottom: 4px;">Cron Schedule</label>
         <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin-top:4px;">
-          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Min</div><input type="text" id="sched-cron-min"  value="*" style="width:56px; text-align:center;"></div>
-          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Hour</div><input type="text" id="sched-cron-hour" value="*" style="width:56px; text-align:center;"></div>
-          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">DOM</div><input type="text" id="sched-cron-dom"  value="*" style="width:56px; text-align:center;"></div>
-          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Mon</div><input type="text" id="sched-cron-mon"  value="*" style="width:56px; text-align:center;"></div>
-          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">DOW</div><input type="text" id="sched-cron-dow"  value="*" style="width:56px; text-align:center;"></div>
+          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Minute</div><input type="text" id="sched-cron-min"  value="*" style="width:70px; text-align:center;"></div>
+          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Hour</div><input type="text" id="sched-cron-hour" value="*" style="width:70px; text-align:center;"></div>
+          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Day of Month</div><input type="text" id="sched-cron-dom"  value="*" style="width:70px; text-align:center;"></div>
+          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Month</div><input type="text" id="sched-cron-mon"  value="*" style="width:70px; text-align:center;"></div>
+          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Day of Week</div><input type="text" id="sched-cron-dow"  value="*" style="width:70px; text-align:center;"></div>
         </div>
-        <div style="margin-top:10px; padding:10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px; font-size:0.88em; line-height:1.6;">
-          <strong>Cron Field Reference</strong><br>
-          <strong>Min</strong> 0–59 &nbsp;|&nbsp; <strong>Hour</strong> 0–23 &nbsp;|&nbsp;
-          <strong>DOM</strong> Day of Month (1–31) &nbsp;|&nbsp; <strong>Mon</strong> Month (1–12) &nbsp;|&nbsp;
-          <strong>DOW</strong> Day of Week (0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat)<br>
-          <strong>Syntax:</strong> &nbsp;<code>*</code> = every &nbsp;&nbsp;
-          <code>*/n</code> = every n &nbsp;&nbsp;
-          <code>n,m</code> = specific values &nbsp;&nbsp;
-          <code>n-m</code> = range<br>
-          <table style="margin-top:6px; border-collapse:collapse; width:auto;">
-            <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">30 8 * * *</td><td style="color:#555;">Daily at 8:30 AM</td></tr>
-            <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">*/20 * * * *</td><td style="color:#555;">Every 20 minutes</td></tr>
-            <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">30 * * * *</td><td style="color:#555;">Every hour at :30 (12:30, 1:30, 2:30…)</td></tr>
-            <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 8 * * 1-5</td><td style="color:#555;">Weekdays (Mon–Fri) at 8:00 AM</td></tr>
-            <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 9 * * 0</td><td style="color:#555;">Sundays at 9:00 AM</td></tr>
-            <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 9 1 * *</td><td style="color:#555;">1st of each month at 9:00 AM</td></tr>
-            <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 12 * * 0,3</td><td style="color:#555;">Sundays and Wednesdays at noon</td></tr>
-          </table>
+        <div style="margin-top:6px; font-size:0.82em; color:#555; line-height:2.0;">
+          <code>0–59</code>&nbsp;&nbsp;|&nbsp;&nbsp;<code>0–23</code>&nbsp;&nbsp;|&nbsp;&nbsp;<code>1–31</code>&nbsp;&nbsp;|&nbsp;&nbsp;<code>1–12</code>&nbsp;&nbsp;|&nbsp;&nbsp;<code>0=Sun, 1=Mon … 6=Sat</code>
+        </div>
+        <div style="font-size:0.82em; color:#555; margin-top:1px;">
+          <code>*</code> = every &nbsp;&nbsp; <code>*/n</code> = every n &nbsp;&nbsp; <code>n,m</code> = specific values &nbsp;&nbsp; <code>n-m</code> = range
+        </div>
+        <div style="font-size:0.82em; color:#888; margin-top:2px; font-style:italic;">
+          ↓ See the Cron Reference and examples below.
         </div>
       </div>
 
@@ -371,6 +362,26 @@
       <button class="btn-primary" id="btn-add-sched">Add Scheduled Announcement</button>
       <button id="sched-edit-cancel" style="display:none;">Cancel Edit</button>
       <div class="msg" id="sched-msg"></div>
+
+      <div style="margin-top:16px; padding:10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px; font-size:0.88em; line-height:1.6;">
+        <strong>Cron Reference</strong><br>
+        <strong>Minute</strong> 0–59 &nbsp;|&nbsp; <strong>Hour</strong> 0–23 &nbsp;|&nbsp;
+        <strong>Day of Month</strong> 1–31 &nbsp;|&nbsp; <strong>Month</strong> 1–12 &nbsp;|&nbsp;
+        <strong>Day of Week</strong> 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat<br>
+        <strong>Syntax:</strong> &nbsp;<code>*</code> = every &nbsp;&nbsp;
+        <code>*/n</code> = every n &nbsp;&nbsp;
+        <code>n,m</code> = specific values &nbsp;&nbsp;
+        <code>n-m</code> = range<br>
+        <table style="margin-top:6px; border-collapse:collapse; width:auto;">
+          <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">30 8 * * *</td><td style="color:#555;">Daily at 8:30 AM</td></tr>
+          <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">*/20 * * * *</td><td style="color:#555;">Every 20 minutes</td></tr>
+          <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">30 * * * *</td><td style="color:#555;">Every hour at :30 (12:30, 1:30, 2:30…)</td></tr>
+          <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 8 * * 1-5</td><td style="color:#555;">Weekdays (Mon–Fri) at 8:00 AM</td></tr>
+          <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 9 * * 0</td><td style="color:#555;">Sundays at 9:00 AM</td></tr>
+          <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 9 1 * *</td><td style="color:#555;">1st of each month at 9:00 AM</td></tr>
+          <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 12 * * 0,3</td><td style="color:#555;">Sundays and Wednesdays at noon</td></tr>
+        </table>
+      </div>
     </div>
   </div>
 </div>
