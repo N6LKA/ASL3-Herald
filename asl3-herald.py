@@ -493,6 +493,9 @@ def log_playback(state, entry_type, name, filepath, node, play_mode="local"):
     state["playback_history"] = history[-MAX_PLAYBACK_HISTORY:]
 
 def should_play_scheduled(sched, state, node, now):
+    if not sched.get("Enabled", True):
+        return False
+
     name = sched.get("Name", "")
     minute_key = now.strftime("%Y-%m-%d %H:%M")
 
@@ -587,6 +590,7 @@ def scheduled_with_health(scheduled):
         s2["FileMissing"] = not (filepath and os.path.exists(filepath))
         if not s2.get("Cron"):
             s2["Cron"] = legacy_to_cron(s)
+        s2["Enabled"] = s.get("Enabled", True)
         out.append(s2)
     return out
 
@@ -754,6 +758,18 @@ def cmd_edit_scheduled(config, args):
     save_config(config)
     print(json.dumps({"success": True, "message": f"Updated scheduled announcement: {new_name}"}))
 
+def cmd_toggle_scheduled(config, args):
+    scheduled = config.setdefault("Scheduled", [])
+    for i, s in enumerate(scheduled):
+        if s.get("Name") == args.name:
+            current = s.get("Enabled", True)
+            scheduled[i]["Enabled"] = not current
+            save_config(config)
+            state = "enabled" if not current else "disabled"
+            print(json.dumps({"success": True, "message": f"Scheduled announcement '{args.name}' {state}", "enabled": not current}))
+            return
+    print(json.dumps({"success": False, "message": f"No scheduled entry found for: {args.name}"}))
+
 def cmd_remove(config, identifier):
     tm = config.setdefault("TailMessage", {})
     rotation = tm.setdefault("Rotation", [])
@@ -915,6 +931,9 @@ def build_arg_parser():
     p_edit_sched.add_argument("--file", default=None)
     p_edit_sched.add_argument("--node", default=None)
 
+    p_toggle_sched = sub.add_parser("toggle-scheduled", help="Toggle a scheduled announcement enabled/disabled")
+    p_toggle_sched.add_argument("name")
+
     p_remove = sub.add_parser("remove", help="Remove a rotation file or scheduled announcement by name")
     p_remove.add_argument("identifier")
 
@@ -965,6 +984,8 @@ def cli_main():
         cmd_edit_rotation(config, args)
     elif args.command == "add-scheduled":
         cmd_add_scheduled(config, args)
+    elif args.command == "toggle-scheduled":
+        cmd_toggle_scheduled(config, args)
     elif args.command == "edit-scheduled":
         cmd_edit_scheduled(config, args)
     elif args.command == "remove":
