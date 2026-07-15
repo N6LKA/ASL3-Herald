@@ -200,16 +200,27 @@ PYEOF
         fi
     }
 
-    # US voices
-    download_voice "en_US-lessac-medium.onnx"     "en/en_US/lessac/medium/en_US-lessac-medium.onnx"         "en/en_US/lessac/medium/en_US-lessac-medium.onnx.json"
-    download_voice "en_US-joe-medium.onnx"        "en/en_US/joe/medium/en_US-joe-medium.onnx"               "en/en_US/joe/medium/en_US-joe-medium.onnx.json"
-    download_voice "en_US-amy-medium.onnx"        "en/en_US/amy/medium/en_US-amy-medium.onnx"               "en/en_US/amy/medium/en_US-amy-medium.onnx.json"
-    download_voice "en_US-kristin-medium.onnx"    "en/en_US/kristin/medium/en_US-kristin-medium.onnx"       "en/en_US/kristin/medium/en_US-kristin-medium.onnx.json"
-    download_voice "en_US-libritts_r-medium.onnx" "en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx" "en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx.json"
-    download_voice "en_US-ryan-low.onnx"          "en/en_US/ryan/low/en_US-ryan-low.onnx"                   "en/en_US/ryan/low/en_US-ryan-low.onnx.json"
+    # US English voices
+    download_voice "en_US-amy-medium.onnx"         "en/en_US/amy/medium/en_US-amy-medium.onnx"                       "en/en_US/amy/medium/en_US-amy-medium.onnx.json"
+    download_voice "en_US-arctic-medium.onnx"      "en/en_US/arctic/medium/en_US-arctic-medium.onnx"                 "en/en_US/arctic/medium/en_US-arctic-medium.onnx.json"
+    download_voice "en_US-bryce-medium.onnx"       "en/en_US/bryce/medium/en_US-bryce-medium.onnx"                   "en/en_US/bryce/medium/en_US-bryce-medium.onnx.json"
+    download_voice "en_US-hfc_female-medium.onnx"  "en/en_US/hfc_female/medium/en_US-hfc_female-medium.onnx"         "en/en_US/hfc_female/medium/en_US-hfc_female-medium.onnx.json"
+    download_voice "en_US-hfc_male-medium.onnx"    "en/en_US/hfc_male/medium/en_US-hfc_male-medium.onnx"             "en/en_US/hfc_male/medium/en_US-hfc_male-medium.onnx.json"
+    download_voice "en_US-joe-medium.onnx"         "en/en_US/joe/medium/en_US-joe-medium.onnx"                       "en/en_US/joe/medium/en_US-joe-medium.onnx.json"
+    download_voice "en_US-john-medium.onnx"        "en/en_US/john/medium/en_US-john-medium.onnx"                     "en/en_US/john/medium/en_US-john-medium.onnx.json"
+    download_voice "en_US-kristin-medium.onnx"     "en/en_US/kristin/medium/en_US-kristin-medium.onnx"               "en/en_US/kristin/medium/en_US-kristin-medium.onnx.json"
+    download_voice "en_US-kusal-medium.onnx"       "en/en_US/kusal/medium/en_US-kusal-medium.onnx"                   "en/en_US/kusal/medium/en_US-kusal-medium.onnx.json"
+    download_voice "en_US-lessac-medium.onnx"      "en/en_US/lessac/medium/en_US-lessac-medium.onnx"                 "en/en_US/lessac/medium/en_US-lessac-medium.onnx.json"
+    download_voice "en_US-libritts_r-medium.onnx"  "en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx"         "en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx.json"
+    download_voice "en_US-norman-medium.onnx"      "en/en_US/norman/medium/en_US-norman-medium.onnx"                 "en/en_US/norman/medium/en_US-norman-medium.onnx.json"
+    download_voice "en_US-ryan-medium.onnx"        "en/en_US/ryan/medium/en_US-ryan-medium.onnx"                     "en/en_US/ryan/medium/en_US-ryan-medium.onnx.json"
     # British English voices
-    download_voice "en_GB-alan-medium.onnx"       "en/en_GB/alan/medium/en_GB-alan-medium.onnx"             "en/en_GB/alan/medium/en_GB-alan-medium.onnx.json"
-    download_voice "en_GB-cori-high.onnx"         "en/en_GB/cori/high/en_GB-cori-high.onnx"                 "en/en_GB/cori/high/en_GB-cori-high.onnx.json"
+    download_voice "en_GB-alan-medium.onnx"                  "en/en_GB/alan/medium/en_GB-alan-medium.onnx"                                       "en/en_GB/alan/medium/en_GB-alan-medium.onnx.json"
+    download_voice "en_GB-alba-medium.onnx"                  "en/en_GB/alba/medium/en_GB-alba-medium.onnx"                                       "en/en_GB/alba/medium/en_GB-alba-medium.onnx.json"
+    download_voice "en_GB-aru-medium.onnx"                   "en/en_GB/aru/medium/en_GB-aru-medium.onnx"                                         "en/en_GB/aru/medium/en_GB-aru-medium.onnx.json"
+    download_voice "en_GB-cori-medium.onnx"                  "en/en_GB/cori/medium/en_GB-cori-medium.onnx"                                       "en/en_GB/cori/medium/en_GB-cori-medium.onnx.json"
+    download_voice "en_GB-jenny_dioco-medium.onnx"           "en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium.onnx"                         "en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium.onnx.json"
+    download_voice "en_GB-northern_english_male-medium.onnx" "en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.onnx"     "en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.onnx.json"
 
     chmod 644 "$PIPER_VOICE_DIR"/*.onnx "$PIPER_VOICE_DIR"/*.onnx.json 2>/dev/null || true
     VOICES_INSTALLED=()
