@@ -265,9 +265,9 @@
         '<td>' + (playMode === 'global' ? 'Global' : 'Local') + '</td>' +
         '<td>' + escapeAttr(s.Node || defaultNode) + '</td>' +
         '<td>' + basename(s.File) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td>' +
+        '<td><button class="' + (enabled ? 'btn-enable' : 'btn-disable') + ' btn-toggle-sched" data-name="' + escapeAttr(s.Name) + '">' + (enabled ? 'Enabled' : 'Disabled') + '</button></td>' +
         '<td>' +
-        '<button class="btn-play" data-name="' + escapeAttr(s.Name) + '">Test</button>' +
-        '<button class="' + (enabled ? 'btn-enable' : 'btn-disable') + ' btn-toggle-sched" data-name="' + escapeAttr(s.Name) + '">' + (enabled ? 'Enabled' : 'Disabled') + '</button>' +
+        '<button class="btn-play" data-name="' + escapeAttr(s.Name) + '">Test (local playback)</button>' +
         '<button class="btn-edit" data-type="sched" data-name="' + escapeAttr(s.Name) + '" data-cron="' + escapeAttr(cron) + '" data-playmode="' + playMode + '" data-node="' + escapeAttr(s.Node) + '" data-text="' + escapeAttr(s.Text) + '" data-voice="' + escapeAttr(s.Voice) + '">Edit</button>' +
         '<button class="btn-danger" data-name="' + escapeAttr(s.Name) + '">Remove</button>' +
         '</td>';
