@@ -1,12 +1,12 @@
 ![asl3-herald](web/img/asl3-herald-banner.svg)
 
 ![Release Version](https://img.shields.io/github/v/release/N6LKA/asl3-herald?label=Version&color=f15d24)
-![Release Date](https://img.shields.io/badge/released-2026--07--14-green)
+![Release Date](https://img.shields.io/badge/released-2026--07--15-green)
 ![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
 
 **Enhanced tail message daemon for ASL3/app_rpt with advanced announcement features.**
 
-`asl3-herald` is a drop-in replacement and enhancement for the native `app_rpt` tail message function. It provides reliable unkey detection, rotating messages, SkywarnPlus weather alert integration with priority playback, scheduled time-based announcements (including nth-week-of-month scheduling), neural TTS voices, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
+`asl3-herald` is a drop-in replacement and enhancement for the native `app_rpt` tail message function. It provides reliable unkey detection, rotating messages, SkywarnPlus weather alert integration with priority playback, cron-style scheduled announcements, neural TTS voices, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
 
 ---
 
@@ -22,8 +22,7 @@
   - **Optional day/time-window gating per entry** — a rotation entry can be restricted to specific days of the week and/or a time-of-day window (e.g. a net-announcement tail message that's only eligible Tuesday evenings); entries without gating stay eligible all the time, same as before
 
 - **Scheduled Announcements** — clock-triggered, independent of repeater activity:
-  - Plays a specific file at a configured time of day, on selected days of the week
-  - Optional nth-week-of-month scheduling (e.g. "2nd Saturday of the month")
+  - Plays a specific file on a **cron-style schedule** (`MIN HOUR DOM MON DOW`) — fire once at a specific time, every N minutes, on selected days, and more
   - **Local or global playback** — each scheduled announcement can play locally on this node only (`rpt localplay`, the default) or globally to all connected/linked nodes (`rpt playback`)
   - **Waits for unkey** — if the node is currently keyed when a scheduled announcement is due, it holds off rather than playing over live traffic, and keeps checking until the node unkeys
   - **Takes precedence over tail messages** — if a scheduled announcement and a tail message would both fire at the same moment, the scheduled announcement always plays; the tail message simply retries on its next unkey once the announcement has finished, with no penalty against `MinInterval`
@@ -117,9 +116,7 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 | `TailMessage.SkywarnPlus.WxTailFile` | `/tmp/SkywarnPlus/wx-tail.wav` | Path to SkywarnPlus wx-tail.wav |
 | `TailMessage.SkywarnPlus.SilenceThreshold` | `5000` | File size (bytes) to distinguish active alerts from silence |
 | `Scheduled[].Name` | _(required)_ | Unique name for the scheduled announcement |
-| `Scheduled[].Time` | _(required)_ | Time to play, `HH:MM` (24-hour) |
-| `Scheduled[].Days` | `daily` | `daily` or a list: `[saturday, sunday]` |
-| `Scheduled[].Week` | _(none)_ | Optional: 1-5 (5 = last week of month); omit for every matching day |
+| `Scheduled[].Cron` | _(required)_ | 5-field cron expression: `MIN HOUR DOM MON DOW` |
 | `Scheduled[].File` | _(required)_ | Path to WAV file to play |
 | `Scheduled[].PlayMode` | `local` | `local` (this node only) or `global` (all connected/linked nodes) |
 | `Scheduled[].Node` | _(daemon's `Node`)_ | Optional: target a specific node number for this entry (multinodes= setups) |
@@ -145,14 +142,11 @@ TailMessage:
 
 Scheduled:
   - Name: "ARRL Audio News"
-    Time: "07:30"
-    Days: ["saturday"]
+    Cron: "30 7 * * 6"           # Saturdays at 7:30 AM
     File: /etc/asterisk/scripts/asl3-herald/announcements/arrl-news.wav
 
   - Name: "Second Saturday Breakfast Net"
-    Time: "08:00"
-    Days: ["saturday"]
-    Week: 2
+    Cron: "0 8 8-14 * 6"         # 2nd Saturday (DOM 8-14, DOW 6) at 8:00 AM
     File: /etc/asterisk/scripts/asl3-herald/announcements/breakfast-net.wav
 ```
 
@@ -193,9 +187,17 @@ Scheduled:
 
 | Command | Description |
 |---|---|
-| `sudo herald add-schedule "<text>" --name <name> --time HH:MM [--days daily\|d1,d2] [--week 1-5] [--voice <voice>] [--play-mode local\|global] [--node <n>]` | Generate TTS WAV and schedule it |
-| `sudo herald add-schedule-file <path> --name <name> --time HH:MM [--days daily\|d1,d2] [--week 1-5] [--play-mode local\|global] [--node <n>]` | Schedule an existing WAV file |
-| `sudo herald edit-schedule <name> [--new-name <n>] [--time HH:MM] [--days ...] [--week 1-5] [--play-mode local\|global] [--text "<text>"] [--voice <v>] [--file <path>] [--node <n>]` | Edit an existing scheduled announcement in place |
+| `sudo herald add-schedule "<text>" --name <name> --cron "MIN HOUR DOM MON DOW" [--voice <voice>] [--play-mode local\|global] [--node <n>]` | Generate TTS WAV and schedule it |
+| `sudo herald add-schedule-file <path> --name <name> --cron "MIN HOUR DOM MON DOW" [--play-mode local\|global] [--node <n>]` | Schedule an existing WAV file |
+| `sudo herald edit-schedule <name> [--new-name <n>] [--cron "MIN HOUR DOM MON DOW"] [--play-mode local\|global] [--text "<text>"] [--voice <v>] [--file <path>] [--node <n>]` | Edit an existing scheduled announcement in place |
+
+**Cron field reference:** `MIN` (0–59)  `HOUR` (0–23)  `DOM` = Day of Month (1–31)  `MON` = Month (1–12)  `DOW` = Day of Week (0=Sun, 1=Mon … 6=Sat). Use `*` for every, `*/n` for every-n, `n,m` for specific values, `n-m` for a range.
+
+```bash
+sudo herald add-schedule "ARRL Audio News follows" --name arrl-news --cron "30 7 * * 6"   # Saturdays at 7:30 AM
+sudo herald add-schedule "Net check-in time" --name net-checkin --cron "*/20 * * * *"      # every 20 minutes
+sudo herald add-schedule "Hourly ID" --name hourly-id --cron "30 * * * *"                  # every hour at :30
+```
 
 A scheduled announcement waits for the node to unkey before playing (rather than interrupting live traffic) and always takes precedence over a tail message due at the same moment.
 
@@ -297,7 +299,7 @@ Every poll, **scheduled announcements are checked first**, before the unkey/tail
 
 A newly-appeared or changed WX alert always plays immediately, taking priority over the rotation. But a **persistent** alert (unchanged since it last played — detected via `wx-tail.wav`'s own modification time, not a separate/optional SkywarnPlus feed) alternates with the rotation on each unkey instead of playing every single time, so a long-running alert (common in some areas, e.g. summer heat warnings) doesn't shut the rotation out entirely. As soon as the alert changes or a new one appears, it immediately jumps back to the front of the line.
 
-**Scheduled announcements** run on a separate time-based path, unaffected by the tail message interval or repeater activity. They fire once per configured `HH:MM` per day, optionally restricted to a specific week of the month via `Week`. If the node is currently keyed when a scheduled announcement is due, it holds off and keeps re-checking every poll — even after the matching minute has passed — until the node unkeys, rather than missing the announcement or talking over live traffic. Once a scheduled announcement plays, its estimated audio duration (via `soxi`, or an 8-second fallback estimate) holds off any tail message for that long, so the two never overlap — this is also how a scheduled announcement takes precedence when both would fire at the same moment.
+**Scheduled announcements** run on a separate time-based path, unaffected by the tail message interval or repeater activity. They are driven by a standard 5-field cron expression (`MIN HOUR DOM MON DOW`) and can fire once at a specific time, at a repeating interval (e.g. `*/20 * * * *` = every 20 minutes), or on any cron-expressible schedule. Each entry fires at most once per matching minute; a `*/20` entry fires three times an hour, not once per day. If the node is currently keyed when a scheduled announcement is due, it holds off and keeps re-checking every poll — even after the matching minute has passed — until the node unkeys, rather than missing the announcement or talking over live traffic. Once a scheduled announcement plays, its estimated audio duration (via `soxi`, or an 8-second fallback estimate) holds off any tail message for that long, so the two never overlap — this is also how a scheduled announcement takes precedence when both would fire at the same moment.
 
 State (rotation index, WX alternation, scheduled "waiting for unkey" status, and last played times) is saved to a JSON file so it survives service restarts.
 
