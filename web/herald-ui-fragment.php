@@ -176,34 +176,34 @@
 <div class="tab-panel active" id="tab-info">
   <div class="card">
     <h3>Tail Messages <span class="muted" style="font-weight:normal; font-size:0.85em;">(Unkey-Triggered)</span></h3>
-    <p>A <strong>Tail Message</strong> plays automatically after someone unkeys on the repeater — timed so it plays after the courtesy tone, just like a native tail message. They rotate through your configured list in order, gated by the <strong>MinInterval</strong> so they don't play too frequently.</p>
+    <p>A <strong>Tail Message</strong> plays automatically after someone unkeys on the node — timed so it plays after the courtesy tone, just like a native tail message. They rotate through your configured list in order, gated by the <strong>MinInterval</strong> so they don't play too frequently.</p>
     <ul style="margin: 8px 0 8px 20px; line-height: 1.8;">
-      <li><strong>Tail messages always play on this local repeater only</strong> — they never go out to connected or linked nodes, regardless of any setting.</li>
+      <li><strong>Tail messages always play on this local node only</strong> — they never go out to connected or linked nodes, regardless of any setting.</li>
       <li>When a SkywarnPlus WX alert is active, the WX audio takes priority over the rotation and plays instead (alternating with rotation entries while the alert persists).</li>
     </ul>
 
     <div style="background:#fff8e1; border:1px solid #f0c040; border-radius:6px; padding:10px 14px; margin-top:8px;">
       <strong>The RF / Network Trigger Toggle (in Settings)</strong><br>
-      This toggle controls <em>what event triggers</em> a tail message — it does <strong>not</strong> change where the audio plays. Tail messages always play on this local repeater, always.
+      This toggle controls <em>what event triggers</em> a tail message — it does <strong>not</strong> change where the audio plays. Tail messages always play on this local node.
       <ul style="margin: 6px 0 0 20px; line-height:1.8;">
-        <li><strong>RF only (toggle off):</strong> a tail message fires when a local RF transmission ends (someone keys up on your repeater's input).</li>
-        <li><strong>RF + Network (toggle on):</strong> a tail message also fires when a connected AllStar node unkeys — useful if you want your repeater to tail-message after remote traffic too.</li>
+        <li><strong>RF only (toggle off):</strong> a tail message fires when a local RF transmission ends (someone keys up on your node's input).</li>
+        <li><strong>RF + Network (toggle on):</strong> a tail message also fires when a connected AllStar node unkeys — useful if you want your node to tail-message after remote traffic too.</li>
       </ul>
-      Either way, the tail message audio goes out on <em>this repeater only</em>.
+      Either way, the tail message audio goes out on <em>this node only</em>.
     </div>
   </div>
 
   <div class="card">
     <h3>Scheduled Announcements <span class="muted" style="font-weight:normal; font-size:0.85em;">(Clock-Triggered)</span></h3>
-    <p>A <strong>Scheduled Announcement</strong> plays at a configured time based on a cron schedule — completely independent of repeater activity or MinInterval. Common uses: ARRL Audio News every Saturday morning, a net reminder every Tuesday evening, or an ID drop every 30 minutes.</p>
+    <p>A <strong>Scheduled Announcement</strong> plays at a configured time based on a cron schedule — completely independent of node activity or MinInterval. Common uses: ARRL Audio News every Saturday morning, a net reminder every Tuesday evening, or an ID drop every 30 minutes.</p>
     <ul style="margin: 8px 0 8px 20px; line-height: 1.8;">
-      <li><strong>Waits for the node to unkey</strong> — if the repeater is in use when the scheduled time arrives, Herald holds the announcement and plays it as soon as the node is clear rather than talking over live traffic.</li>
+      <li><strong>Waits for the node to unkey</strong> — if the node is in use when the scheduled time arrives, Herald holds the announcement and plays it as soon as the node is clear rather than talking over live traffic.</li>
       <li><strong>Takes priority over tail messages</strong> — if a tail message and a scheduled announcement would both fire at the same moment, the scheduled announcement always goes first.</li>
-      <li><strong>Can play locally or globally</strong> — unlike tail messages, each scheduled announcement has its own <em>Play Mode</em>: <strong>Local</strong> plays on this repeater only; <strong>Global</strong> sends audio to all connected and linked AllStar nodes simultaneously.</li>
+      <li><strong>Can play locally or globally</strong> — unlike tail messages, each scheduled announcement has its own <em>Play Mode</em>: <strong>Local</strong> plays on this node only; <strong>Global</strong> sends audio to all connected and linked AllStar nodes simultaneously.</li>
     </ul>
 
     <div style="background:#fdecea; border:1px solid #e74c3c; border-radius:6px; padding:10px 14px; margin-top:8px;">
-      <strong>⚠ Use Global Play Mode with caution.</strong> Selecting Global sends the announcement audio to <em>every node currently linked to yours</em> — other clubs' repeaters, remote receivers, and any other systems in your AllStar network. Only choose Global if you are certain all connected nodes should receive this announcement. When in doubt, use Local.
+      <strong>⚠ Use Global Play Mode with caution.</strong> Selecting Global sends the announcement audio to <em>every node currently linked to yours</em> — other clubs' repeaters, remote nodes, and any other systems in your AllStar network. Only choose Global if you are certain all connected nodes should receive this announcement. When in doubt, use Local.
     </div>
   </div>
 </div>
@@ -285,7 +285,7 @@
 <div class="tab-panel" id="tab-scheduled">
   <div class="card">
     <h3>Scheduled Announcements</h3>
-    <p class="muted">Plays on a cron schedule, independent of repeater activity or MinInterval.</p>
+    <p class="muted">Plays on a cron schedule, independent of node activity or MinInterval.</p>
     <table id="sched-table">
       <thead><tr><th>Name</th><th>Schedule</th><th>Play Mode</th><th>Node</th><th>File</th><th></th></tr></thead>
       <tbody></tbody>
