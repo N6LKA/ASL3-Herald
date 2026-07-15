@@ -301,21 +301,38 @@
       <input type="text" id="sched-name" placeholder="e.g. arrl-news">
 
       <div style="margin-top: 12px;">
-        <label style="margin-bottom: 4px;">Cron Schedule</label>
-        <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin-top:4px;">
-          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Minute</div><input type="text" id="sched-cron-min"  value="*" style="width:70px; text-align:center;"></div>
-          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Hour</div><input type="text" id="sched-cron-hour" value="*" style="width:70px; text-align:center;"></div>
-          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Day of Month</div><input type="text" id="sched-cron-dom"  value="*" style="width:70px; text-align:center;"></div>
-          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Month</div><input type="text" id="sched-cron-mon"  value="*" style="width:70px; text-align:center;"></div>
-          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Day of Week</div><input type="text" id="sched-cron-dow"  value="*" style="width:70px; text-align:center;"></div>
+        <label style="margin-bottom: 6px;">Cron Schedule</label>
+        <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-top:6px;">
+          <div style="text-align:center;">
+            <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Minute</div>
+            <input type="text" id="sched-cron-min"  value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
+            <div style="font-size:0.88em; color:#666; margin-top:4px;">0–59</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Hour</div>
+            <input type="text" id="sched-cron-hour" value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
+            <div style="font-size:0.88em; color:#666; margin-top:4px;">0–23</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Day of Month</div>
+            <input type="text" id="sched-cron-dom"  value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
+            <div style="font-size:0.88em; color:#666; margin-top:4px;">1–31</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Month</div>
+            <input type="text" id="sched-cron-mon"  value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
+            <div style="font-size:0.88em; color:#666; margin-top:4px;">1–12</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Day of Week</div>
+            <input type="text" id="sched-cron-dow"  value="*" style="width:110px; text-align:center; display:block; margin:0 auto;">
+            <div style="font-size:0.88em; color:#666; margin-top:4px;">0=Sun … 6=Sat</div>
+          </div>
         </div>
-        <div style="margin-top:6px; font-size:0.82em; color:#555; line-height:2.0;">
-          <code>0–59</code>&nbsp;&nbsp;|&nbsp;&nbsp;<code>0–23</code>&nbsp;&nbsp;|&nbsp;&nbsp;<code>1–31</code>&nbsp;&nbsp;|&nbsp;&nbsp;<code>1–12</code>&nbsp;&nbsp;|&nbsp;&nbsp;<code>0=Sun, 1=Mon … 6=Sat</code>
-        </div>
-        <div style="font-size:0.82em; color:#555; margin-top:1px;">
+        <div style="margin-top:10px; font-size:0.92em; color:#555;">
           <code>*</code> = every &nbsp;&nbsp; <code>*/n</code> = every n &nbsp;&nbsp; <code>n,m</code> = specific values &nbsp;&nbsp; <code>n-m</code> = range
         </div>
-        <div style="font-size:0.82em; color:#888; margin-top:2px; font-style:italic;">
+        <div style="font-size:0.92em; color:#888; margin-top:4px; font-style:italic;">
           ↓ See the Cron Reference and examples below.
         </div>
       </div>
