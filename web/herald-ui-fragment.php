@@ -248,9 +248,9 @@
 <div class="tab-panel" id="tab-scheduled">
   <div class="card">
     <h3>Scheduled Announcements</h3>
-    <p class="muted">Plays at a specific time of day, independent of repeater activity or MinInterval.</p>
+    <p class="muted">Plays on a cron schedule, independent of repeater activity or MinInterval.</p>
     <table id="sched-table">
-      <thead><tr><th>Name</th><th>Time</th><th>Days</th><th>Week</th><th>Play Mode</th><th>Node</th><th>File</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Schedule</th><th>Play Mode</th><th>Node</th><th>File</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
 
@@ -260,38 +260,37 @@
       <label>Name (letters, numbers, hyphens only — no spaces)</label>
       <input type="text" id="sched-name" placeholder="e.g. arrl-news">
 
-      <div class="field-row" style="margin-top: 8px;">
-        <div>
-          <label>Time (24-hour)</label>
-          <input type="time" id="sched-time">
+      <div style="margin-top: 12px;">
+        <label style="margin-bottom: 4px;">Cron Schedule</label>
+        <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin-top:4px;">
+          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Min</div><input type="text" id="sched-cron-min"  value="*" style="width:56px; text-align:center;"></div>
+          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Hour</div><input type="text" id="sched-cron-hour" value="*" style="width:56px; text-align:center;"></div>
+          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">DOM</div><input type="text" id="sched-cron-dom"  value="*" style="width:56px; text-align:center;"></div>
+          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">Mon</div><input type="text" id="sched-cron-mon"  value="*" style="width:56px; text-align:center;"></div>
+          <div style="text-align:center;"><div style="font-size:0.8em; color:#555; margin-bottom:2px;">DOW</div><input type="text" id="sched-cron-dow"  value="*" style="width:56px; text-align:center;"></div>
         </div>
-        <div>
-          <label>Days</label>
-          <div class="days-picker" id="sched-days">
-            <label><input type="checkbox" value="daily" id="sched-day-daily" checked> Daily</label>
-            <label><input type="checkbox" value="sunday"> Sun</label>
-            <label><input type="checkbox" value="monday"> Mon</label>
-            <label><input type="checkbox" value="tuesday"> Tue</label>
-            <label><input type="checkbox" value="wednesday"> Wed</label>
-            <label><input type="checkbox" value="thursday"> Thu</label>
-            <label><input type="checkbox" value="friday"> Fri</label>
-            <label><input type="checkbox" value="saturday"> Sat</label>
-          </div>
-        </div>
-        <div>
-          <label>Week of month (optional)</label>
-          <select id="sched-week">
-            <option value="">Every week</option>
-            <option value="1">1st week</option>
-            <option value="2">2nd week</option>
-            <option value="3">3rd week</option>
-            <option value="4">4th week</option>
-            <option value="5">Last week</option>
-          </select>
+        <div style="margin-top:10px; padding:10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px; font-size:0.88em; line-height:1.6;">
+          <strong>Cron Field Reference</strong><br>
+          <strong>Min</strong> 0–59 &nbsp;|&nbsp; <strong>Hour</strong> 0–23 &nbsp;|&nbsp;
+          <strong>DOM</strong> Day of Month (1–31) &nbsp;|&nbsp; <strong>Mon</strong> Month (1–12) &nbsp;|&nbsp;
+          <strong>DOW</strong> Day of Week (0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat)<br>
+          <strong>Syntax:</strong> &nbsp;<code>*</code> = every &nbsp;&nbsp;
+          <code>*/n</code> = every n &nbsp;&nbsp;
+          <code>n,m</code> = specific values &nbsp;&nbsp;
+          <code>n-m</code> = range<br>
+          <table style="margin-top:6px; border-collapse:collapse; width:auto;">
+            <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">30 8 * * *</td><td style="color:#555;">Daily at 8:30 AM</td></tr>
+            <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">*/20 * * * *</td><td style="color:#555;">Every 20 minutes</td></tr>
+            <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">30 * * * *</td><td style="color:#555;">Every hour at :30 (12:30, 1:30, 2:30…)</td></tr>
+            <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 8 * * 1-5</td><td style="color:#555;">Weekdays (Mon–Fri) at 8:00 AM</td></tr>
+            <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 9 * * 0</td><td style="color:#555;">Sundays at 9:00 AM</td></tr>
+            <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 9 1 * *</td><td style="color:#555;">1st of each month at 9:00 AM</td></tr>
+            <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 12 * * 0,3</td><td style="color:#555;">Sundays and Wednesdays at noon</td></tr>
+          </table>
         </div>
       </div>
 
-      <div class="field-row">
+      <div class="field-row" style="margin-top:12px;">
         <div>
           <label>Play Mode</label>
           <select id="sched-playmode">
@@ -407,6 +406,7 @@
 
         <label>Silence Threshold (bytes)</label>
         <input type="text" id="set-swp-threshold" style="width: 100px;">
+        <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;">When enabled, active WX alerts take priority over tail message rotation. Herald alternates between the WX alert and your normal rotation — the alert plays first, then one rotation message, then the alert again. A new or updated alert file always plays immediately on the next unkey. When no alert is active, normal rotation resumes. SkywarnPlus messages do not affect the cron-scheduled announcement timing.</p>
       </div>
     </div>
 
