@@ -327,7 +327,7 @@ mkdir -p "$WEB_DIR/api" "$WEB_DIR/img"
 for f in herald-common.php herald-ui-fragment.php herald-ui.js; do
     fetch_repo_file "web/$f" "$WEB_DIR/$f"
 done
-for f in list.php voices.php play.php reload.php toggle.php remove.php add_rotation.php add_scheduled.php edit_rotation.php edit_scheduled.php settings.php reorder_rotation.php playback_history.php clear_history.php config_export.php config_import.php version_check.php; do
+for f in list.php voices.php play.php reload.php toggle.php toggle_scheduled.php remove.php add_rotation.php add_scheduled.php edit_rotation.php edit_scheduled.php settings.php reorder_rotation.php playback_history.php clear_history.php config_export.php config_import.php version_check.php; do
     fetch_repo_file "web/api/$f" "$WEB_DIR/api/$f"
 done
 for f in asl3-herald-icon.svg asl3-herald-banner.svg; do
@@ -492,7 +492,7 @@ echo "  1. Edit config:   nano $CONFIG_DIR/asl3-herald.conf"
 echo "  2. Add a message: sudo herald add \"This is W1ABC, repeater ID.\" --name id"
 echo "  3. List voices:   herald voices"
 echo ""
-echo "  Manage:  herald <status|enable|disable|reload|voices|add|add-file|list|remove|play|add-schedule|add-schedule-file|reorder-rotation|playback-history|export-config|import-config>"
+echo "  Manage:  herald <status|enable|disable|reload|voices|add|add-file|list|remove|play|add-schedule|add-schedule-file|toggle-schedule|reorder-rotation|playback-history|export-config|import-config>"
 echo ""
 echo "  Web UI:  installed to $WEB_DIR"
 if [[ -d /etc/allmon3 ]]; then
