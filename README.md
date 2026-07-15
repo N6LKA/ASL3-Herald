@@ -14,14 +14,14 @@
 
 `asl3-herald` covers two distinct functions:
 
-- **Tail Messages** — unkey-triggered, reactive to repeater activity:
+- **Tail Messages** — unkey-triggered, reactive to node activity:
   - **Reliable unkey detection** — uses the Asterisk Manager Interface (AMI) for real-time, event-driven unkey detection that fires at the actual unkey (before the courtesy tone), giving a seamless native-feel tail message; falls back to the legacy `rpt stats` kerchunk counter if AMI credentials aren't available
   - **Network keyup support** — with AMI active, the optional `NetworkKeyupTrigger` setting also fires tail messages after a connected AllStar node unkeys (not just local RF)
   - **Rotating messages** — cycles through a list of announcement files in order with a configurable minimum interval between plays
   - **SkywarnPlus WX integration** — when weather alerts are active, plays the SkywarnPlus `wx-tail.wav` file instead of the normal rotation (WX always takes priority)
   - **Optional day/time-window gating per entry** — a rotation entry can be restricted to specific days of the week and/or a time-of-day window (e.g. a net-announcement tail message that's only eligible Tuesday evenings); entries without gating stay eligible all the time, same as before
 
-- **Scheduled Announcements** — clock-triggered, independent of repeater activity:
+- **Scheduled Announcements** — clock-triggered, independent of node activity:
   - Plays a specific file on a **cron-style schedule** (`MIN HOUR DOM MON DOW`) — fire once at a specific time, every N minutes, on selected days, and more
   - **Local or global playback** — each scheduled announcement can play locally on this node only (`rpt localplay`, the default) or globally to all connected/linked nodes (`rpt playback`)
   - **Waits for unkey** — if the node is currently keyed when a scheduled announcement is due, it holds off rather than playing over live traffic, and keeps checking until the node unkeys
@@ -55,7 +55,7 @@ curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/
 
 **Development (testing only):** installs from `develop` — whatever's currently being worked on ahead of the next release.
 
-> ⚠️ **Warning:** `develop` may contain incomplete, untested, or broken features at any given time. Only use this on a system where you can tolerate things breaking (or reinstall from `main` to recover). Don't use it on a repeater you depend on for daily use.
+> ⚠️ **Warning:** `develop` may contain incomplete, untested, or broken features at any given time. Only use this on a system where you can tolerate things breaking (or reinstall from `main` to recover). Don't use it on a repeater or node you depend on for daily use.
 
 ```bash
 curl -fsSL "https://github.com/N6LKA/asl3-herald/archive/refs/heads/develop.tar.gz" \
@@ -299,7 +299,7 @@ Every poll, **scheduled announcements are checked first**, before the unkey/tail
 
 A newly-appeared or changed WX alert always plays immediately, taking priority over the rotation. But a **persistent** alert (unchanged since it last played — detected via `wx-tail.wav`'s own modification time, not a separate/optional SkywarnPlus feed) alternates with the rotation on each unkey instead of playing every single time, so a long-running alert (common in some areas, e.g. summer heat warnings) doesn't shut the rotation out entirely. As soon as the alert changes or a new one appears, it immediately jumps back to the front of the line.
 
-**Scheduled announcements** run on a separate time-based path, unaffected by the tail message interval or repeater activity. They are driven by a standard 5-field cron expression (`MIN HOUR DOM MON DOW`) and can fire once at a specific time, at a repeating interval (e.g. `*/20 * * * *` = every 20 minutes), or on any cron-expressible schedule. Each entry fires at most once per matching minute; a `*/20` entry fires three times an hour, not once per day. If the node is currently keyed when a scheduled announcement is due, it holds off and keeps re-checking every poll — even after the matching minute has passed — until the node unkeys, rather than missing the announcement or talking over live traffic. Once a scheduled announcement plays, its estimated audio duration (via `soxi`, or an 8-second fallback estimate) holds off any tail message for that long, so the two never overlap — this is also how a scheduled announcement takes precedence when both would fire at the same moment.
+**Scheduled announcements** run on a separate time-based path, unaffected by the tail message interval or node activity. They are driven by a standard 5-field cron expression (`MIN HOUR DOM MON DOW`) and can fire once at a specific time, at a repeating interval (e.g. `*/20 * * * *` = every 20 minutes), or on any cron-expressible schedule. Each entry fires at most once per matching minute; a `*/20` entry fires three times an hour, not once per day. If the node is currently keyed when a scheduled announcement is due, it holds off and keeps re-checking every poll — even after the matching minute has passed — until the node unkeys, rather than missing the announcement or talking over live traffic. Once a scheduled announcement plays, its estimated audio duration (via `soxi`, or an 8-second fallback estimate) holds off any tail message for that long, so the two never overlap — this is also how a scheduled announcement takes precedence when both would fire at the same moment.
 
 State (rotation index, WX alternation, scheduled "waiting for unkey" status, and last played times) is saved to a JSON file so it survives service restarts.
 
@@ -320,7 +320,7 @@ Set `SilenceThreshold: 5000` (the default) to reliably distinguish between the t
 
 ## Support the Project
 
-If asl3-herald has been useful on your repeater, please consider supporting its development!
+If asl3-herald has been useful on your repeater or node, please consider supporting its development!
 
 <p align="center"><a href="https://www.paypal.me/LarryAycock"><img src="https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png" width="300px" alt="Donate with PayPal"/></a></p>
 
