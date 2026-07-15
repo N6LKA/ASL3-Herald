@@ -26,6 +26,7 @@
   - **Local or global playback** — each scheduled announcement can play locally on this node only (`rpt localplay`, the default) or globally to all connected/linked nodes (`rpt playback`)
   - **Waits for unkey** — if the node is currently keyed when a scheduled announcement is due, it holds off rather than playing over live traffic, and keeps checking until the node unkeys
   - **Takes precedence over tail messages** — if a scheduled announcement and a tail message would both fire at the same moment, the scheduled announcement always plays; the tail message simply retries on its next unkey once the announcement has finished, with no penalty against `MinInterval`
+  - **Per-announcement enable/disable** — disable an entry without removing it (`herald toggle-schedule <name>` or the web UI Status toggle); re-enable it the same way
 
 Both Tail Messages and Scheduled Announcements can be edited in place (name, text, voice, schedule, play mode) via `herald edit-rotation` / `herald edit-schedule` or the web UI, instead of removing and re-adding.
 
@@ -120,6 +121,7 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 | `Scheduled[].File` | _(required)_ | Path to WAV file to play |
 | `Scheduled[].PlayMode` | `local` | `local` (this node only) or `global` (all connected/linked nodes) |
 | `Scheduled[].Node` | _(daemon's `Node`)_ | Optional: target a specific node number for this entry (multinodes= setups) |
+| `Scheduled[].Enabled` | `true` | Set to `false` to disable an entry without removing it; re-enable with `herald toggle-schedule <name>` or the web UI |
 
 **AMI credentials** are never stored in `asl3-herald.conf`. The daemon reads them automatically at startup and on every config reload from `/etc/allmon3/allmon3.ini` (Allmon3 users) or `/etc/asterisk/manager.conf` (Supermon and other frontends). If neither file yields usable credentials, herald falls back to the legacy CLI kerchunk counter (local RF unkeys only).
 
@@ -190,6 +192,7 @@ Scheduled:
 | `sudo herald add-schedule "<text>" --name <name> --cron "MIN HOUR DOM MON DOW" [--voice <voice>] [--play-mode local\|global] [--node <n>]` | Generate TTS WAV and schedule it |
 | `sudo herald add-schedule-file <path> --name <name> --cron "MIN HOUR DOM MON DOW" [--play-mode local\|global] [--node <n>]` | Schedule an existing WAV file |
 | `sudo herald edit-schedule <name> [--new-name <n>] [--cron "MIN HOUR DOM MON DOW"] [--play-mode local\|global] [--text "<text>"] [--voice <v>] [--file <path>] [--node <n>]` | Edit an existing scheduled announcement in place |
+| `sudo herald toggle-schedule <name>` | Enable or disable a scheduled announcement without removing it |
 
 **Cron field reference:** `MIN` (0–59)  `HOUR` (0–23)  `DOM` = Day of Month (1–31)  `MON` = Month (1–12)  `DOW` = Day of Week (0=Sun, 1=Mon … 6=Sat). Use `*` for every, `*/n` for every-n, `n,m` for specific values, `n-m` for a range.
 
@@ -241,6 +244,7 @@ An optional browser-based UI for managing both Tail Messages and Scheduled Annou
 - **Allmon3**: `install.sh` installs `asl3-herald.html` directly into Allmon3's own web root (`/usr/share/allmon3/`, alongside `index.html`) and appends a `[Herald]` entry to the bottom of `/etc/allmon3/menu.ini` (Allmon3's own supported sidebar-customization mechanism) pointing at it. Because the page lives inside Allmon3's own directory, it loads Allmon3's real `functions.js`/`index.js` unmodified — same header/sidebar chrome as any other Allmon3 page, and a same-origin `master/auth/check` fetch for login detection. (A page living outside Allmon3's own directory can't reliably read Allmon3's session cookie server-side — its `Path` ends up scoped to Allmon3's own API prefix — which is why an earlier design based on a separate PHP page cookie-forwarding to Allmon3's internal port didn't reliably work.)
 - **Optional**: `install.sh` also appends a rule to `/etc/allmon3/custom.css` that hides the sidebar link entirely until you're logged into Allmon3, using Allmon3's own stock `body.logged-in`/`body.logged-out` class toggle. This is cosmetic only — the page itself still gates its content on real login status regardless of whether the link is visible.
 - **Supermon (v7.4+ and v8+)**: `install.sh` installs `asl3-herald.php` directly into Supermon's own directory (`/var/www/html/supermon/`) and adds a link at the bottom of the page after logging in (added to `footer.inc`, inside Supermon's own existing login-conditional block — so it's already hidden until logged in, natively). Because the page lives inside Supermon's own directory, it includes Supermon's real `session.inc`/`header.inc`/`footer.inc` unmodified — same nav and login dialog as any other Supermon page, and the same named session cookie (`supermon61`) Supermon itself uses, so login detection always matches Supermon's actual state.
+- A **How It Works** tab explains the difference between Tail Messages and Scheduled Announcements, the RF/Network trigger toggle, and the Global play mode caution — useful for users who are new to the system or sharing access with others.
 - Both pages support adding announcements via typed text (with Piper voice selection) or by uploading an existing `.wav`/`.mp3` file (auto-converted to 8kHz mono).
 - **Playback History tab** — the last 200 plays (rotation, WX, scheduled, manual test) with timestamp, node, and play mode.
 - **Settings tab** also shows the installed version with a "Check for Updates" button (compares against `main`'s `version.txt` via GitHub's API), plus a Backup & Restore card to download the full config as JSON or restore from a previously exported file.
