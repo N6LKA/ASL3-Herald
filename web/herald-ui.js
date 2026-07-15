@@ -147,14 +147,25 @@
   // ── Load voices ────────────────────────────────────────────────────────────────────────────
   const DEFAULT_VOICE = 'en_US-amy-medium';
   const VOICE_LABELS = {
-    'en_US-lessac-medium':     'Lessac (US Female, Medium)',
-    'en_US-joe-medium':        'Joe (US Male, Medium)',
-    'en_US-amy-medium':        'Amy (US Female, Medium)',
-    'en_US-kristin-medium':    'Kristin (US Female, Medium)',
-    'en_US-libritts_r-medium': 'LibriTTS (US Neutral, Medium)',
-    'en_US-ryan-low':          'Ryan (US Male, Low)',
-    'en_GB-alan-medium':       'Alan (British Male, Medium)',
-    'en_GB-cori-high':         'Cori (British Female, High)',
+    'en_US-amy-medium':                    'Amy (US Female)',
+    'en_US-arctic-medium':                 'Arctic (US Multi-speaker)',
+    'en_US-bryce-medium':                  'Bryce (US Male)',
+    'en_US-hfc_female-medium':             'HFC Female (US Female)',
+    'en_US-hfc_male-medium':               'HFC Male (US Male)',
+    'en_US-joe-medium':                    'Joe (US Male)',
+    'en_US-john-medium':                   'John (US Male)',
+    'en_US-kristin-medium':                'Kristin (US Female)',
+    'en_US-kusal-medium':                  'Kusal (US Male)',
+    'en_US-lessac-medium':                 'Lessac (US Female)',
+    'en_US-libritts_r-medium':             'LibriTTS (US Neutral)',
+    'en_US-norman-medium':                 'Norman (US Male)',
+    'en_US-ryan-medium':                   'Ryan (US Male)',
+    'en_GB-alan-medium':                   'Alan (British Male)',
+    'en_GB-alba-medium':                   'Alba (Scottish Female)',
+    'en_GB-aru-medium':                    'Aru (British Female)',
+    'en_GB-cori-medium':                   'Cori (British Female)',
+    'en_GB-jenny_dioco-medium':            'Jenny (British Female)',
+    'en_GB-northern_english_male-medium':  'Northern English Male',
   };
   async function loadVoices() {
     const data = await api('voices.php');
