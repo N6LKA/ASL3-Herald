@@ -189,7 +189,6 @@
         <li><strong>RF only (toggle off):</strong> a tail message fires when a local RF transmission ends (someone keys up on your node's input).</li>
         <li><strong>RF + Network (toggle on):</strong> a tail message also fires when a connected AllStar node unkeys — useful if you want your node to tail-message after remote traffic too.</li>
       </ul>
-      Either way, the tail message audio goes out on <em>this node only</em>.
     </div>
   </div>
 
