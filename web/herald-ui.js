@@ -240,21 +240,37 @@
       tbody.appendChild(tr);
     });
 
+    const defaultNode = data.node || '—';
     const stbody = document.querySelector('#sched-table tbody');
     stbody.innerHTML = '';
     (data.scheduled || []).forEach(s => {
       const playMode = s.PlayMode === 'global' ? 'global' : 'local';
       const fileMissing = !!s.FileMissing;
-      const cron = s.Cron || '?';
+      const enabled = s.Enabled !== false;
+      const cron = s.Cron || '* * * * *';
+      const cronParts = cron.split(/\s+/);
+      const [cMin, cHour, cDom, cMon, cDow] = [
+        cronParts[0] || '*', cronParts[1] || '*', cronParts[2] || '*',
+        cronParts[3] || '*', cronParts[4] || '*',
+      ];
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + escapeAttr(s.Name) + '</td>' +
-        '<td><code>' + escapeAttr(cron) + '</code></td>' +
+      if (!enabled) tr.classList.add('sched-disabled');
+      tr.innerHTML =
+        '<td>' + escapeAttr(s.Name) + '</td>' +
+        '<td><code>' + escapeAttr(cMin)  + '</code></td>' +
+        '<td><code>' + escapeAttr(cHour) + '</code></td>' +
+        '<td><code>' + escapeAttr(cDom)  + '</code></td>' +
+        '<td><code>' + escapeAttr(cMon)  + '</code></td>' +
+        '<td><code>' + escapeAttr(cDow)  + '</code></td>' +
         '<td>' + (playMode === 'global' ? 'Global' : 'Local') + '</td>' +
-        '<td>' + (s.Node || '—') + '</td>' +
-        '<td>' + basename(s.File) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td><td>' +
-        '<button class="btn-play" data-name="' + escapeAttr(s.Name) + '">Test (local playback)</button>' +
+        '<td>' + escapeAttr(s.Node || defaultNode) + '</td>' +
+        '<td>' + basename(s.File) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td>' +
+        '<td>' +
+        '<button class="btn-play" data-name="' + escapeAttr(s.Name) + '">Test</button>' +
+        '<button class="' + (enabled ? 'btn-enable' : 'btn-disable') + ' btn-toggle-sched" data-name="' + escapeAttr(s.Name) + '">' + (enabled ? 'Enabled' : 'Disabled') + '</button>' +
         '<button class="btn-edit" data-type="sched" data-name="' + escapeAttr(s.Name) + '" data-cron="' + escapeAttr(cron) + '" data-playmode="' + playMode + '" data-node="' + escapeAttr(s.Node) + '" data-text="' + escapeAttr(s.Text) + '" data-voice="' + escapeAttr(s.Voice) + '">Edit</button>' +
-        '<button class="btn-danger" data-name="' + escapeAttr(s.Name) + '">Remove</button></td>';
+        '<button class="btn-danger" data-name="' + escapeAttr(s.Name) + '">Remove</button>' +
+        '</td>';
       stbody.appendChild(tr);
     });
 
@@ -321,6 +337,17 @@
       btn.onclick = () => {
         if (btn.dataset.type === 'tail') startEditTail(btn.dataset);
         else startEditSched(btn.dataset);
+      };
+    });
+    document.querySelectorAll('.btn-toggle-sched').forEach(btn => {
+      btn.onclick = async () => {
+        const data = await api('toggle_scheduled.php', { method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ name: btn.dataset.name }) });
+        if (data.success === false) {
+          alert(data.message || 'Toggle failed');
+          return;
+        }
+        loadAll();
       };
     });
   }
