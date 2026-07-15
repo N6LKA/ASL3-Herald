@@ -470,6 +470,8 @@ def entry_time_window_ok(entry, now):
     return hhmm <= end
 
 def rotation_entry_eligible(entry, now):
+    if isinstance(entry, dict) and not entry.get("Enabled", True):
+        return False
     if not entry_days_ok(entry, now):
         return False
     if not entry_time_window_ok(entry, now):
@@ -567,7 +569,8 @@ def normalize_rotation(rotation):
     for e in rotation:
         if isinstance(e, str):
             entry = {"File": e, "Text": None, "Voice": None,
-                      "Days": "daily", "TimeStart": None, "TimeEnd": None, "Node": None}
+                      "Days": "daily", "TimeStart": None, "TimeEnd": None, "Node": None,
+                      "Enabled": True}
         else:
             entry = {
                 "File": e.get("File", ""),
@@ -577,6 +580,7 @@ def normalize_rotation(rotation):
                 "TimeStart": e.get("TimeStart"),
                 "TimeEnd": e.get("TimeEnd"),
                 "Node": e.get("Node"),
+                "Enabled": e.get("Enabled", True),
             }
         entry["FileMissing"] = not (entry["File"] and os.path.exists(entry["File"]))
         out.append(entry)
@@ -770,6 +774,24 @@ def cmd_toggle_scheduled(config, args):
             return
     print(json.dumps({"success": False, "message": f"No scheduled entry found for: {args.name}"}))
 
+def cmd_toggle_rotation(config, args):
+    tm = config.setdefault("TailMessage", {})
+    rotation = tm.setdefault("Rotation", [])
+    target = args.name
+    for i, e in enumerate(rotation):
+        base = os.path.splitext(os.path.basename(rotation_entry_file(e)))[0]
+        if base == target:
+            current = e.get("Enabled", True) if isinstance(e, dict) else True
+            if isinstance(e, str):
+                rotation[i] = {"File": e, "Enabled": not current}
+            else:
+                rotation[i]["Enabled"] = not current
+            save_config(config)
+            state = "enabled" if not current else "disabled"
+            print(json.dumps({"success": True, "message": f"Rotation entry '{target}' {state}", "enabled": not current}))
+            return
+    print(json.dumps({"success": False, "message": f"No rotation entry found for: {target}"}))
+
 def cmd_remove(config, identifier):
     tm = config.setdefault("TailMessage", {})
     rotation = tm.setdefault("Rotation", [])
@@ -934,6 +956,9 @@ def build_arg_parser():
     p_toggle_sched = sub.add_parser("toggle-scheduled", help="Toggle a scheduled announcement enabled/disabled")
     p_toggle_sched.add_argument("name")
 
+    p_toggle_rot = sub.add_parser("toggle-rotation", help="Toggle a tail message rotation entry enabled/disabled")
+    p_toggle_rot.add_argument("name")
+
     p_remove = sub.add_parser("remove", help="Remove a rotation file or scheduled announcement by name")
     p_remove.add_argument("identifier")
 
@@ -986,6 +1011,8 @@ def cli_main():
         cmd_add_scheduled(config, args)
     elif args.command == "toggle-scheduled":
         cmd_toggle_scheduled(config, args)
+    elif args.command == "toggle-rotation":
+        cmd_toggle_rotation(config, args)
     elif args.command == "edit-scheduled":
         cmd_edit_scheduled(config, args)
     elif args.command == "remove":
