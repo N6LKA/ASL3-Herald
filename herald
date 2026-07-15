@@ -62,6 +62,7 @@ Scheduled Announcements (clock-triggered):
                 [--play-mode local|global] [--text "<text>"] [--voice <v>] [--file <path>]
                 [--node <n>]
                                            Edit an existing scheduled announcement
+  toggle-schedule <name>                   Toggle a scheduled announcement enabled/disabled
 
   Cron fields: MIN (0-59)  HOUR (0-23)  DOM (1-31)  MON (1-12)  DOW (0=Sun..6=Sat)
   Use * for every, */n for every-n, n,m for multiple values, n-m for a range.
@@ -679,6 +680,17 @@ cmd_edit_schedule() {
     cmd_reload 2>/dev/null || true
 }
 
+cmd_toggle_schedule() {
+    need_root "$@"
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+        echo "Usage: herald toggle-schedule <name>"
+        exit 1
+    fi
+    python3 "$DAEMON_PY" toggle-scheduled "$name"
+    cmd_reload 2>/dev/null || true
+}
+
 # ── Dispatch ───────────────────────────────────────────────────────────────────
 
 CMD="${1:-help}"
@@ -702,6 +714,7 @@ case "$CMD" in
     add-schedule)         cmd_add_schedule       "$@" ;;
     add-schedule-file)    cmd_add_schedule_file  "$@" ;;
     edit-schedule)        cmd_edit_schedule      "$@" ;;
+    toggle-schedule)      cmd_toggle_schedule    "$@" ;;
     update-settings)      cmd_update_settings    "$@" ;;
     playback-history)     cmd_playback_history   "$@" ;;
     clear-history)        cmd_clear_history      "$@" ;;
