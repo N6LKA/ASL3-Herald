@@ -210,18 +210,31 @@ A scheduled announcement waits for the node to unkey before playing (rather than
 
 `herald add` and `herald add-schedule` prefer **Piper** (neural TTS, installed by `install.sh`) for natural-sounding voices, and fall back to `festival` or `espeak-ng` if Piper isn't available.
 
+> **Install size note:** The Piper binary plus all 19 included voices totals approximately **1.2 GB**. The installer downloads them during `install.sh` and the step may take several minutes depending on your connection. Voices already present on disk are skipped on reinstall, so updates are fast.
+
 **Included Piper voices:**
 
-| Voice | Description |
+| Voice | Character |
 |---|---|
-| `en_US-lessac-medium` | US Female (default) |
-| `en_US-joe-medium` | US Male |
-| `en_US-amy-medium` | US Female |
-| `en_US-kristin-medium` | US Female |
-| `en_US-libritts_r-medium` | US Neutral |
-| `en_US-ryan-low` | US Male |
-| `en_GB-alan-medium` | British Male |
-| `en_GB-cori-high` | British Female |
+| `en_US-amy-medium` | Amy — US Female ⭐ default |
+| `en_US-arctic-medium` | Arctic — US Multi-speaker |
+| `en_US-bryce-medium` | Bryce — US Male |
+| `en_US-hfc_female-medium` | HFC Female — US Female |
+| `en_US-hfc_male-medium` | HFC Male — US Male |
+| `en_US-joe-medium` | Joe — US Male |
+| `en_US-john-medium` | John — US Male |
+| `en_US-kristin-medium` | Kristin — US Female |
+| `en_US-kusal-medium` | Kusal — US Male |
+| `en_US-lessac-medium` | Lessac — US Female |
+| `en_US-libritts_r-medium` | LibriTTS — US Neutral |
+| `en_US-norman-medium` | Norman — US Male |
+| `en_US-ryan-medium` | Ryan — US Male |
+| `en_GB-alan-medium` | Alan — British Male |
+| `en_GB-alba-medium` | Alba — Scottish Female |
+| `en_GB-aru-medium` | Aru — British Female |
+| `en_GB-cori-medium` | Cori — British Female |
+| `en_GB-jenny_dioco-medium` | Jenny — British Female |
+| `en_GB-northern_english_male-medium` | Northern English Male — British Male |
 
 ```bash
 herald voices                                              # list installed voices
