@@ -27,6 +27,7 @@
   - **Waits for unkey** — if the node is currently keyed when a scheduled announcement is due, it holds off rather than playing over live traffic, and keeps checking until the node unkeys
   - **Takes precedence over tail messages** — if a scheduled announcement and a tail message would both fire at the same moment, the scheduled announcement always plays; the tail message simply retries on its next unkey once the announcement has finished, with no penalty against `MinInterval`
   - **Per-announcement enable/disable** — disable an entry without removing it (`herald toggle-schedule <name>` or the web UI Status toggle); re-enable it the same way
+- **Per-entry enable/disable for tail messages** — disable individual rotation entries without removing them (`herald toggle-rotation <name>` or the web UI Status toggle); disabled entries are skipped during the unkey cycle
 
 Both Tail Messages and Scheduled Announcements can be edited in place (name, text, voice, schedule, play mode) via `herald edit-rotation` / `herald edit-schedule` or the web UI, instead of removing and re-adding.
 
@@ -113,6 +114,7 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 | `TailMessage.Rotation[].Days` | _(always eligible)_ | Optional: `daily` (default) or a list, e.g. `[tuesday]` — restricts this entry to those days |
 | `TailMessage.Rotation[].TimeStart` / `TimeEnd` | _(none)_ | Optional: `HH:MM` window this entry is eligible in; omit either side for open-ended |
 | `TailMessage.Rotation[].Node` | _(daemon's `Node`)_ | Optional: target a specific node number for this entry (multinodes= setups) |
+| `TailMessage.Rotation[].Enabled` | `true` | Set to `false` to disable an entry without removing it; re-enable with `herald toggle-rotation <name>` or the web UI |
 | `TailMessage.SkywarnPlus.Enable` | `true` | Enable SkywarnPlus WX tail integration |
 | `TailMessage.SkywarnPlus.WxTailFile` | `/tmp/SkywarnPlus/wx-tail.wav` | Path to SkywarnPlus wx-tail.wav |
 | `TailMessage.SkywarnPlus.SilenceThreshold` | `5000` | File size (bytes) to distinguish active alerts from silence |
@@ -179,6 +181,7 @@ Scheduled:
 | `sudo herald add-file <path> [--name <name>] [--days daily\|d1,d2] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]` | Copy an existing WAV into rotation |
 | `sudo herald edit-rotation <name> [--new-name <n>] [--text "<text>"] [--voice <v>] [--file <path>] [--days ...] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]` | Edit an existing rotation entry in place |
 | `sudo herald reorder-rotation <name> <up\|down>` | Move a rotation entry earlier/later in the cycle |
+| `sudo herald toggle-rotation <name>` | Enable or disable a tail message rotation entry without removing it |
 | `herald list` | List rotation + scheduled announcements (flags entries with a missing file) |
 | `sudo herald remove <name>` | Remove a rotation file or scheduled announcement |
 | `sudo herald play <name>` | Test-play an announcement on the node immediately (always local, ignores `PlayMode`) |
