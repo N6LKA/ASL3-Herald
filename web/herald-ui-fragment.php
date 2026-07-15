@@ -219,7 +219,7 @@
     <h3>Rotation</h3>
     <p class="muted">Plays on the next transmission unkey, gated by MinInterval. A SkywarnPlus WX alert always takes priority over the rotation.</p>
     <table id="tail-table">
-      <thead><tr><th>#</th><th>File</th><th>Days</th><th>Window</th><th>Node</th><th>Actions</th></tr></thead>
+      <thead><tr><th>#</th><th>File</th><th>Days</th><th>Window</th><th>Node</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody></tbody>
     </table>
 
