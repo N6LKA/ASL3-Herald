@@ -111,6 +111,7 @@
   #herald-ui .btn-disable { background: #888;    color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-edit    { background: #e67e22; color: #fff; border: none; border-radius: 4px; }
   #herald-ui tr.sched-disabled td { opacity: 0.5; }
+  #herald-ui code { color: #333; background: #eee; padding: 1px 5px; border-radius: 3px; font-size: 0.95em; }
   #herald-ui .badge-missing {
     background: #e74c3c; color: #fff; font-size: 0.75em;
     padding: 2px 6px; border-radius: 4px; margin-left: 6px; white-space: nowrap;
@@ -329,10 +330,10 @@
             <div style="font-size:0.88em; color:#666; margin-top:4px;">0=Sun … 6=Sat</div>
           </div>
         </div>
-        <div style="margin-top:10px; font-size:0.92em; color:#555;">
-          <code>*</code> = every &nbsp;&nbsp; <code>*/n</code> = every n &nbsp;&nbsp; <code>n,m</code> = specific values &nbsp;&nbsp; <code>n-m</code> = range
+        <div style="margin-top:10px; font-size:1em; color:#333;">
+          <strong>Syntax:</strong> &nbsp;<code>*</code> = every &nbsp;&nbsp; <code>*/n</code> = every n &nbsp;&nbsp; <code>n,m</code> = specific values &nbsp;&nbsp; <code>n-m</code> = range
         </div>
-        <div style="font-size:0.92em; color:#888; margin-top:4px; font-style:italic;">
+        <div style="font-size:1em; color:#555; margin-top:5px; font-style:italic;">
           ↓ See the Cron Reference and examples below.
         </div>
       </div>
