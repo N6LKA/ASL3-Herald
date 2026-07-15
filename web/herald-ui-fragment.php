@@ -16,7 +16,7 @@
   #herald-ui {
     font-family: Arial, sans-serif;
     font-size: 16px;
-    max-width: 1400px;
+    max-width: 100%;
     color: #222;
   }
   #herald-ui h3 { margin-bottom: 8px; }
@@ -107,6 +107,12 @@
   #herald-ui .muted { color: #777; font-size: 0.95em; }
   #herald-ui .btn-reorder { padding: 4px 8px; }
   #herald-ui .btn-reorder:disabled { opacity: 0.3; cursor: default; }
+  #herald-ui .btn-enable  { background: #27ae60; color: #fff; border: none; border-radius: 4px; }
+  #herald-ui .btn-disable { background: #888;    color: #fff; border: none; border-radius: 4px; }
+  #herald-ui .btn-edit    { background: #e67e22; color: #fff; border: none; border-radius: 4px; }
+  #herald-ui tr.sched-disabled td { opacity: 0.5; }
+  #herald-ui code { color: #333; background: #eee; padding: 1px 5px; border-radius: 3px; font-size: 0.95em; }
+  #herald-ui #sched-table th { white-space: normal; }
   #herald-ui .badge-missing {
     background: #e74c3c; color: #fff; font-size: 0.75em;
     padding: 2px 6px; border-radius: 4px; margin-left: 6px; white-space: nowrap;
@@ -165,19 +171,55 @@
 </div>
 
 <div class="tabs">
-  <button class="tab-btn active" data-tab="tail">Tail Messages</button>
+  <button class="tab-btn active" data-tab="info">How It Works</button>
+  <button class="tab-btn" data-tab="tail">Tail Messages</button>
   <button class="tab-btn" data-tab="scheduled">Scheduled Announcements</button>
   <button class="tab-btn" data-tab="history">Playback History</button>
   <button class="tab-btn" data-tab="settings">Settings</button>
 </div>
 
+<!-- ══════════════════ HOW IT WORKS ══════════════════ -->
+<div class="tab-panel active" id="tab-info">
+  <div class="card">
+    <h3>Tail Messages <span class="muted" style="font-weight:normal; font-size:0.85em;">(Unkey-Triggered)</span></h3>
+    <p>A <strong>Tail Message</strong> plays automatically after someone unkeys on the node — timed so it plays after the courtesy tone, just like a native tail message. They rotate through your configured list in order, gated by the <strong>MinInterval</strong> so they don't play too frequently.</p>
+    <ul style="margin: 8px 0 8px 20px; line-height: 1.8;">
+      <li><strong>Tail messages always play on this local node only</strong> — they never go out to connected or linked nodes, regardless of any setting.</li>
+      <li>When a SkywarnPlus WX alert is active, the WX audio takes priority over the rotation and plays instead (alternating with rotation entries while the alert persists).</li>
+    </ul>
+
+    <div style="background:#fff8e1; border:1px solid #f0c040; border-radius:6px; padding:10px 14px; margin-top:8px;">
+      <strong>The RF / Network Trigger Toggle (in Settings)</strong><br>
+      This toggle controls <em>what event triggers</em> a tail message — it does <strong>not</strong> change where the audio plays. Tail messages always play on this local node.
+      <ul style="margin: 6px 0 0 20px; line-height:1.8;">
+        <li><strong>RF only (toggle off):</strong> a tail message fires when a local RF transmission ends (someone keys up on your node's input).</li>
+        <li><strong>RF + Network (toggle on):</strong> a tail message also fires when a connected AllStar node unkeys — useful if you want your node to tail-message after remote traffic too.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Scheduled Announcements <span class="muted" style="font-weight:normal; font-size:0.85em;">(Clock-Triggered)</span></h3>
+    <p>A <strong>Scheduled Announcement</strong> plays at a configured time based on a cron schedule — completely independent of node activity or MinInterval. Common uses: ARRL Audio News every Saturday morning, a net reminder every Tuesday evening, or an ID drop every 30 minutes.</p>
+    <ul style="margin: 8px 0 8px 20px; line-height: 1.8;">
+      <li><strong>Waits for the node to unkey</strong> — if the node is in use when the scheduled time arrives, Herald holds the announcement and plays it as soon as the node is clear rather than talking over live traffic.</li>
+      <li><strong>Takes priority over tail messages</strong> — if a tail message and a scheduled announcement would both fire at the same moment, the scheduled announcement always goes first.</li>
+      <li><strong>Can play locally or globally</strong> — unlike tail messages, each scheduled announcement has its own <em>Play Mode</em>: <strong>Local</strong> plays on this node only; <strong>Global</strong> sends audio to all connected and linked AllStar nodes simultaneously.</li>
+    </ul>
+
+    <div style="background:#fdecea; border:1px solid #e74c3c; border-radius:6px; padding:10px 14px; margin-top:8px;">
+      <strong>⚠ Use Global Play Mode with caution.</strong> Selecting Global sends the announcement audio to <em>every node currently linked to yours</em> — other clubs' repeaters, remote nodes, and any other systems in your AllStar network. Only choose Global if you are certain all connected nodes should receive this announcement. When in doubt, use Local.
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════════ TAIL MESSAGES (unkey-triggered) ══════════════════ -->
-<div class="tab-panel active" id="tab-tail">
+<div class="tab-panel" id="tab-tail">
   <div class="card">
     <h3>Rotation</h3>
     <p class="muted">Plays on the next transmission unkey, gated by MinInterval. A SkywarnPlus WX alert always takes priority over the rotation.</p>
     <table id="tail-table">
-      <thead><tr><th>#</th><th>File</th><th>Days</th><th>Window</th><th>Node</th><th></th></tr></thead>
+      <thead><tr><th>#</th><th>File</th><th>Days</th><th>Window</th><th>Node</th><th>Actions</th></tr></thead>
       <tbody></tbody>
     </table>
 
@@ -248,9 +290,9 @@
 <div class="tab-panel" id="tab-scheduled">
   <div class="card">
     <h3>Scheduled Announcements</h3>
-    <p class="muted">Plays at a specific time of day, independent of repeater activity or MinInterval.</p>
+    <p class="muted">Plays on a cron schedule, independent of node activity or MinInterval.</p>
     <table id="sched-table">
-      <thead><tr><th>Name</th><th>Time</th><th>Days</th><th>Week</th><th>Play Mode</th><th>Node</th><th>File</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Minute</th><th>Hour</th><th>Day of Month</th><th>Month</th><th>Day of Week</th><th>Play Mode</th><th>Node</th><th>File</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody></tbody>
     </table>
 
@@ -260,44 +302,51 @@
       <label>Name (letters, numbers, hyphens only — no spaces)</label>
       <input type="text" id="sched-name" placeholder="e.g. arrl-news">
 
-      <div class="field-row" style="margin-top: 8px;">
-        <div>
-          <label>Time (24-hour)</label>
-          <input type="time" id="sched-time">
-        </div>
-        <div>
-          <label>Days</label>
-          <div class="days-picker" id="sched-days">
-            <label><input type="checkbox" value="daily" id="sched-day-daily" checked> Daily</label>
-            <label><input type="checkbox" value="sunday"> Sun</label>
-            <label><input type="checkbox" value="monday"> Mon</label>
-            <label><input type="checkbox" value="tuesday"> Tue</label>
-            <label><input type="checkbox" value="wednesday"> Wed</label>
-            <label><input type="checkbox" value="thursday"> Thu</label>
-            <label><input type="checkbox" value="friday"> Fri</label>
-            <label><input type="checkbox" value="saturday"> Sat</label>
+      <div style="margin-top: 12px;">
+        <label style="margin-bottom: 6px;">Cron Schedule</label>
+        <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-top:6px;">
+          <div style="text-align:center;">
+            <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Minute</div>
+            <input type="text" id="sched-cron-min"  value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
+            <div style="font-size:0.88em; color:#666; margin-top:4px;">0–59</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Hour</div>
+            <input type="text" id="sched-cron-hour" value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
+            <div style="font-size:0.88em; color:#666; margin-top:4px;">0–23</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Day of Month</div>
+            <input type="text" id="sched-cron-dom"  value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
+            <div style="font-size:0.88em; color:#666; margin-top:4px;">1–31</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Month</div>
+            <input type="text" id="sched-cron-mon"  value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
+            <div style="font-size:0.88em; color:#666; margin-top:4px;">1–12</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Day of Week</div>
+            <input type="text" id="sched-cron-dow"  value="*" style="width:110px; text-align:center; display:block; margin:0 auto;">
+            <div style="font-size:0.88em; color:#666; margin-top:4px;">0=Sun … 6=Sat</div>
           </div>
         </div>
-        <div>
-          <label>Week of month (optional)</label>
-          <select id="sched-week">
-            <option value="">Every week</option>
-            <option value="1">1st week</option>
-            <option value="2">2nd week</option>
-            <option value="3">3rd week</option>
-            <option value="4">4th week</option>
-            <option value="5">Last week</option>
-          </select>
+        <div style="margin-top:10px; font-size:1em; color:#333;">
+          <strong>Syntax:</strong> &nbsp;<code>*</code> = every &nbsp;&nbsp; <code>*/n</code> = every n &nbsp;&nbsp; <code>n,m</code> = specific values &nbsp;&nbsp; <code>n-m</code> = range
+        </div>
+        <div style="font-size:1em; color:#555; margin-top:5px; font-style:italic;">
+          ↓ See the Cron Reference and examples below.
         </div>
       </div>
 
-      <div class="field-row">
+      <div class="field-row" style="margin-top:12px;">
         <div>
           <label>Play Mode</label>
           <select id="sched-playmode">
             <option value="local" selected>Local (this node only)</option>
             <option value="global">Global (all connected/linked nodes)</option>
           </select>
+          <p class="muted" style="margin-top:5px; margin-bottom:0; font-size:0.85em;"><strong>Global</strong> sends audio to every node currently linked to yours. Use with caution.</p>
         </div>
         <div>
           <label>Node Override (optional)</label>
@@ -332,6 +381,26 @@
       <button class="btn-primary" id="btn-add-sched">Add Scheduled Announcement</button>
       <button id="sched-edit-cancel" style="display:none;">Cancel Edit</button>
       <div class="msg" id="sched-msg"></div>
+
+      <div style="margin-top:16px; padding:10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px; font-size:0.88em; line-height:1.6;">
+        <strong>Cron Reference</strong><br>
+        <strong>Minute</strong> 0–59 &nbsp;|&nbsp; <strong>Hour</strong> 0–23 &nbsp;|&nbsp;
+        <strong>Day of Month</strong> 1–31 &nbsp;|&nbsp; <strong>Month</strong> 1–12 &nbsp;|&nbsp;
+        <strong>Day of Week</strong> 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat<br>
+        <strong>Syntax:</strong> &nbsp;<code>*</code> = every &nbsp;&nbsp;
+        <code>*/n</code> = every n &nbsp;&nbsp;
+        <code>n,m</code> = specific values &nbsp;&nbsp;
+        <code>n-m</code> = range<br>
+        <table style="margin-top:6px; border-collapse:collapse; width:auto;">
+          <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">30 8 * * *</td><td style="color:#555;">Daily at 8:30 AM</td></tr>
+          <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">*/20 * * * *</td><td style="color:#555;">Every 20 minutes</td></tr>
+          <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">30 * * * *</td><td style="color:#555;">Every hour at :30 (12:30, 1:30, 2:30…)</td></tr>
+          <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 8 * * 1-5</td><td style="color:#555;">Weekdays (Mon–Fri) at 8:00 AM</td></tr>
+          <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 9 * * 0</td><td style="color:#555;">Sundays at 9:00 AM</td></tr>
+          <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 9 1 * *</td><td style="color:#555;">1st of each month at 9:00 AM</td></tr>
+          <tr><td style="padding:1px 10px 1px 0; font-family:monospace; white-space:nowrap;">0 12 * * 0,3</td><td style="color:#555;">Sundays and Wednesdays at noon</td></tr>
+        </table>
+      </div>
     </div>
   </div>
 </div>
@@ -407,6 +476,7 @@
 
         <label>Silence Threshold (bytes)</label>
         <input type="text" id="set-swp-threshold" style="width: 100px;">
+        <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;">When enabled, active WX alerts take priority over tail message rotation. Herald alternates between the WX alert and your normal rotation — the alert plays first, then one rotation message, then the alert again. A new or updated alert file always plays immediately on the next unkey. When no alert is active, normal rotation resumes. SkywarnPlus messages do not affect the cron-scheduled announcement timing.</p>
       </div>
     </div>
 

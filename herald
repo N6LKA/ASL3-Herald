@@ -52,16 +52,24 @@ Tail Messages (unkey-triggered rotation):
   where one AMI connection serves several node numbers).
 
 Scheduled Announcements (clock-triggered):
-  add-schedule "<text>" --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5]
+  add-schedule "<text>" --name <name> --cron "MIN HOUR DOM MON DOW"
                [--voice <voice>] [--play-mode local|global] [--node <n>]
                                            Generate TTS announcement and schedule it
-  add-schedule-file <path> --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5]
+  add-schedule-file <path> --name <name> --cron "MIN HOUR DOM MON DOW"
                      [--play-mode local|global] [--node <n>]
                                            Schedule an existing WAV file
-  edit-schedule <name> [--new-name <n>] [--time HH:MM] [--days ...] [--week 1-5]
+  edit-schedule <name> [--new-name <n>] [--cron "MIN HOUR DOM MON DOW"]
                 [--play-mode local|global] [--text "<text>"] [--voice <v>] [--file <path>]
                 [--node <n>]
                                            Edit an existing scheduled announcement
+  toggle-schedule <name>                   Toggle a scheduled announcement enabled/disabled
+
+  Cron fields: MIN (0-59)  HOUR (0-23)  DOM (1-31)  MON (1-12)  DOW (0=Sun..6=Sat)
+  Use * for every, */n for every-n, n,m for multiple values, n-m for a range.
+  Examples:  "30 8 * * *"      daily at 8:30 AM
+             "*/20 * * * *"    every 20 minutes
+             "30 * * * *"      every hour at :30
+             "0 8 * * 1-5"     weekdays at 8:00 AM
 
   A scheduled announcement waits for the node to unkey before playing if it's
   currently keyed (rather than playing over live traffic), and always takes
@@ -439,12 +447,10 @@ sched = d['scheduled']
 if not sched:
     print('  (none)')
 for s in sched:
-    days = s.get('Days', 'daily')
-    days = days if isinstance(days, str) else ','.join(days)
-    week = f\" (week {s['Week']})\" if s.get('Week') else ''
+    cron = s.get('Cron', '?')
     node = f\" [node {s['Node']}]\" if s.get('Node') else ''
     missing = ' [MISSING FILE]' if s.get('FileMissing') else ''
-    print(f\"  {s.get('Name','?')} — {s.get('Time','?')} {days}{week}{node} — {s.get('File','?')}{missing}\")
+    print(f\"  {s.get('Name','?')} — {cron}{node} — {s.get('File','?')}{missing}\")
 "
 }
 
@@ -556,19 +562,17 @@ cmd_play() {
 # ── Scheduled announcement commands ───────────────────────────────────────────
 
 parse_schedule_opts() {
-    # Parses --name --time --days --week --play-mode --node from "$@",
+    # Parses --name --cron --play-mode --node from "$@",
     # leaving the remainder (text or filepath) in REMAINDER.
-    name="" time="" days="daily" week="" play_mode="" node=""
+    name="" cron="" play_mode="" node=""
     REMAINDER=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --name)      name="$2";  shift 2 ;;
-            --time)      time="$2";  shift 2 ;;
-            --days)      days="$2";  shift 2 ;;
-            --week)      week="$2";  shift 2 ;;
-            --voice)     voice="$2"; shift 2 ;;
+            --name)      name="$2";      shift 2 ;;
+            --cron)      cron="$2";      shift 2 ;;
+            --voice)     voice="$2";     shift 2 ;;
             --play-mode) play_mode="$2"; shift 2 ;;
-            --node)      node="$2"; shift 2 ;;
+            --node)      node="$2";      shift 2 ;;
             *) REMAINDER+=("$1"); shift ;;
         esac
     done
@@ -576,20 +580,19 @@ parse_schedule_opts() {
 
 cmd_add_schedule() {
     need_root "$@"
-    local name time days week voice play_mode node
+    local name cron voice play_mode node
     parse_schedule_opts "$@"
     local text="${REMAINDER[*]}"
 
-    if [[ -z "$text" || -z "$name" || -z "$time" ]]; then
-        echo 'Usage: herald add-schedule "<text>" --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5] [--voice <voice>] [--play-mode local|global] [--node <n>]'
+    if [[ -z "$text" || -z "$name" || -z "$cron" ]]; then
+        echo 'Usage: herald add-schedule "<text>" --name <name> --cron "MIN HOUR DOM MON DOW" [--voice <voice>] [--play-mode local|global] [--node <n>]'
         exit 1
     fi
 
     local outfile
     outfile="$(generate_tts_file "$text" "$name" "$voice")" || exit 1
 
-    local args=(add-scheduled --name "$name" --time "$time" --days "$days" --file "$outfile" --text "$text")
-    [[ -n "$week" ]] && args+=(--week "$week")
+    local args=(add-scheduled --name "$name" --cron "$cron" --file "$outfile" --text "$text")
     [[ -n "$voice" ]] && args+=(--voice "$voice")
     [[ -n "$play_mode" ]] && args+=(--play-mode "$play_mode")
     [[ -n "$node" ]] && args+=(--node "$node")
@@ -599,12 +602,12 @@ cmd_add_schedule() {
 
 cmd_add_schedule_file() {
     need_root "$@"
-    local name time days week voice play_mode node
+    local name cron voice play_mode node
     parse_schedule_opts "$@"
     local src="${REMAINDER[0]:-}"
 
-    if [[ -z "$src" || -z "$name" || -z "$time" ]]; then
-        echo "Usage: herald add-schedule-file <path> --name <name> --time HH:MM [--days daily|d1,d2] [--week 1-5] [--play-mode local|global] [--node <n>]"
+    if [[ -z "$src" || -z "$name" || -z "$cron" ]]; then
+        echo "Usage: herald add-schedule-file <path> --name <name> --cron \"MIN HOUR DOM MON DOW\" [--play-mode local|global] [--node <n>]"
         exit 1
     fi
     if [[ ! -f "$src" ]]; then
@@ -617,8 +620,7 @@ cmd_add_schedule_file() {
     cp "$src" "$dest"
     echo "Copied to: $dest"
 
-    local args=(add-scheduled --name "$name" --time "$time" --days "$days" --file "$dest")
-    [[ -n "$week" ]] && args+=(--week "$week")
+    local args=(add-scheduled --name "$name" --cron "$cron" --file "$dest")
     [[ -n "$play_mode" ]] && args+=(--play-mode "$play_mode")
     [[ -n "$node" ]] && args+=(--node "$node")
     python3 "$DAEMON_PY" "${args[@]}"
@@ -627,14 +629,12 @@ cmd_add_schedule_file() {
 
 cmd_edit_schedule() {
     need_root "$@"
-    local old_name="" new_name="" time="" days="" week="" play_mode="" text="" voice="" file="" node=""
-    local has_text=false has_file=false has_time=false has_days=false has_week=false has_playmode=false has_node=false
+    local old_name="" new_name="" cron="" play_mode="" text="" voice="" file="" node=""
+    local has_cron=false has_text=false has_file=false has_playmode=false has_node=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --new-name)  new_name="$2"; shift 2 ;;
-            --time)      time="$2"; has_time=true; shift 2 ;;
-            --days)      days="$2"; has_days=true; shift 2 ;;
-            --week)      week="$2"; has_week=true; shift 2 ;;
+            --cron)      cron="$2"; has_cron=true; shift 2 ;;
             --play-mode) play_mode="$2"; has_playmode=true; shift 2 ;;
             --text)      text="$2"; has_text=true; shift 2 ;;
             --voice)     voice="$2"; shift 2 ;;
@@ -645,7 +645,7 @@ cmd_edit_schedule() {
     done
 
     if [[ -z "$old_name" ]]; then
-        echo 'Usage: herald edit-schedule <name> [--new-name <n>] [--time HH:MM] [--days ...] [--week 1-5] [--play-mode local|global] [--text "<text>"] [--voice <v>] [--file <path>] [--node <n>]'
+        echo 'Usage: herald edit-schedule <name> [--new-name <n>] [--cron "MIN HOUR DOM MON DOW"] [--play-mode local|global] [--text "<text>"] [--voice <v>] [--file <path>] [--node <n>]'
         exit 1
     fi
     [[ -z "$new_name" ]] && new_name="$old_name"
@@ -664,15 +664,12 @@ cmd_edit_schedule() {
         final_file="$new_wav"
         [[ "$old_name" != "$new_name" && -f "$old_wav" ]] && rm -f "$old_wav"
     elif [[ "$old_name" != "$new_name" && -f "$old_wav" ]]; then
-        # Rename only - no new text/audio, keep the existing file content.
         mv "$old_wav" "$new_wav"
         final_file="$new_wav"
     fi
 
     local args=(edit-scheduled "$old_name" --new-name "$new_name")
-    $has_time     && args+=(--time "$time")
-    $has_days     && args+=(--days "$days")
-    $has_week     && args+=(--week "$week")
+    $has_cron     && args+=(--cron "$cron")
     $has_playmode && args+=(--play-mode "$play_mode")
     $has_text     && args+=(--text "$text")
     [[ -n "$voice" ]] && args+=(--voice "$voice")
@@ -680,6 +677,17 @@ cmd_edit_schedule() {
     $has_node     && args+=(--node "$node")
 
     python3 "$DAEMON_PY" "${args[@]}"
+    cmd_reload 2>/dev/null || true
+}
+
+cmd_toggle_schedule() {
+    need_root "$@"
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+        echo "Usage: herald toggle-schedule <name>"
+        exit 1
+    fi
+    python3 "$DAEMON_PY" toggle-scheduled "$name"
     cmd_reload 2>/dev/null || true
 }
 
@@ -706,6 +714,7 @@ case "$CMD" in
     add-schedule)         cmd_add_schedule       "$@" ;;
     add-schedule-file)    cmd_add_schedule_file  "$@" ;;
     edit-schedule)        cmd_edit_schedule      "$@" ;;
+    toggle-schedule)      cmd_toggle_schedule    "$@" ;;
     update-settings)      cmd_update_settings    "$@" ;;
     playback-history)     cmd_playback_history   "$@" ;;
     clear-history)        cmd_clear_history      "$@" ;;

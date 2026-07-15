@@ -1,12 +1,12 @@
 ![asl3-herald](web/img/asl3-herald-banner.svg)
 
 ![Release Version](https://img.shields.io/github/v/release/N6LKA/asl3-herald?label=Version&color=f15d24)
-![Release Date](https://img.shields.io/badge/released-2026--07--14-green)
+![Release Date](https://img.shields.io/badge/released-2026--07--15-green)
 ![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
 
 **Enhanced tail message daemon for ASL3/app_rpt with advanced announcement features.**
 
-`asl3-herald` is a drop-in replacement and enhancement for the native `app_rpt` tail message function. It provides reliable unkey detection, rotating messages, SkywarnPlus weather alert integration with priority playback, scheduled time-based announcements (including nth-week-of-month scheduling), neural TTS voices, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
+`asl3-herald` is a drop-in replacement and enhancement for the native `app_rpt` tail message function. It provides reliable unkey detection, rotating messages, SkywarnPlus weather alert integration with priority playback, cron-style scheduled announcements, neural TTS voices, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
 
 ---
 
@@ -14,19 +14,19 @@
 
 `asl3-herald` covers two distinct functions:
 
-- **Tail Messages** — unkey-triggered, reactive to repeater activity:
+- **Tail Messages** — unkey-triggered, reactive to node activity:
   - **Reliable unkey detection** — uses the Asterisk Manager Interface (AMI) for real-time, event-driven unkey detection that fires at the actual unkey (before the courtesy tone), giving a seamless native-feel tail message; falls back to the legacy `rpt stats` kerchunk counter if AMI credentials aren't available
   - **Network keyup support** — with AMI active, the optional `NetworkKeyupTrigger` setting also fires tail messages after a connected AllStar node unkeys (not just local RF)
   - **Rotating messages** — cycles through a list of announcement files in order with a configurable minimum interval between plays
   - **SkywarnPlus WX integration** — when weather alerts are active, plays the SkywarnPlus `wx-tail.wav` file instead of the normal rotation (WX always takes priority)
   - **Optional day/time-window gating per entry** — a rotation entry can be restricted to specific days of the week and/or a time-of-day window (e.g. a net-announcement tail message that's only eligible Tuesday evenings); entries without gating stay eligible all the time, same as before
 
-- **Scheduled Announcements** — clock-triggered, independent of repeater activity:
-  - Plays a specific file at a configured time of day, on selected days of the week
-  - Optional nth-week-of-month scheduling (e.g. "2nd Saturday of the month")
+- **Scheduled Announcements** — clock-triggered, independent of node activity:
+  - Plays a specific file on a **cron-style schedule** (`MIN HOUR DOM MON DOW`) — fire once at a specific time, every N minutes, on selected days, and more
   - **Local or global playback** — each scheduled announcement can play locally on this node only (`rpt localplay`, the default) or globally to all connected/linked nodes (`rpt playback`)
   - **Waits for unkey** — if the node is currently keyed when a scheduled announcement is due, it holds off rather than playing over live traffic, and keeps checking until the node unkeys
   - **Takes precedence over tail messages** — if a scheduled announcement and a tail message would both fire at the same moment, the scheduled announcement always plays; the tail message simply retries on its next unkey once the announcement has finished, with no penalty against `MinInterval`
+  - **Per-announcement enable/disable** — disable an entry without removing it (`herald toggle-schedule <name>` or the web UI Status toggle); re-enable it the same way
 
 Both Tail Messages and Scheduled Announcements can be edited in place (name, text, voice, schedule, play mode) via `herald edit-rotation` / `herald edit-schedule` or the web UI, instead of removing and re-adding.
 
@@ -56,7 +56,7 @@ curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/N6LKA/
 
 **Development (testing only):** installs from `develop` — whatever's currently being worked on ahead of the next release.
 
-> ⚠️ **Warning:** `develop` may contain incomplete, untested, or broken features at any given time. Only use this on a system where you can tolerate things breaking (or reinstall from `main` to recover). Don't use it on a repeater you depend on for daily use.
+> ⚠️ **Warning:** `develop` may contain incomplete, untested, or broken features at any given time. Only use this on a system where you can tolerate things breaking (or reinstall from `main` to recover). Don't use it on a repeater or node you depend on for daily use.
 
 ```bash
 curl -fsSL "https://github.com/N6LKA/asl3-herald/archive/refs/heads/develop.tar.gz" \
@@ -117,12 +117,11 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 | `TailMessage.SkywarnPlus.WxTailFile` | `/tmp/SkywarnPlus/wx-tail.wav` | Path to SkywarnPlus wx-tail.wav |
 | `TailMessage.SkywarnPlus.SilenceThreshold` | `5000` | File size (bytes) to distinguish active alerts from silence |
 | `Scheduled[].Name` | _(required)_ | Unique name for the scheduled announcement |
-| `Scheduled[].Time` | _(required)_ | Time to play, `HH:MM` (24-hour) |
-| `Scheduled[].Days` | `daily` | `daily` or a list: `[saturday, sunday]` |
-| `Scheduled[].Week` | _(none)_ | Optional: 1-5 (5 = last week of month); omit for every matching day |
+| `Scheduled[].Cron` | _(required)_ | 5-field cron expression: `MIN HOUR DOM MON DOW` |
 | `Scheduled[].File` | _(required)_ | Path to WAV file to play |
 | `Scheduled[].PlayMode` | `local` | `local` (this node only) or `global` (all connected/linked nodes) |
 | `Scheduled[].Node` | _(daemon's `Node`)_ | Optional: target a specific node number for this entry (multinodes= setups) |
+| `Scheduled[].Enabled` | `true` | Set to `false` to disable an entry without removing it; re-enable with `herald toggle-schedule <name>` or the web UI |
 
 **AMI credentials** are never stored in `asl3-herald.conf`. The daemon reads them automatically at startup and on every config reload from `/etc/allmon3/allmon3.ini` (Allmon3 users) or `/etc/asterisk/manager.conf` (Supermon and other frontends). If neither file yields usable credentials, herald falls back to the legacy CLI kerchunk counter (local RF unkeys only).
 
@@ -145,14 +144,11 @@ TailMessage:
 
 Scheduled:
   - Name: "ARRL Audio News"
-    Time: "07:30"
-    Days: ["saturday"]
+    Cron: "30 7 * * 6"           # Saturdays at 7:30 AM
     File: /etc/asterisk/scripts/asl3-herald/announcements/arrl-news.wav
 
   - Name: "Second Saturday Breakfast Net"
-    Time: "08:00"
-    Days: ["saturday"]
-    Week: 2
+    Cron: "0 8 8-14 * 6"         # 2nd Saturday (DOM 8-14, DOW 6) at 8:00 AM
     File: /etc/asterisk/scripts/asl3-herald/announcements/breakfast-net.wav
 ```
 
@@ -193,9 +189,18 @@ Scheduled:
 
 | Command | Description |
 |---|---|
-| `sudo herald add-schedule "<text>" --name <name> --time HH:MM [--days daily\|d1,d2] [--week 1-5] [--voice <voice>] [--play-mode local\|global] [--node <n>]` | Generate TTS WAV and schedule it |
-| `sudo herald add-schedule-file <path> --name <name> --time HH:MM [--days daily\|d1,d2] [--week 1-5] [--play-mode local\|global] [--node <n>]` | Schedule an existing WAV file |
-| `sudo herald edit-schedule <name> [--new-name <n>] [--time HH:MM] [--days ...] [--week 1-5] [--play-mode local\|global] [--text "<text>"] [--voice <v>] [--file <path>] [--node <n>]` | Edit an existing scheduled announcement in place |
+| `sudo herald add-schedule "<text>" --name <name> --cron "MIN HOUR DOM MON DOW" [--voice <voice>] [--play-mode local\|global] [--node <n>]` | Generate TTS WAV and schedule it |
+| `sudo herald add-schedule-file <path> --name <name> --cron "MIN HOUR DOM MON DOW" [--play-mode local\|global] [--node <n>]` | Schedule an existing WAV file |
+| `sudo herald edit-schedule <name> [--new-name <n>] [--cron "MIN HOUR DOM MON DOW"] [--play-mode local\|global] [--text "<text>"] [--voice <v>] [--file <path>] [--node <n>]` | Edit an existing scheduled announcement in place |
+| `sudo herald toggle-schedule <name>` | Enable or disable a scheduled announcement without removing it |
+
+**Cron field reference:** `MIN` (0–59)  `HOUR` (0–23)  `DOM` = Day of Month (1–31)  `MON` = Month (1–12)  `DOW` = Day of Week (0=Sun, 1=Mon … 6=Sat). Use `*` for every, `*/n` for every-n, `n,m` for specific values, `n-m` for a range.
+
+```bash
+sudo herald add-schedule "ARRL Audio News follows" --name arrl-news --cron "30 7 * * 6"   # Saturdays at 7:30 AM
+sudo herald add-schedule "Net check-in time" --name net-checkin --cron "*/20 * * * *"      # every 20 minutes
+sudo herald add-schedule "Hourly ID" --name hourly-id --cron "30 * * * *"                  # every hour at :30
+```
 
 A scheduled announcement waits for the node to unkey before playing (rather than interrupting live traffic) and always takes precedence over a tail message due at the same moment.
 
@@ -205,18 +210,31 @@ A scheduled announcement waits for the node to unkey before playing (rather than
 
 `herald add` and `herald add-schedule` prefer **Piper** (neural TTS, installed by `install.sh`) for natural-sounding voices, and fall back to `festival` or `espeak-ng` if Piper isn't available.
 
+> **Install size note:** The Piper binary plus all 19 included voices totals approximately **1.2 GB**. The installer downloads them during `install.sh` and the step may take several minutes depending on your connection. Voices already present on disk are skipped on reinstall, so updates are fast.
+
 **Included Piper voices:**
 
-| Voice | Description |
+| Voice | Character |
 |---|---|
-| `en_US-lessac-medium` | US Female (default) |
-| `en_US-joe-medium` | US Male |
-| `en_US-amy-medium` | US Female |
-| `en_US-kristin-medium` | US Female |
-| `en_US-libritts_r-medium` | US Neutral |
-| `en_US-ryan-low` | US Male |
-| `en_GB-alan-medium` | British Male |
-| `en_GB-cori-high` | British Female |
+| `en_US-amy-medium` | Amy — US Female ⭐ default |
+| `en_US-arctic-medium` | Arctic — US Multi-speaker |
+| `en_US-bryce-medium` | Bryce — US Male |
+| `en_US-hfc_female-medium` | HFC Female — US Female |
+| `en_US-hfc_male-medium` | HFC Male — US Male |
+| `en_US-joe-medium` | Joe — US Male |
+| `en_US-john-medium` | John — US Male |
+| `en_US-kristin-medium` | Kristin — US Female |
+| `en_US-kusal-medium` | Kusal — US Male |
+| `en_US-lessac-medium` | Lessac — US Female |
+| `en_US-libritts_r-medium` | LibriTTS — US Neutral |
+| `en_US-norman-medium` | Norman — US Male |
+| `en_US-ryan-medium` | Ryan — US Male |
+| `en_GB-alan-medium` | Alan — British Male |
+| `en_GB-alba-medium` | Alba — Scottish Female |
+| `en_GB-aru-medium` | Aru — British Female |
+| `en_GB-cori-medium` | Cori — British Female |
+| `en_GB-jenny_dioco-medium` | Jenny — British Female |
+| `en_GB-northern_english_male-medium` | Northern English Male — British Male |
 
 ```bash
 herald voices                                              # list installed voices
@@ -239,6 +257,7 @@ An optional browser-based UI for managing both Tail Messages and Scheduled Annou
 - **Allmon3**: `install.sh` installs `asl3-herald.html` directly into Allmon3's own web root (`/usr/share/allmon3/`, alongside `index.html`) and appends a `[Herald]` entry to the bottom of `/etc/allmon3/menu.ini` (Allmon3's own supported sidebar-customization mechanism) pointing at it. Because the page lives inside Allmon3's own directory, it loads Allmon3's real `functions.js`/`index.js` unmodified — same header/sidebar chrome as any other Allmon3 page, and a same-origin `master/auth/check` fetch for login detection. (A page living outside Allmon3's own directory can't reliably read Allmon3's session cookie server-side — its `Path` ends up scoped to Allmon3's own API prefix — which is why an earlier design based on a separate PHP page cookie-forwarding to Allmon3's internal port didn't reliably work.)
 - **Optional**: `install.sh` also appends a rule to `/etc/allmon3/custom.css` that hides the sidebar link entirely until you're logged into Allmon3, using Allmon3's own stock `body.logged-in`/`body.logged-out` class toggle. This is cosmetic only — the page itself still gates its content on real login status regardless of whether the link is visible.
 - **Supermon (v7.4+ and v8+)**: `install.sh` installs `asl3-herald.php` directly into Supermon's own directory (`/var/www/html/supermon/`) and adds a link at the bottom of the page after logging in (added to `footer.inc`, inside Supermon's own existing login-conditional block — so it's already hidden until logged in, natively). Because the page lives inside Supermon's own directory, it includes Supermon's real `session.inc`/`header.inc`/`footer.inc` unmodified — same nav and login dialog as any other Supermon page, and the same named session cookie (`supermon61`) Supermon itself uses, so login detection always matches Supermon's actual state.
+- A **How It Works** tab explains the difference between Tail Messages and Scheduled Announcements, the RF/Network trigger toggle, and the Global play mode caution — useful for users who are new to the system or sharing access with others.
 - Both pages support adding announcements via typed text (with Piper voice selection) or by uploading an existing `.wav`/`.mp3` file (auto-converted to 8kHz mono).
 - **Playback History tab** — the last 200 plays (rotation, WX, scheduled, manual test) with timestamp, node, and play mode.
 - **Settings tab** also shows the installed version with a "Check for Updates" button (compares against `main`'s `version.txt` via GitHub's API), plus a Backup & Restore card to download the full config as JSON or restore from a previously exported file.
@@ -297,7 +316,7 @@ Every poll, **scheduled announcements are checked first**, before the unkey/tail
 
 A newly-appeared or changed WX alert always plays immediately, taking priority over the rotation. But a **persistent** alert (unchanged since it last played — detected via `wx-tail.wav`'s own modification time, not a separate/optional SkywarnPlus feed) alternates with the rotation on each unkey instead of playing every single time, so a long-running alert (common in some areas, e.g. summer heat warnings) doesn't shut the rotation out entirely. As soon as the alert changes or a new one appears, it immediately jumps back to the front of the line.
 
-**Scheduled announcements** run on a separate time-based path, unaffected by the tail message interval or repeater activity. They fire once per configured `HH:MM` per day, optionally restricted to a specific week of the month via `Week`. If the node is currently keyed when a scheduled announcement is due, it holds off and keeps re-checking every poll — even after the matching minute has passed — until the node unkeys, rather than missing the announcement or talking over live traffic. Once a scheduled announcement plays, its estimated audio duration (via `soxi`, or an 8-second fallback estimate) holds off any tail message for that long, so the two never overlap — this is also how a scheduled announcement takes precedence when both would fire at the same moment.
+**Scheduled announcements** run on a separate time-based path, unaffected by the tail message interval or node activity. They are driven by a standard 5-field cron expression (`MIN HOUR DOM MON DOW`) and can fire once at a specific time, at a repeating interval (e.g. `*/20 * * * *` = every 20 minutes), or on any cron-expressible schedule. Each entry fires at most once per matching minute; a `*/20` entry fires three times an hour, not once per day. If the node is currently keyed when a scheduled announcement is due, it holds off and keeps re-checking every poll — even after the matching minute has passed — until the node unkeys, rather than missing the announcement or talking over live traffic. Once a scheduled announcement plays, its estimated audio duration (via `soxi`, or an 8-second fallback estimate) holds off any tail message for that long, so the two never overlap — this is also how a scheduled announcement takes precedence when both would fire at the same moment.
 
 State (rotation index, WX alternation, scheduled "waiting for unkey" status, and last played times) is saved to a JSON file so it survives service restarts.
 
@@ -318,7 +337,7 @@ Set `SilenceThreshold: 5000` (the default) to reliably distinguish between the t
 
 ## Support the Project
 
-If asl3-herald has been useful on your repeater, please consider supporting its development!
+If asl3-herald has been useful on your repeater or node, please consider supporting its development!
 
 <p align="center"><a href="https://www.paypal.me/LarryAycock"><img src="https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png" width="300px" alt="Donate with PayPal"/></a></p>
 

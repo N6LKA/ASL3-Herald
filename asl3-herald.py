@@ -363,6 +363,89 @@ def week_of_month_range(week):
     high = 31 if week == 5 else low + 6
     return low, high
 
+def cron_field_matches(field, value):
+    field = str(field).strip()
+    if field == "*":
+        return True
+    for part in field.split(","):
+        part = part.strip()
+        if "/" in part:
+            base, step = part.split("/", 1)
+            try:
+                step = int(step)
+                start = 0 if base == "*" else int(base)
+                if value >= start and (value - start) % step == 0:
+                    return True
+            except ValueError:
+                pass
+        elif "-" in part:
+            lo, hi = part.split("-", 1)
+            try:
+                if int(lo) <= value <= int(hi):
+                    return True
+            except ValueError:
+                pass
+        else:
+            try:
+                if int(part) == value:
+                    return True
+            except ValueError:
+                pass
+    return False
+
+def cron_matches(expr, now):
+    parts = str(expr or "").split()
+    if len(parts) != 5:
+        return False
+    cron_min, cron_hour, cron_dom, cron_mon, cron_dow = parts
+    dow_val = now.isoweekday() % 7  # Sun=0, Mon=1, ..., Sat=6
+    return (
+        cron_field_matches(cron_min,  now.minute) and
+        cron_field_matches(cron_hour, now.hour)   and
+        cron_field_matches(cron_dom,  now.day)    and
+        cron_field_matches(cron_mon,  now.month)  and
+        cron_field_matches(cron_dow,  dow_val)
+    )
+
+_DAY_TO_DOW = {
+    "sunday": 0, "monday": 1, "tuesday": 2, "wednesday": 3,
+    "thursday": 4, "friday": 5, "saturday": 6,
+}
+
+def legacy_to_cron(sched):
+    """Convert legacy Time/Days/Week fields to a 5-field cron expression."""
+    time_str = sched.get("Time", "00:00") or "00:00"
+    try:
+        hh, mm = str(time_str).split(":")
+        hour, minute = int(hh), int(mm)
+    except (ValueError, AttributeError):
+        hour, minute = 0, 0
+
+    days = sched.get("Days", "daily")
+    if not days or days == "daily":
+        dow_field = "*"
+    else:
+        day_list = days if isinstance(days, list) else [days]
+        nums = [str(_DAY_TO_DOW[d.lower()]) for d in day_list if d.lower() in _DAY_TO_DOW]
+        dow_field = ",".join(nums) if nums else "*"
+
+    week = sched.get("Week")
+    if week:
+        try:
+            low, high = week_of_month_range(int(week))
+            dom_field = f"{low}-{high}"
+        except (TypeError, ValueError):
+            dom_field = "*"
+    else:
+        dom_field = "*"
+
+    return f"{minute} {hour} {dom_field} * {dow_field}"
+
+def sched_cron_expr(sched):
+    """Return the cron expression for a scheduled entry, converting legacy fields if needed."""
+    cron = sched.get("Cron")
+    return cron if cron else legacy_to_cron(sched)
+
 def entry_days_ok(entry, now):
     days = entry.get("Days") if isinstance(entry, dict) else None
     if not days or days == "daily":
@@ -409,38 +492,18 @@ def log_playback(state, entry_type, name, filepath, node, play_mode="local"):
     })
     state["playback_history"] = history[-MAX_PLAYBACK_HISTORY:]
 
-def scheduled_time_matches(sched, now):
-    if now.strftime("%H:%M") != sched.get("Time", ""):
-        return False
-
-    days = sched.get("Days", "daily")
-    if days != "daily":
-        day_list = [d.lower() for d in (days if isinstance(days, list) else [days])]
-        if now.strftime("%A").lower() not in day_list:
-            return False
-
-    week = sched.get("Week")
-    if week:
-        try:
-            week = int(week)
-        except (TypeError, ValueError):
-            week = None
-        if week in (1, 2, 3, 4, 5):
-            low, high = week_of_month_range(week)
-            if not (low <= now.day <= high):
-                return False
-
-    return True
-
 def should_play_scheduled(sched, state, node, now):
-    name = sched.get("Name", "")
-    date = now.strftime("%Y-%m-%d")
-
-    if state["scheduled_played"].get(name) == date:
+    if not sched.get("Enabled", True):
         return False
 
-    already_pending = state["scheduled_pending"].get(name) == date
-    if not already_pending and not scheduled_time_matches(sched, now):
+    name = sched.get("Name", "")
+    minute_key = now.strftime("%Y-%m-%d %H:%M")
+
+    if state["scheduled_played"].get(name) == minute_key:
+        return False
+
+    already_pending = name in state["scheduled_pending"]
+    if not already_pending and not cron_matches(sched_cron_expr(sched), now):
         return False
 
     filepath = sched.get("File", "")
@@ -454,7 +517,7 @@ def should_play_scheduled(sched, state, node, now):
 
     if keyed:
         if not already_pending:
-            state["scheduled_pending"][name] = date
+            state["scheduled_pending"][name] = minute_key
             log_info(f"Scheduled announcement '{name}' due but node {target_node} is keyed - waiting for unkey")
         else:
             log_debug(f"Scheduled announcement '{name}' still waiting for unkey")
@@ -525,6 +588,9 @@ def scheduled_with_health(scheduled):
         s2 = dict(s)
         filepath = s.get("File", "")
         s2["FileMissing"] = not (filepath and os.path.exists(filepath))
+        if not s2.get("Cron"):
+            s2["Cron"] = legacy_to_cron(s)
+        s2["Enabled"] = s.get("Enabled", True)
         out.append(s2)
     return out
 
@@ -633,13 +699,10 @@ def cmd_add_scheduled(config, args):
 
     entry = {
         "Name": args.name,
-        "Time": args.time,
-        "Days": "daily" if args.days == "daily" else [d.strip().lower() for d in args.days.split(",")],
+        "Cron": args.cron,
         "File": args.file,
         "PlayMode": args.play_mode or "local",
     }
-    if args.week:
-        entry["Week"] = int(args.week)
     if args.text:
         entry["Text"] = args.text
     if args.voice:
@@ -670,19 +733,13 @@ def cmd_edit_scheduled(config, args):
         return
 
     entry = dict(old)
+    # Migrate any legacy Time/Days/Week fields when editing
+    entry.pop("Time", None)
+    entry.pop("Days", None)
+    entry.pop("Week", None)
     entry["Name"] = new_name
-    if args.time is not None:
-        entry["Time"] = args.time
-    if args.days is not None:
-        entry["Days"] = "daily" if args.days == "daily" else [d.strip().lower() for d in args.days.split(",")]
-    if args.week is not None:
-        if args.week == "":
-            entry.pop("Week", None)
-        else:
-            try:
-                entry["Week"] = int(args.week)
-            except ValueError:
-                pass
+    if args.cron is not None:
+        entry["Cron"] = args.cron
     if args.play_mode is not None:
         entry["PlayMode"] = args.play_mode
     if args.text is not None:
@@ -700,6 +757,18 @@ def cmd_edit_scheduled(config, args):
     scheduled[idx] = entry
     save_config(config)
     print(json.dumps({"success": True, "message": f"Updated scheduled announcement: {new_name}"}))
+
+def cmd_toggle_scheduled(config, args):
+    scheduled = config.setdefault("Scheduled", [])
+    for i, s in enumerate(scheduled):
+        if s.get("Name") == args.name:
+            current = s.get("Enabled", True)
+            scheduled[i]["Enabled"] = not current
+            save_config(config)
+            state = "enabled" if not current else "disabled"
+            print(json.dumps({"success": True, "message": f"Scheduled announcement '{args.name}' {state}", "enabled": not current}))
+            return
+    print(json.dumps({"success": False, "message": f"No scheduled entry found for: {args.name}"}))
 
 def cmd_remove(config, identifier):
     tm = config.setdefault("TailMessage", {})
@@ -845,9 +914,7 @@ def build_arg_parser():
 
     p_add_sched = sub.add_parser("add-scheduled", help="Add a scheduled announcement")
     p_add_sched.add_argument("--name", required=True)
-    p_add_sched.add_argument("--time", required=True)
-    p_add_sched.add_argument("--days", default="daily")
-    p_add_sched.add_argument("--week", default=None)
+    p_add_sched.add_argument("--cron", required=True)
     p_add_sched.add_argument("--file", required=True)
     p_add_sched.add_argument("--play-mode", dest="play_mode", choices=["local", "global"], default="local")
     p_add_sched.add_argument("--text", default=None)
@@ -857,14 +924,15 @@ def build_arg_parser():
     p_edit_sched = sub.add_parser("edit-scheduled", help="Edit an existing scheduled announcement")
     p_edit_sched.add_argument("old_name")
     p_edit_sched.add_argument("--new-name", dest="new_name", default=None)
-    p_edit_sched.add_argument("--time", default=None)
-    p_edit_sched.add_argument("--days", default=None)
-    p_edit_sched.add_argument("--week", default=None)
+    p_edit_sched.add_argument("--cron", default=None)
     p_edit_sched.add_argument("--play-mode", dest="play_mode", choices=["local", "global"], default=None)
     p_edit_sched.add_argument("--text", default=None)
     p_edit_sched.add_argument("--voice", default=None)
     p_edit_sched.add_argument("--file", default=None)
     p_edit_sched.add_argument("--node", default=None)
+
+    p_toggle_sched = sub.add_parser("toggle-scheduled", help="Toggle a scheduled announcement enabled/disabled")
+    p_toggle_sched.add_argument("name")
 
     p_remove = sub.add_parser("remove", help="Remove a rotation file or scheduled announcement by name")
     p_remove.add_argument("identifier")
@@ -916,6 +984,8 @@ def cli_main():
         cmd_edit_rotation(config, args)
     elif args.command == "add-scheduled":
         cmd_add_scheduled(config, args)
+    elif args.command == "toggle-scheduled":
+        cmd_toggle_scheduled(config, args)
     elif args.command == "edit-scheduled":
         cmd_edit_scheduled(config, args)
     elif args.command == "remove":
@@ -1157,7 +1227,7 @@ def main():
                     play_mode   = sched.get("PlayMode", "local")
                     play_file(target_node, sched["File"], play_mode)
                     log_playback(state, "scheduled", name, sched["File"], target_node, play_mode)
-                    state["scheduled_played"][sched.get("Name", "")] = now_dt.strftime("%Y-%m-%d")
+                    state["scheduled_played"][sched.get("Name", "")] = now_dt.strftime("%Y-%m-%d %H:%M")
                     state["scheduled_pending"].pop(sched.get("Name", ""), None)
                     duration = audio_duration(sched["File"]) or DEFAULT_ANNOUNCEMENT_DURATION
                     state["scheduled_busy_until"] = now + min(duration, MAX_BUSY_SECONDS) + BUSY_GRACE_SECONDS

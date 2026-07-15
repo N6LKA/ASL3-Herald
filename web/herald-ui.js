@@ -29,6 +29,10 @@
     return String(path || '').split('/').pop();
   }
 
+  function titleCase(s) {
+    return String(s || '').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
   async function api(path, options) {
     const res = await fetch(API + path, options || {});
     let data;
@@ -114,14 +118,13 @@
   wireSourceToggle('tail-source', 'tail-tts-fields', 'tail-file-fields');
   wireSourceToggle('sched-source', 'sched-tts-fields', 'sched-file-fields');
 
-  // "Daily" checkbox disables the individual day checkboxes
+  // "Daily" checkbox disables the individual day checkboxes (tail messages only)
   function wireDailyToggle(dailyId, containerId) {
     document.getElementById(dailyId).addEventListener('change', function () {
       document.querySelectorAll('#' + containerId + ' input[type=checkbox]:not(#' + dailyId + ')')
         .forEach(cb => { cb.disabled = this.checked; if (this.checked) cb.checked = false; });
     });
   }
-  wireDailyToggle('sched-day-daily', 'sched-days');
   wireDailyToggle('tail-day-daily', 'tail-days');
 
   function pickedDays(dailyId, containerId) {
@@ -144,14 +147,25 @@
   // ── Load voices ────────────────────────────────────────────────────────────────────────────
   const DEFAULT_VOICE = 'en_US-amy-medium';
   const VOICE_LABELS = {
-    'en_US-lessac-medium':     'Lessac (US Female, Medium)',
-    'en_US-joe-medium':        'Joe (US Male, Medium)',
-    'en_US-amy-medium':        'Amy (US Female, Medium)',
-    'en_US-kristin-medium':    'Kristin (US Female, Medium)',
-    'en_US-libritts_r-medium': 'LibriTTS (US Neutral, Medium)',
-    'en_US-ryan-low':          'Ryan (US Male, Low)',
-    'en_GB-alan-medium':       'Alan (British Male, Medium)',
-    'en_GB-cori-high':         'Cori (British Female, High)',
+    'en_US-amy-medium':                    'Amy (US Female)',
+    'en_US-arctic-medium':                 'Arctic (US Multi-speaker)',
+    'en_US-bryce-medium':                  'Bryce (US Male)',
+    'en_US-hfc_female-medium':             'HFC Female (US Female)',
+    'en_US-hfc_male-medium':               'HFC Male (US Male)',
+    'en_US-joe-medium':                    'Joe (US Male)',
+    'en_US-john-medium':                   'John (US Male)',
+    'en_US-kristin-medium':                'Kristin (US Female)',
+    'en_US-kusal-medium':                  'Kusal (US Male)',
+    'en_US-lessac-medium':                 'Lessac (US Female)',
+    'en_US-libritts_r-medium':             'LibriTTS (US Neutral)',
+    'en_US-norman-medium':                 'Norman (US Male)',
+    'en_US-ryan-medium':                   'Ryan (US Male)',
+    'en_GB-alan-medium':                   'Alan (British Male)',
+    'en_GB-alba-medium':                   'Alba (Scottish Female)',
+    'en_GB-aru-medium':                    'Aru (British Female)',
+    'en_GB-cori-medium':                   'Cori (British Female)',
+    'en_GB-jenny_dioco-medium':            'Jenny (British Female)',
+    'en_GB-northern_english_male-medium':  'Northern English Male',
   };
   async function loadVoices() {
     const data = await api('voices.php');
@@ -221,13 +235,13 @@
       const node = isObj ? entry.Node : null;
       const fileMissing = isObj && !!entry.FileMissing;
       const daysAttr = Array.isArray(days) ? days.join(',') : (days || 'daily');
-      const daysDisplay = Array.isArray(days) ? days.join(', ') : (days || 'Daily');
+      const daysDisplay = Array.isArray(days) ? days.map(titleCase).join(', ') : titleCase(days || 'daily');
       const windowDisplay = (timeStart || timeEnd) ? ((timeStart || '00:00') + '–' + (timeEnd || '23:59')) : '—';
       const name = basename(file).replace(/\.wav$/, '');
       const canMoveUp = i > 0;
       const canMoveDown = i < rotationList.length - 1;
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + (i + 1) + '</td><td>' + basename(file) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td><td>' + daysDisplay + '</td>' +
+      tr.innerHTML = '<td>' + (i + 1) + '</td><td class="col-wrap">' + basename(file) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td><td>' + daysDisplay + '</td>' +
         '<td>' + windowDisplay + '</td><td>' + (node || '—') + '</td><td>' +
         '<button class="btn-reorder" data-name="' + name + '" data-direction="up" title="Move up"' + (canMoveUp ? '' : ' disabled') + '>&uarr;</button>' +
         '<button class="btn-reorder" data-name="' + name + '" data-direction="down" title="Move down"' + (canMoveDown ? '' : ' disabled') + '>&darr;</button>' +
@@ -237,21 +251,37 @@
       tbody.appendChild(tr);
     });
 
+    const defaultNode = data.node || '—';
     const stbody = document.querySelector('#sched-table tbody');
     stbody.innerHTML = '';
     (data.scheduled || []).forEach(s => {
-      const daysAttr = Array.isArray(s.Days) ? s.Days.join(',') : (s.Days || 'daily');
-      const daysDisplay = Array.isArray(s.Days) ? s.Days.join(', ') : s.Days;
       const playMode = s.PlayMode === 'global' ? 'global' : 'local';
       const fileMissing = !!s.FileMissing;
+      const enabled = s.Enabled !== false;
+      const cron = s.Cron || '* * * * *';
+      const cronParts = cron.split(/\s+/);
+      const [cMin, cHour, cDom, cMon, cDow] = [
+        cronParts[0] || '*', cronParts[1] || '*', cronParts[2] || '*',
+        cronParts[3] || '*', cronParts[4] || '*',
+      ];
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + s.Name + '</td><td>' + s.Time + '</td><td>' + daysDisplay + '</td>' +
-        '<td>' + (s.Week || '—') + '</td><td>' + (playMode === 'global' ? 'Global' : 'Local') + '</td>' +
-        '<td>' + (s.Node || '—') + '</td>' +
-        '<td>' + basename(s.File) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td><td>' +
-        '<button class="btn-play" data-name="' + s.Name + '">Test (local playback)</button>' +
-        '<button class="btn-edit" data-type="sched" data-name="' + s.Name + '" data-time="' + s.Time + '" data-days="' + daysAttr + '" data-week="' + (s.Week || '') + '" data-playmode="' + playMode + '" data-node="' + escapeAttr(s.Node) + '" data-text="' + escapeAttr(s.Text) + '" data-voice="' + escapeAttr(s.Voice) + '">Edit</button>' +
-        '<button class="btn-danger" data-name="' + s.Name + '">Remove</button></td>';
+      if (!enabled) tr.classList.add('sched-disabled');
+      tr.innerHTML =
+        '<td class="col-wrap">' + escapeAttr(s.Name) + '</td>' +
+        '<td><code>' + escapeAttr(cMin)  + '</code></td>' +
+        '<td><code>' + escapeAttr(cHour) + '</code></td>' +
+        '<td><code>' + escapeAttr(cDom)  + '</code></td>' +
+        '<td><code>' + escapeAttr(cMon)  + '</code></td>' +
+        '<td><code>' + escapeAttr(cDow)  + '</code></td>' +
+        '<td>' + (playMode === 'global' ? 'Global' : 'Local') + '</td>' +
+        '<td>' + escapeAttr(s.Node || defaultNode) + '</td>' +
+        '<td class="col-wrap">' + basename(s.File) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td>' +
+        '<td><button class="' + (enabled ? 'btn-enable' : 'btn-disable') + ' btn-toggle-sched" data-name="' + escapeAttr(s.Name) + '">' + (enabled ? 'Enabled' : 'Disabled') + '</button></td>' +
+        '<td>' +
+        '<button class="btn-play" data-name="' + escapeAttr(s.Name) + '">Test (local playback)</button>' +
+        '<button class="btn-edit" data-type="sched" data-name="' + escapeAttr(s.Name) + '" data-cron="' + escapeAttr(cron) + '" data-playmode="' + playMode + '" data-node="' + escapeAttr(s.Node) + '" data-text="' + escapeAttr(s.Text) + '" data-voice="' + escapeAttr(s.Voice) + '">Edit</button>' +
+        '<button class="btn-danger" data-name="' + escapeAttr(s.Name) + '">Remove</button>' +
+        '</td>';
       stbody.appendChild(tr);
     });
 
@@ -320,6 +350,17 @@
         else startEditSched(btn.dataset);
       };
     });
+    document.querySelectorAll('.btn-toggle-sched').forEach(btn => {
+      btn.onclick = async () => {
+        const data = await api('toggle_scheduled.php', { method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ name: btn.dataset.name }) });
+        if (data.success === false) {
+          alert(data.message || 'Toggle failed');
+          return;
+        }
+        loadAll();
+      };
+    });
   }
 
   // ── Edit tail message ───────────────────────────────────────────────────────────────────
@@ -367,15 +408,31 @@
   // ── Edit scheduled announcement ─────────────────────────────────────────────────────────
   let editingSchedName = null;
 
+  function applyCronToPicker(cronExpr) {
+    const parts = String(cronExpr || '* * * * *').split(/\s+/);
+    document.getElementById('sched-cron-min').value  = parts[0] || '*';
+    document.getElementById('sched-cron-hour').value = parts[1] || '*';
+    document.getElementById('sched-cron-dom').value  = parts[2] || '*';
+    document.getElementById('sched-cron-mon').value  = parts[3] || '*';
+    document.getElementById('sched-cron-dow').value  = parts[4] || '*';
+  }
+
+  function readCronFromPicker() {
+    return [
+      document.getElementById('sched-cron-min').value.trim()  || '*',
+      document.getElementById('sched-cron-hour').value.trim() || '*',
+      document.getElementById('sched-cron-dom').value.trim()  || '*',
+      document.getElementById('sched-cron-mon').value.trim()  || '*',
+      document.getElementById('sched-cron-dow').value.trim()  || '*',
+    ].join(' ');
+  }
+
   function startEditSched(d) {
     editingSchedName = d.name;
     document.getElementById('sched-name').value = d.name;
-    document.getElementById('sched-time').value = d.time || '';
-    document.getElementById('sched-week').value = d.week || '';
+    applyCronToPicker(d.cron || '* * * * *');
     document.getElementById('sched-playmode').value = d.playmode || 'local';
     document.getElementById('sched-node').value = d.node || '';
-
-    applyDaysToPicker(d.days || 'daily', 'sched-day-daily', 'sched-days');
 
     const hasText = !!d.text;
     document.querySelector('input[name="sched-source"][value="' + (hasText ? 'tts' : 'file') + '"]').checked = true;
@@ -396,14 +453,12 @@
   function cancelEditSched() {
     editingSchedName = null;
     document.getElementById('sched-name').value = '';
-    document.getElementById('sched-time').value = '';
+    applyCronToPicker('* * * * *');
     document.getElementById('sched-text').value = '';
     document.getElementById('sched-file').value = '';
     document.getElementById('sched-file-keep-note').style.display = 'none';
-    document.getElementById('sched-week').value = '';
     document.getElementById('sched-playmode').value = 'local';
     document.getElementById('sched-node').value = '';
-    applyDaysToPicker('daily', 'sched-day-daily', 'sched-days');
     document.getElementById('sched-form-heading').textContent = 'Add a Scheduled Announcement';
     document.getElementById('btn-add-sched').textContent = 'Add Scheduled Announcement';
     document.getElementById('sched-edit-cancel').style.display = 'none';
@@ -525,19 +580,15 @@
   document.getElementById('btn-add-sched').addEventListener('click', async () => {
     const msgEl = document.getElementById('sched-msg');
     const name = document.getElementById('sched-name').value.trim();
-    const time = document.getElementById('sched-time').value;
-    const week = document.getElementById('sched-week').value;
+    const cron = readCronFromPicker();
     const playMode = document.getElementById('sched-playmode').value;
     const isTts = document.querySelector('input[name="sched-source"]:checked').value === 'tts';
-    const days = pickedDays('sched-day-daily', 'sched-days');
 
     const form = new FormData();
     form.append('name', name);
-    form.append('time', time);
-    form.append('days', days);
+    form.append('cron', cron);
     form.append('play_mode', playMode);
     form.append('node', document.getElementById('sched-node').value.trim());
-    if (week) form.append('week', week);
     if (isTts) {
       form.append('mode', 'tts');
       form.append('text', document.getElementById('sched-text').value);
