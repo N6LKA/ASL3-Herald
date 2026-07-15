@@ -16,7 +16,7 @@
   #herald-ui {
     font-family: Arial, sans-serif;
     font-size: 16px;
-    max-width: 1400px;
+    max-width: 100%;
     color: #222;
   }
   #herald-ui h3 { margin-bottom: 8px; }
