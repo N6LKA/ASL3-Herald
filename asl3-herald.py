@@ -1213,16 +1213,24 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, test_mode=False, warnings
     # single occurrence, so it needs a fresh name every time instead.
     out_path = os.path.join(TW_TEMP_OUTDIR, f"asl3-herald-timeweather-{int(now * 1000)}.gsm")
 
-    # Best-effort cleanup of the file from the *previous* occurrence. Done
-    # here (start of this call) rather than right after play_file() below,
-    # since play_file() only issues the play command and returns immediately
-    # - the previous file could still be mid-playback for several more
-    # seconds. By the time any next occurrence happens (next cron tick or
-    # next manual test), that playback is long finished.
+    # Best-effort cleanup of the file from the *previous* occurrence. Only
+    # once it's actually old enough that any realistic playback is long done
+    # - confirmed live that issuing "rpt localplay" and Asterisk actually
+    # opening the file are NOT simultaneous (channel setup / joining the
+    # softmix bridge takes some real time first), so deleting the previous
+    # file unconditionally on the very next call - as this used to do - can
+    # delete it out from under Asterisk before it ever opens it, if a human
+    # clicks Test again faster than that setup takes (which they will, when
+    # each attempt looks like it silently failed). Gating on age instead of
+    # "is there a next call yet" avoids that regardless of how fast someone
+    # re-tests. MAX_BUSY_SECONDS is already the system's own notion of the
+    # longest a single occurrence could plausibly still be playing.
     old_path = state.get("timeweather_last_audio_file")
     if old_path and old_path != out_path and os.path.exists(old_path):
         try:
-            os.remove(old_path)
+            age = now - os.path.getmtime(old_path)
+            if age > MAX_BUSY_SECONDS:
+                os.remove(old_path)
         except OSError as e:
             log_debug(f"Time & Weather: could not remove previous audio file {old_path}: {e}")
 
