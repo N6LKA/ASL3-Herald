@@ -9,6 +9,7 @@ announcements.
 """
 
 import os
+import re
 import sys
 import time
 import json
@@ -18,6 +19,8 @@ import argparse
 import subprocess
 import traceback
 import configparser
+import urllib.request
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 
@@ -34,6 +37,15 @@ CONF_FILE    = os.path.join(INSTALL_DIR, "asl3-herald.conf")
 STATE_FILE   = os.path.join(INSTALL_DIR, "asl3-herald.state")
 DISABLE_FLAG = os.path.join(INSTALL_DIR, "asl3-herald-disabled")
 ANNOUNCE_DIR = os.path.join(INSTALL_DIR, "announcements")
+
+# Pre-recorded sound snippets (digits, greetings, condition words) shared with
+# Time-Weather-Announce and other ASL3 programs — installed by install.sh.
+TW_SOUND_BASE   = "/usr/local/share/asterisk/sounds/custom"
+TW_COORD_CACHE  = os.path.join(INSTALL_DIR, "timeweather-coords.cache")
+TW_TEMP_OUTDIR  = "/tmp"
+SWP_WEATHER_FILE = "/tmp/SkywarnPlus/swp-data.json"
+DEFAULT_TW_CRON = "0 * * * *"
+DEFAULT_TW_WEATHER_CACHE_MIN = 10
 
 try:
     with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "version.txt")) as _vf:
@@ -279,6 +291,11 @@ def load_state():
         "swp_last_mtime": None,
         "swp_next_is_rotation": False,
         "playback_history": [],
+        "timeweather_played": None,
+        "timeweather_pending": False,
+        "timeweather_busy_until": 0.0,
+        "timeweather_weather_cache": None,
+        "timeweather_tempest_station": None,
     }
     try:
         if os.path.exists(STATE_FILE):
@@ -513,6 +530,18 @@ def should_play_scheduled(sched, state, node, now):
         log_warn(f"Scheduled file not found: {filepath}  ({name})")
         return False
 
+    # Hourly Time & Weather takes priority over Scheduled Announcements when
+    # both are due at the same moment — same pending/retry pattern as the
+    # keyed-node case below, so the scheduled entry plays right after T&W
+    # finishes instead of being skipped outright.
+    if now.timestamp() < state.get("timeweather_busy_until", 0):
+        if not already_pending:
+            state["scheduled_pending"][name] = minute_key
+            log_info(f"Scheduled announcement '{name}' due but Time & Weather is playing - waiting")
+        else:
+            log_debug(f"Scheduled announcement '{name}' still waiting on Time & Weather")
+        return False
+
     entry_node = sched.get("Node")
     target_node = str(entry_node) if entry_node else node
     keyed = node_is_keyed(target_node)
@@ -528,6 +557,617 @@ def should_play_scheduled(sched, state, node, now):
     if already_pending:
         state["scheduled_pending"].pop(name, None)
 
+    return True
+
+# ── Hourly Time & Weather ──────────────────────────────────────────────────────
+# Ported from Time-Weather-Announce (saytime.pl / weather.sh) into native
+# Python so weather fetch + audio assembly live in one process/language with
+# the rest of the daemon, instead of shelling out to a second script.
+
+# Antarctic/remote research-station and island locations with no postal code —
+# ported verbatim from weather.sh's get_special_coordinates().
+_TW_SPECIAL_COORDS = {
+    "SOUTHPOLE": (-90.0, 0.0), "MCMURDO": (-77.85, 166.67), "PALMER": (-64.77, -64.05),
+    "VOSTOK": (-78.46, 106.84), "CASEY": (-66.28, 110.53), "MAWSON": (-67.60, 62.87),
+    "DAVIS": (-68.58, 77.97), "SCOTTBASE": (-77.85, 166.76), "SYOWA": (-69.00, 39.58),
+    "CONCORDIA": (-75.10, 123.33), "HALLEY": (-75.58, -26.66), "DUMONT": (-66.66, 140.01),
+    "SANAE": (-71.67, -2.84), "ALERT": (82.50, -62.35), "EUREKA": (79.99, -85.93),
+    "THULE": (76.53, -68.70), "LONGYEARBYEN": (78.22, 15.65), "BARROW": (71.29, -156.79),
+    "RESOLUTE": (74.72, -94.83), "GRISE": (76.42, -82.90), "ASCENSION": (-7.95, -14.36),
+    "STHELENA": (-15.97, -5.72), "TRISTAN": (-37.11, -12.28), "BOUVET": (-54.42, 3.38),
+    "HEARD": (-53.10, 73.51), "KERGUELEN": (-49.35, 70.22), "CROZET": (-46.43, 51.86),
+    "AMSTERDAM": (-37.83, 77.57), "MACQUARIE": (-54.62, 158.86), "MIDWAY": (28.21, -177.38),
+    "WAKE": (19.28, 166.65), "JOHNSTON": (16.73, -169.53), "PALMYRA": (5.89, -162.08),
+    "JARVIS": (-0.37, -159.99), "HOWLAND": (0.81, -176.62), "BAKER": (0.19, -176.48),
+    "KINGMAN": (6.38, -162.42), "DIEGO": (-7.26, 72.40), "CHAGOS": (-7.26, 72.40),
+    "COCOS": (-12.19, 96.83), "CHRISTMAS": (-10.49, 105.62), "FALKLANDS": (-51.70, -59.52),
+    "SOUTHGEORGIA": (-54.28, -36.51), "SOUTHSANDWICH": (-59.43, -26.35),
+    "MARQUESAS": (-9.00, -140.00), "EASTER": (-27.11, -109.36), "PITCAIRN": (-25.07, -130.10),
+    "CLIPPERTON": (10.30, -109.22), "GALAPAGOS": (-0.95, -90.97), "MAUNA": (19.54, -155.58),
+    "JUNGFRAUJOCH": (46.55, 7.98), "MCMURDODRY": (-77.85, 163.00), "ATACAMA": (-24.50, -69.25),
+    "GOUGH": (-40.35, -9.88), "MARION": (-46.88, 37.86), "PRINCE": (-46.88, 37.86),
+    "CAMPBELL": (-52.55, 169.15), "AUCKLAND": (-50.73, 166.09), "KERMADEC": (-29.25, -177.92),
+    "CHATHAM": (-43.95, -176.55),
+}
+
+# Canadian FSA (first 3 chars of postal code) -> nearest major city, used only
+# as a fallback when Nominatim's direct postal-code lookup fails.
+_TW_CANADIAN_FSA_CITY = {
+    "N7L": "Chatham-Kent, Ontario", "N7M": "Sarnia, Ontario", "N7T": "Sarnia, Ontario",
+    "N1G": "Guelph, Ontario", "N1H": "Guelph, Ontario", "N1K": "Guelph, Ontario", "N1L": "Guelph, Ontario",
+    "N3C": "Cambridge, Ontario", "N3E": "Cambridge, Ontario", "N3H": "Cambridge, Ontario",
+    "N2C": "Kitchener, Ontario", "N2E": "Kitchener, Ontario", "N2G": "Kitchener, Ontario",
+    "N2H": "Kitchener, Ontario", "N2J": "Kitchener, Ontario", "N2K": "Kitchener, Ontario",
+    "N2L": "Kitchener, Ontario", "N2M": "Kitchener, Ontario", "N2N": "Kitchener, Ontario",
+    "N2P": "Kitchener, Ontario", "N2R": "Kitchener, Ontario",
+}
+for _fsa in ("N6A", "N6B", "N6C", "N6E", "N6G", "N6H", "N6J", "N6K"):
+    _TW_CANADIAN_FSA_CITY[_fsa] = "London, Ontario"
+for _fsa in ("N8A", "N8H", "N8N", "N8P", "N8R", "N8S", "N8T", "N8V", "N8W", "N8X", "N8Y",
+             "N9A", "N9B", "N9C", "N9E", "N9G", "N9H", "N9J", "N9K", "N9Y"):
+    _TW_CANADIAN_FSA_CITY[_fsa] = "Windsor, Ontario"
+_TW_CANADIAN_FSA_PREFIX = {
+    "M": "Toronto, Ontario", "V": "Vancouver, British Columbia", "H": "Montreal, Quebec",
+    "T": "Calgary, Alberta", "R": "Winnipeg, Manitoba", "K": "Ottawa, Ontario",
+    "L": "Mississauga, Ontario", "N": "London, Ontario", "P": "Thunder Bay, Ontario",
+    "S": "Regina, Saskatchewan", "E": "Moncton, New Brunswick", "B": "Halifax, Nova Scotia",
+}
+
+def tw_is_icao_code(loc):
+    return bool(re.fullmatch(r"[A-Z]{4}", loc.upper()))
+
+def tw_is_special_location(loc):
+    return loc.upper().replace(" ", "") in _TW_SPECIAL_COORDS
+
+def tw_special_coordinates(loc):
+    return _TW_SPECIAL_COORDS.get(loc.upper().replace(" ", ""))
+
+def tw_canadian_fsa_city(fsa):
+    fsa = fsa.upper()
+    if fsa in _TW_CANADIAN_FSA_CITY:
+        return _TW_CANADIAN_FSA_CITY[fsa]
+    return _TW_CANADIAN_FSA_PREFIX.get(fsa[0])
+
+def tw_http_get(url, timeout=10):
+    """GET a URL and return the response body as text, or None on any failure."""
+    try:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "asl3-herald/{} (github.com/N6LKA/asl3-herald)".format(VERSION),
+        })
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status != 200:
+                return None
+            return resp.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        log_debug(f"HTTP GET failed ({url}): {e}")
+        return None
+
+def tw_http_get_json(url, timeout=10):
+    text = tw_http_get(url, timeout=timeout)
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
+
+# ── Condition-word mapping (drives which pre-recorded audio snippet plays) ────
+
+def tw_metar_condition_word(metar_text):
+    m = metar_text or ""
+    if re.search(r"(\+|-)?TS", m):
+        return "thunderstorm"
+    if re.search(r"FZRA|FZDZ|\+RA|-RA|RA", m):
+        return "rain"
+    if re.search(r"SN", m):
+        return "snow"
+    if re.search(r"PL", m):
+        return "hail"
+    if re.search(r"FG", m):
+        return "fog"
+    if re.search(r"BR|HZ|FU|DU|SA", m):
+        return "mist"
+    if re.search(r"OVC|BKN|SCT", m):
+        return "cloudy"
+    return "clear"
+
+def tw_openmeteo_condition_word(code, is_day=True):
+    code = int(code) if code is not None else 0
+    if code == 0:
+        return "clear"
+    if code in (1, 2):
+        return "sunny" if is_day else "clear"
+    if code == 3:
+        return "cloudy"
+    if code in (45, 48):
+        return "fog"
+    if code in (51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82):
+        return "rain"
+    if code in (71, 73, 75, 77, 85, 86):
+        return "snow"
+    if code in (95, 96, 99):
+        return "thunderstorm"
+    return "clear"
+
+def tw_text_condition_word(text):
+    """Map a free-text condition description (Tempest's `conditions` string,
+    or SkywarnPlus's passthrough condition text) to our fixed audio vocabulary."""
+    c = (text or "").lower()
+    if "thunderstorm" in c or "thunder" in c:
+        return "thunderstorm"
+    if "drizzle" in c or "rain" in c:
+        return "rain"
+    if "snow" in c or "sleet" in c or "blizzard" in c:
+        return "snow"
+    if "hail" in c:
+        return "hail"
+    if "fog" in c or "mist" in c:
+        return "fog"
+    if "partly" in c and "cloud" in c:
+        return "partly cloudy"
+    if "cloud" in c or "overcast" in c:
+        return "cloudy"
+    if "sunny" in c or "clear" in c or "fair" in c:
+        return "clear"
+    return None if not c else "clear"
+
+# ── Coordinate resolution (Open-Meteo needs lat/lon, not a postal code) ───────
+
+def _tw_load_coord_cache():
+    try:
+        with open(TW_COORD_CACHE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _tw_save_coord_cache(cache):
+    try:
+        os.makedirs(os.path.dirname(TW_COORD_CACHE), exist_ok=True)
+        with open(TW_COORD_CACHE, "w") as f:
+            json.dump(cache, f)
+    except Exception as e:
+        log_warn(f"Could not write coordinate cache: {e}")
+
+def tw_postal_to_coordinates(postal, default_country="us"):
+    postal_upper = postal.upper()
+    cache = _tw_load_coord_cache()
+    if postal_upper in cache:
+        return tuple(cache[postal_upper])
+
+    if re.fullmatch(r"\d{5}", postal_upper):
+        url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode({
+            "postalcode": postal, "country": default_country, "format": "json", "limit": 1,
+        })
+    elif re.fullmatch(r"[A-Z]\d[A-Z] ?\d[A-Z]\d", postal_upper):
+        normalized = postal_upper.replace(" ", "")
+        normalized = normalized[:3] + " " + normalized[3:]
+        url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode({
+            "postalcode": normalized, "country": "ca", "format": "json", "limit": 1,
+        })
+    else:
+        url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode({
+            "postalcode": postal, "format": "json", "limit": 1,
+        })
+
+    data = tw_http_get_json(url)
+    if data:
+        try:
+            lat, lon = float(data[0]["lat"]), float(data[0]["lon"])
+            cache[postal_upper] = [lat, lon]
+            _tw_save_coord_cache(cache)
+            return (lat, lon)
+        except (IndexError, KeyError, ValueError, TypeError):
+            pass
+
+    # Canadian FSA fallback: look up the nearest major city by name instead
+    if re.match(r"^[A-Z]\d[A-Z]", postal_upper):
+        city = tw_canadian_fsa_city(postal_upper[:3])
+        if city:
+            time.sleep(1)  # be polite to Nominatim between requests
+            url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode({
+                "q": city, "format": "json", "limit": 1,
+            })
+            data = tw_http_get_json(url)
+            if data:
+                try:
+                    lat, lon = float(data[0]["lat"]), float(data[0]["lon"])
+                    cache[postal_upper] = [lat, lon]
+                    _tw_save_coord_cache(cache)
+                    return (lat, lon)
+                except (IndexError, KeyError, ValueError, TypeError):
+                    pass
+
+    log_warn(f"Could not resolve coordinates for location: {postal}")
+    return None
+
+def tw_icao_coordinates(icao):
+    data = tw_http_get_json(
+        "https://aviationweather.gov/api/data/airport?ids={}&format=json".format(icao)
+    )
+    try:
+        info = data[0] if isinstance(data, list) else data
+        return (float(info["lat"]), float(info["lon"]))
+    except (IndexError, KeyError, TypeError, ValueError):
+        return None
+
+def tw_resolve_coordinates(location, default_country="us"):
+    if tw_is_special_location(location):
+        return tw_special_coordinates(location)
+    if tw_is_icao_code(location):
+        return tw_icao_coordinates(location.upper())
+    return tw_postal_to_coordinates(location, default_country)
+
+# ── Per-provider fetchers ──────────────────────────────────────────────────────
+# All return a dict {temp_f, condition, feels_like_f, humidity} (any value may
+# be None if unavailable) or None on total failure. Temperatures always in F;
+# build_timeweather_audio() converts to C itself if TemperatureUnit is C.
+
+def fetch_weather_metar(icao):
+    icao = icao.upper()
+    metar = tw_http_get(
+        "https://aviationweather.gov/api/data/metar?ids={}&format=raw&hours=0&taf=false".format(icao)
+    )
+    if metar:
+        metar = metar.splitlines()[0].strip()
+    if not metar:
+        metar = tw_http_get(
+            "https://tgftp.nws.noaa.gov/data/observations/metar/stations/{}.TXT".format(icao)
+        )
+        if metar:
+            lines = [l for l in metar.splitlines() if l.strip()]
+            metar = lines[-1].strip() if lines else None
+    if not metar:
+        log_debug(f"METAR: no data for {icao}")
+        return None
+
+    m = re.search(r" (M?\d{2})/(M?\d{2}) ", metar)
+    if not m:
+        log_debug(f"METAR: no temp field in report for {icao}")
+        return None
+    t_c = -int(m.group(1)[1:]) if m.group(1).startswith("M") else int(m.group(1))
+    temp_f = round(t_c * 9 / 5 + 32)
+
+    return {
+        "temp_f": temp_f,
+        "condition": tw_metar_condition_word(metar),
+        "feels_like_f": None,   # not available from METAR
+        "humidity": None,       # not available from METAR
+    }
+
+def fetch_weather_openmeteo(location, default_country="us"):
+    coords = tw_resolve_coordinates(location, default_country)
+    if not coords:
+        return None
+    lat, lon = coords
+
+    data = tw_http_get_json(
+        "https://api.open-meteo.com/v1/forecast?" + urllib.parse.urlencode({
+            "latitude": lat, "longitude": lon,
+            "current": "temperature_2m,apparent_temperature,relative_humidity_2m,"
+                       "weather_code,is_day",
+            "temperature_unit": "fahrenheit", "timezone": "auto",
+        })
+    )
+    if not data or "current" not in data:
+        log_debug(f"OpenMeteo: no current-conditions data for {location}")
+        return None
+
+    cur = data["current"]
+    if cur.get("temperature_2m") is None:
+        return None
+
+    return {
+        "temp_f": round(cur["temperature_2m"]),
+        "condition": tw_openmeteo_condition_word(cur.get("weather_code", 0), cur.get("is_day", 1) == 1),
+        "feels_like_f": round(cur["apparent_temperature"]) if cur.get("apparent_temperature") is not None else None,
+        "humidity": round(cur["relative_humidity_2m"]) if cur.get("relative_humidity_2m") is not None else None,
+    }
+
+def fetch_weather_tempest(state, token, station_id):
+    if not token:
+        log_warn("Tempest requires TimeWeather.Weather.Tempest.Token")
+        return None
+
+    cached = state.get("timeweather_tempest_station") or {}
+    resolved_station_id = station_id or (cached.get("station_id") if cached.get("token") == token else None)
+    if not resolved_station_id:
+        stations = tw_http_get_json(
+            "https://swd.weatherflow.com/swd/rest/stations?token={}".format(token)
+        )
+        found = (stations or {}).get("stations") or []
+        if not found:
+            log_warn("Tempest: could not auto-detect station ID")
+            return None
+        resolved_station_id = found[0]["station_id"]
+        state["timeweather_tempest_station"] = {"token": token, "station_id": resolved_station_id}
+        log_info(f"Tempest: auto-detected station ID {resolved_station_id}")
+
+    data = tw_http_get_json(
+        "https://swd.weatherflow.com/swd/rest/better_forecast?" + urllib.parse.urlencode({
+            "station_id": resolved_station_id, "units_temp": "f", "token": token,
+        })
+    )
+    cc = (data or {}).get("current_conditions") or {}
+    if cc.get("air_temperature") is None:
+        log_debug(f"Tempest: no current conditions for station {resolved_station_id}")
+        return None
+
+    return {
+        "temp_f": round(cc["air_temperature"]),
+        "condition": tw_text_condition_word(cc.get("conditions", "")),
+        "feels_like_f": round(cc["feels_like"]) if cc.get("feels_like") is not None else None,
+        "humidity": round(cc["relative_humidity"]) if cc.get("relative_humidity") is not None else None,
+    }
+
+def fetch_weather_skywarnplus():
+    try:
+        with open(SWP_WEATHER_FILE) as f:
+            payload = json.load(f)
+    except Exception:
+        log_warn(f"SkywarnPlus weather file not found or unreadable: {SWP_WEATHER_FILE}")
+        return None
+
+    w = payload.get("weather")
+    if not w:
+        log_warn("SkywarnPlus weather file has no 'weather' data (WeatherEnable may be off in its config.yaml)")
+        return None
+
+    def _num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    temp_f = _num(w.get("temp_f"))
+    feels_f = _num(w.get("feels_like_f"))
+    humidity = _num(w.get("humidity"))
+    return {
+        "temp_f": round(temp_f) if temp_f is not None else None,
+        "condition": tw_text_condition_word(w.get("condition", "")),
+        "feels_like_f": round(feels_f) if feels_f is not None else None,
+        "humidity": round(humidity) if humidity is not None else None,
+    }
+
+def fetch_weather(state, provider, location, tempest_token, tempest_station, default_country="us"):
+    """Dispatch to the right provider(s), matching weather.sh's fallback rules."""
+    provider = (provider or "auto").lower()
+
+    if provider == "skywarnplus":
+        return fetch_weather_skywarnplus()
+
+    if provider == "tempest":
+        result = fetch_weather_tempest(state, tempest_token, tempest_station)
+        if result is None and location:
+            result = fetch_weather_openmeteo(location, default_country)
+        return result
+
+    is_icao = bool(location) and tw_is_icao_code(location)
+
+    if is_icao:
+        if provider == "openmeteo":
+            return fetch_weather_openmeteo(location, default_country) or fetch_weather_metar(location)
+        result = fetch_weather_metar(location)
+        return result if result is not None else fetch_weather_openmeteo(location, default_country)
+
+    if location and tw_is_special_location(location):
+        return fetch_weather_openmeteo(location, default_country)
+
+    # Postal/ZIP code (or provider explicitly forced to metar with a non-ICAO
+    # location, which will simply fail and fall through to Open-Meteo)
+    if provider == "metar":
+        result = fetch_weather_metar(location) if location else None
+        return result if result is not None else fetch_weather_openmeteo(location, default_country)
+    result = fetch_weather_openmeteo(location, default_country) if location else None
+    return result if result is not None else fetch_weather_metar(location)
+
+def fetch_weather_cached(state, provider, location, tempest_token, tempest_station,
+                          cache_max_age_min=DEFAULT_TW_WEATHER_CACHE_MIN, default_country="us"):
+    """Throttled wrapper: reuses the last successful reading if it's still
+    fresh, and falls back to a stale reading (rather than nothing) if a fresh
+    fetch fails outright."""
+    cache = state.get("timeweather_weather_cache")
+    if cache and cache.get("provider") == provider:
+        try:
+            fetched = datetime.fromisoformat(cache["fetched"])
+            if (datetime.now() - fetched).total_seconds() < cache_max_age_min * 60:
+                return cache["weather"]
+        except Exception:
+            pass
+
+    weather = fetch_weather(state, provider, location, tempest_token, tempest_station, default_country)
+    if weather:
+        state["timeweather_weather_cache"] = {
+            "provider": provider, "weather": weather,
+            "fetched": datetime.now().isoformat(),
+        }
+    elif cache:
+        log_warn("Time & Weather fetch failed, reusing last cached reading")
+        weather = cache["weather"]
+    return weather
+
+# ── Announcement audio assembly ────────────────────────────────────────────────
+# Concatenates pre-recorded GSM snippets exactly like saytime.pl did (GSM
+# frames are directly concatenable — no re-encoding needed).
+
+def _tw_find_sound(name):
+    path = os.path.join(TW_SOUND_BASE, name + ".gsm")
+    return path if os.path.exists(path) else None
+
+def tw_add_number(n, files):
+    n = int(abs(n))
+    if n >= 100:
+        files.append(os.path.join(TW_SOUND_BASE, "digits", "1.gsm"))
+        files.append(os.path.join(TW_SOUND_BASE, "digits", "hundred.gsm"))
+        if n > 100:
+            n -= 100
+    if n < 20:
+        files.append(os.path.join(TW_SOUND_BASE, "digits", f"{n}.gsm"))
+    else:
+        tens, ones = (n // 10) * 10, n % 10
+        files.append(os.path.join(TW_SOUND_BASE, "digits", f"{tens}.gsm"))
+        if ones > 0:
+            files.append(os.path.join(TW_SOUND_BASE, "digits", f"{ones}.gsm"))
+
+def build_timeweather_audio(tw_cfg, weather, now_dt, out_path):
+    """Builds the announcement WAV/GSM file. Returns True on success."""
+    files = []
+    hour, minute = now_dt.hour, now_dt.minute
+    time_format = str(tw_cfg.get("TimeFormat", "12"))
+
+    if time_format == "24":
+        files.append(os.path.join(TW_SOUND_BASE, "the-time-is.gsm"))
+        tw_add_number(hour, files)
+        if minute == 0:
+            files.append(os.path.join(TW_SOUND_BASE, "digits", "oclock.gsm"))
+        elif minute < 10:
+            files.append(os.path.join(TW_SOUND_BASE, "digits", "oh.gsm"))
+            files.append(os.path.join(TW_SOUND_BASE, "digits", f"{minute}.gsm"))
+        else:
+            tens, ones = (minute // 10) * 10, minute % 10
+            files.append(os.path.join(TW_SOUND_BASE, "digits", f"{tens}.gsm"))
+            if ones > 0:
+                files.append(os.path.join(TW_SOUND_BASE, "digits", f"{ones}.gsm"))
+    else:
+        if hour < 12:
+            ampm, greeting = "AM", "good-morning"
+        elif hour < 18:
+            ampm, greeting = "PM", "good-afternoon"
+        else:
+            ampm, greeting = "PM", "good-evening"
+        files.append(os.path.join(TW_SOUND_BASE, f"{greeting}.gsm"))
+
+        hour12 = hour - 12 if hour > 12 else (12 if hour == 0 else hour)
+        files.append(os.path.join(TW_SOUND_BASE, "the-time-is.gsm"))
+        files.append(os.path.join(TW_SOUND_BASE, "digits", f"{hour12}.gsm"))
+        if minute != 0:
+            if minute < 10:
+                files.append(os.path.join(TW_SOUND_BASE, "digits", "oh.gsm"))
+                files.append(os.path.join(TW_SOUND_BASE, "digits", f"{minute}.gsm"))
+            elif minute < 20:
+                files.append(os.path.join(TW_SOUND_BASE, "digits", f"{minute}.gsm"))
+            else:
+                tens, ones = (minute // 10) * 10, minute % 10
+                files.append(os.path.join(TW_SOUND_BASE, "digits", f"{tens}.gsm"))
+                if ones > 0:
+                    files.append(os.path.join(TW_SOUND_BASE, "digits", f"{ones}.gsm"))
+        files.append(os.path.join(TW_SOUND_BASE, "digits", "a-m.gsm" if ampm == "AM" else "p-m.gsm"))
+
+    wcfg = tw_cfg.get("Weather", {}) or {}
+    if wcfg.get("Enable", True) and weather:
+        unit_c = str(wcfg.get("TemperatureUnit", "F")).upper() == "C"
+
+        def _convert(f_val):
+            return round((f_val - 32) * 5 / 9) if unit_c else f_val
+
+        if wcfg.get("AnnounceCondition", True) and weather.get("condition"):
+            files.append(os.path.join(TW_SOUND_BASE, "silence", "1.gsm"))
+            cond_files = []
+            for word in weather["condition"].split():
+                f = _tw_find_sound(word)
+                if f:
+                    cond_files.append(f)
+            if cond_files:
+                files.append(os.path.join(TW_SOUND_BASE, "weather.gsm"))
+                files.append(os.path.join(TW_SOUND_BASE, "conditions.gsm"))
+                files.extend(cond_files)
+
+        if weather.get("temp_f") is not None:
+            files.append(os.path.join(TW_SOUND_BASE, "wx", "temperature.gsm"))
+            temp = _convert(weather["temp_f"])
+            if temp < -1:
+                files.append(os.path.join(TW_SOUND_BASE, "digits", "minus.gsm"))
+            tw_add_number(temp, files)
+            files.append(os.path.join(TW_SOUND_BASE, "degrees.gsm"))
+
+        if wcfg.get("AnnounceFeelsLike", False) and weather.get("feels_like_f") is not None:
+            files.append(os.path.join(TW_SOUND_BASE, "silence", "1.gsm"))
+            feels_file = _tw_find_sound("feels-like") or _tw_find_sound(os.path.join("wx", "heat-index"))
+            if feels_file:
+                files.append(feels_file)
+            feels = _convert(weather["feels_like_f"])
+            if feels < -1:
+                files.append(os.path.join(TW_SOUND_BASE, "digits", "minus.gsm"))
+            tw_add_number(feels, files)
+            files.append(os.path.join(TW_SOUND_BASE, "degrees.gsm"))
+
+        if wcfg.get("AnnounceHumidity", False) and weather.get("humidity") is not None:
+            files.append(os.path.join(TW_SOUND_BASE, "silence", "1.gsm"))
+            files.append(os.path.join(TW_SOUND_BASE, "wx", "humidity.gsm"))
+            tw_add_number(weather["humidity"], files)
+            files.append(os.path.join(TW_SOUND_BASE, "wx", "percent.gsm"))
+
+    missing = [f for f in files if not os.path.exists(f)]
+    if missing:
+        log_warn(f"Time & Weather: missing sound file(s), skipping: {missing[:3]}")
+        return False
+    if not files:
+        log_warn("Time & Weather: nothing to announce (check config)")
+        return False
+
+    try:
+        with open(out_path, "wb") as out:
+            for f in files:
+                with open(f, "rb") as src:
+                    out.write(src.read())
+        return True
+    except Exception as e:
+        log_error(f"Time & Weather: failed writing {out_path}: {e}")
+        return False
+
+def should_play_timeweather(tw_cfg, state, node, now_dt):
+    if not tw_cfg.get("Enable", False):
+        return False
+
+    minute_key = now_dt.strftime("%Y-%m-%d %H:%M")
+    if state.get("timeweather_played") == minute_key:
+        return False
+
+    already_pending = state.get("timeweather_pending", False)
+    cron_expr = (tw_cfg.get("Schedule", {}) or {}).get("Cron", DEFAULT_TW_CRON)
+    if not already_pending and not cron_matches(cron_expr, now_dt):
+        return False
+
+    keyed = node_is_keyed(node)
+    if keyed:
+        if not already_pending:
+            state["timeweather_pending"] = True
+            log_info("Time & Weather due but node is keyed - waiting for unkey")
+        else:
+            log_debug("Time & Weather still waiting for unkey")
+        return False
+
+    if already_pending:
+        state["timeweather_pending"] = False
+
+    return True
+
+def play_timeweather(tw_cfg, state, node, now, now_dt):
+    wcfg = tw_cfg.get("Weather", {}) or {}
+    weather = None
+    if wcfg.get("Enable", True):
+        tempest_cfg = wcfg.get("Tempest", {}) or {}
+        weather = fetch_weather_cached(
+            state, wcfg.get("Provider", "auto"), wcfg.get("Location", ""),
+            tempest_cfg.get("Token", ""), tempest_cfg.get("StationID", ""),
+            wcfg.get("CacheMaxAgeMin", DEFAULT_TW_WEATHER_CACHE_MIN),
+        )
+        if not weather:
+            log_warn("Time & Weather: no weather data available, announcing time only")
+
+    out_path = os.path.join(TW_TEMP_OUTDIR, "asl3-herald-timeweather.gsm")
+    if not build_timeweather_audio(tw_cfg, weather, now_dt, out_path):
+        return False
+
+    log_info("Playing Hourly Time & Weather announcement")
+    play_file(node, out_path)
+    log_playback(state, "timeweather", "Hourly Time & Weather", out_path, node)
+
+    minute_key = now_dt.strftime("%Y-%m-%d %H:%M")
+    state["timeweather_played"] = minute_key
+    state["timeweather_pending"] = False
+    duration = audio_duration(out_path) or DEFAULT_ANNOUNCEMENT_DURATION
+    state["timeweather_busy_until"] = now + min(duration, MAX_BUSY_SECONDS) + BUSY_GRACE_SECONDS
+    save_state(state)
     return True
 
 # ── Config extraction helper ──────────────────────────────────────────────────
@@ -549,6 +1189,8 @@ def extract_config(config):
 
     scheduled = config.get("Scheduled", []) or []
 
+    tw = config.get("TimeWeather", {}) or {}
+
     return {
         "node":            node,
         "debug":           debug,
@@ -560,6 +1202,7 @@ def extract_config(config):
         "swp_file":        swp_file,
         "swp_thr":         swp_thr,
         "scheduled":       scheduled,
+        "timeweather":     tw,
     }
 
 # ── CLI subcommands (used by the `herald` bash CLI and the web UI) ────────────
@@ -598,6 +1241,36 @@ def scheduled_with_health(scheduled):
         out.append(s2)
     return out
 
+SWP_INSTALL_MARKER = "/usr/local/bin/SkywarnPlus/SkywarnPlus.py"
+
+def skywarnplus_weather_status():
+    """Returns (installed, weather_available) for the UI's SkywarnPlus
+    recommendation banner and provider validation."""
+    installed = os.path.exists(SWP_INSTALL_MARKER)
+    weather_available = False
+    try:
+        with open(SWP_WEATHER_FILE) as f:
+            weather_available = bool(json.load(f).get("weather"))
+    except Exception:
+        pass
+    return installed, weather_available
+
+def timeweather_with_health(tw):
+    out = dict(tw)
+    wcfg = dict(out.get("Weather", {}) or {})
+    tempest_cfg = dict(wcfg.get("Tempest", {}) or {})
+    wcfg["Tempest"] = tempest_cfg
+    out["Weather"] = wcfg
+    out.setdefault("Schedule", {}).setdefault("Cron", DEFAULT_TW_CRON)
+
+    swp_installed, swp_weather_available = skywarnplus_weather_status()
+    out["_health"] = {
+        "sound_files_installed": os.path.exists(os.path.join(TW_SOUND_BASE, "the-time-is.gsm")),
+        "skywarnplus_installed": swp_installed,
+        "skywarnplus_weather_available": swp_weather_available,
+    }
+    return out
+
 def cmd_list_json(config):
     cfg = extract_config(config)
     state = load_state()
@@ -620,6 +1293,7 @@ def cmd_list_json(config):
             },
         },
         "scheduled": scheduled_with_health(cfg["scheduled"]),
+        "timeweather": timeweather_with_health(cfg["timeweather"]),
     }
     print(json.dumps(out, indent=2))
 
@@ -908,6 +1582,42 @@ def cmd_update_settings(config, args):
     save_config(config)
     print(json.dumps({"success": True, "message": "Settings updated"}))
 
+def cmd_update_timeweather(config, args):
+    tw = config.setdefault("TimeWeather", {})
+    if args.enable is not None:
+        tw["Enable"] = (args.enable == "true")
+    if args.time_format is not None:
+        tw["TimeFormat"] = args.time_format
+    if args.cron is not None:
+        tw.setdefault("Schedule", {})["Cron"] = args.cron
+
+    w = tw.setdefault("Weather", {})
+    if args.weather_enable is not None:
+        w["Enable"] = (args.weather_enable == "true")
+    if args.provider is not None:
+        w["Provider"] = args.provider
+    if args.location is not None:
+        w["Location"] = args.location
+    if args.temp_unit is not None:
+        w["TemperatureUnit"] = args.temp_unit
+    if args.announce_condition is not None:
+        w["AnnounceCondition"] = (args.announce_condition == "true")
+    if args.announce_feels_like is not None:
+        w["AnnounceFeelsLike"] = (args.announce_feels_like == "true")
+    if args.announce_humidity is not None:
+        w["AnnounceHumidity"] = (args.announce_humidity == "true")
+    if args.cache_max_age is not None:
+        w["CacheMaxAgeMin"] = args.cache_max_age
+
+    tempest = w.setdefault("Tempest", {})
+    if args.tempest_token is not None:
+        tempest["Token"] = args.tempest_token
+    if args.tempest_station is not None:
+        tempest["StationID"] = args.tempest_station
+
+    save_config(config)
+    print(json.dumps({"success": True, "message": "Time & Weather settings updated"}))
+
 def build_arg_parser():
     parser = argparse.ArgumentParser(prog="asl3-herald.py")
     sub = parser.add_subparsers(dest="command")
@@ -989,6 +1699,21 @@ def build_arg_parser():
     p_settings.add_argument("--swp-wxfile",    dest="swp_wxfile")
     p_settings.add_argument("--swp-threshold", dest="swp_threshold", type=int)
 
+    p_tw = sub.add_parser("update-timeweather", help="Update Hourly Time & Weather settings")
+    p_tw.add_argument("--enable", choices=["true", "false"])
+    p_tw.add_argument("--time-format", dest="time_format", choices=["12", "24"])
+    p_tw.add_argument("--cron")
+    p_tw.add_argument("--weather-enable", dest="weather_enable", choices=["true", "false"])
+    p_tw.add_argument("--provider", choices=["auto", "metar", "openmeteo", "tempest", "skywarnplus"])
+    p_tw.add_argument("--location")
+    p_tw.add_argument("--temp-unit", dest="temp_unit", choices=["F", "C"])
+    p_tw.add_argument("--announce-condition", dest="announce_condition", choices=["true", "false"])
+    p_tw.add_argument("--announce-feels-like", dest="announce_feels_like", choices=["true", "false"])
+    p_tw.add_argument("--announce-humidity", dest="announce_humidity", choices=["true", "false"])
+    p_tw.add_argument("--cache-max-age", dest="cache_max_age", type=int)
+    p_tw.add_argument("--tempest-token", dest="tempest_token")
+    p_tw.add_argument("--tempest-station", dest="tempest_station")
+
     return parser
 
 def cli_main():
@@ -1031,6 +1756,8 @@ def cli_main():
         cmd_import_config(args)
     elif args.command == "update-settings":
         cmd_update_settings(config, args)
+    elif args.command == "update-timeweather":
+        cmd_update_timeweather(config, args)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -1072,6 +1799,7 @@ def main():
     swp_file        = cfg["swp_file"]
     swp_thr         = cfg["swp_thr"]
     scheduled       = cfg["scheduled"]
+    timeweather     = cfg["timeweather"]
 
     if not node:
         log_error("Node not set in config. Exiting.")
@@ -1149,6 +1877,7 @@ def main():
                 swp_file        = cfg["swp_file"]
                 swp_thr         = cfg["swp_thr"]
                 scheduled       = cfg["scheduled"]
+                timeweather     = cfg["timeweather"]
                 # Re-read AMI credentials from system files on SIGHUP so changes
                 # to allmon3.ini or manager.conf are picked up automatically.
                 new_host, new_port, new_user, new_secret = load_ami_credentials()
@@ -1244,6 +1973,13 @@ def main():
                         last_kerchunks = cur
                         log_debug(f"Unkey detected (kerchunks now {cur})")
                         unkey_detected = True
+
+            # ── Hourly Time & Weather (highest priority, time-driven) ──────
+            # Checked before Scheduled Announcements so it always plays first
+            # if both are due at the same moment; should_play_scheduled()
+            # defers any Scheduled entry until timeweather_busy_until clears.
+            if should_play_timeweather(timeweather, state, node, now_dt):
+                play_timeweather(timeweather, state, node, now, now_dt)
 
             # ── Scheduled announcements (time-driven) ─────────────────────
             for sched in scheduled:
