@@ -402,6 +402,24 @@ EOF
 chmod 0440 "$SUDOERS_WEB"
 chown root:root "$SUDOERS_WEB"
 
+# DTMF-triggered on-demand Time & Weather playback (e.g. "press 57 to hear
+# the time and weather now"). app_rpt's own DTMF "cmd" functions execute as
+# whatever user Asterisk itself runs as (asterisk, not root) - this rule is
+# scoped to the exact single command line, not all of `herald`, since a DTMF
+# code is reachable by anyone with radio access to the node, a lower-trust
+# path than the web UI's own login. You still need to add the actual DTMF
+# function entry yourself in rpt.conf, calling:
+#   sudo /usr/local/bin/herald test-timeweather
+SUDOERS_DTMF="/etc/sudoers.d/asl3-herald-dtmf"
+info "Writing sudoers rule for asterisk (test-timeweather only, for DTMF) ..."
+cat > "$SUDOERS_DTMF" << EOF
+# $SUDOERS_DTMF
+# managed by asl3-herald install.sh — do not edit manually
+asterisk ALL=(root) NOPASSWD: $HERALD_BIN test-timeweather
+EOF
+chmod 0440 "$SUDOERS_DTMF"
+chown root:root "$SUDOERS_DTMF"
+
 # Allmon3 integration — a dedicated page installed directly into Allmon3's
 # own web root (not /asl3-herald/), so it can load Allmon3's real
 # functions.js/index.js unmodified for chrome + login detection. A page

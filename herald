@@ -99,6 +99,12 @@ Hourly Time & Weather (smart-greeting time + current conditions, clock-triggered
   Takes priority over Scheduled Announcements when both are due at the same
   moment (Scheduled just retries on the next poll cycle), and waits for the
   node to unkey before playing, same as Scheduled Announcements.
+
+  For an on-demand DTMF trigger (e.g. "press 57 for the time and weather"),
+  add a function in rpt.conf that runs: sudo /usr/local/bin/herald test-timeweather
+  install.sh already installs a sudoers rule scoping the asterisk user to
+  that exact command (nothing broader), since app_rpt's own DTMF functions
+  run as asterisk, not root.
 EOF
 }
 
