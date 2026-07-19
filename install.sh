@@ -82,6 +82,24 @@ if [[ -f "$CONFIG_DIR_EARLY/asl3-herald.conf" ]] && \
     HAS_CONFIG=true
 fi
 
+# SkywarnPlus, if installed, already fetches weather data on its own — the
+# Hourly Time & Weather feature's "skywarnplus" provider reads that instead
+# of polling an API a second time. Detected here so a brand-new config can
+# default to it (see the config-generation section below).
+SWP_DETECTED=false
+[[ -f /usr/local/bin/SkywarnPlus/SkywarnPlus.py ]] && SWP_DETECTED=true
+
+# A standalone Time-Weather-Announce install runs its own cron job for the
+# same hourly time+weather announcement. We never touch it automatically —
+# there are too many variants/forks to detect reliably — but if we spot
+# unmistakable signs of one, warn in the summary so the user knows to
+# disable its cron themselves before turning on Hourly Time & Weather here.
+TW_DETECTED=false
+if [[ -d /etc/asterisk/scripts/saytime-weather ]] || \
+   crontab -u asterisk -l 2>/dev/null | grep -q "saytime\.pl"; then
+    TW_DETECTED=true
+fi
+
 if [[ $EUID -ne 0 ]]; then
     error "This installer must be run as root. Use: curl -fsSL ... | sudo bash"
 fi
@@ -102,6 +120,7 @@ command -v python3 &>/dev/null || PKGS+=(python3)
 python3 -c "import yaml" 2>/dev/null     || PKGS+=(python3-yaml)
 command -v sox &>/dev/null               || PKGS+=(sox)
 dpkg -s libsox-fmt-mp3 &>/dev/null        || PKGS+=(libsox-fmt-mp3)
+command -v unzip &>/dev/null             || PKGS+=(unzip)
 
 if [[ ${#PKGS[@]} -gt 0 ]]; then
     info "Installing: ${PKGS[*]}"
@@ -245,6 +264,16 @@ fetch_repo_file "asl3-herald.py" "$INSTALL_DIR/asl3-herald.py"
 fetch_repo_file "version.txt"    "$INSTALL_DIR/version.txt"
 chmod +x "$INSTALL_DIR/asl3-herald.py"
 
+# ── Sound files for Hourly Time & Weather ──────────────────────────────────────
+# Same pre-recorded digit/greeting/condition-word GSM snippets used by
+# Time-Weather-Announce, installed to the same shared location other ASL3
+# programs use — installed unconditionally (not gated on TimeWeather.Enable)
+# so the feature works immediately if enabled later without a reinstall.
+SOUNDS_DIR="/usr/local/share/asterisk/sounds/custom"
+info "Installing Hourly Time & Weather sound files to $SOUNDS_DIR ..."
+mkdir -p "$SOUNDS_DIR"
+unzip -o -q "$REPO_TMP_DIR/sounds/sound_files.zip" -d "$SOUNDS_DIR"
+
 # ── Herald management command ──────────────────────────────────────────────────
 
 info "Installing herald command to $HERALD_BIN ..."
@@ -298,6 +327,11 @@ else
     # directly from /etc/allmon3/allmon3.ini (Allmon3) or /etc/asterisk/manager.conf
     # (Supermon / other frontends) at startup and on every SIGHUP reload.
     # No action needed here.
+
+    if $SWP_DETECTED; then
+        sed -i "s/^    Provider: auto/    Provider: skywarnplus/" "$CONFIG_DIR/asl3-herald.conf"
+        info "SkywarnPlus detected — Time & Weather's provider defaulted to 'skywarnplus' (avoids a second independent weather poller)."
+    fi
 
     warn "Review the rest of the config before starting: $CONFIG_DIR/asl3-herald.conf"
 fi
@@ -515,3 +549,9 @@ if [[ -f "$SUPERMON_FOOTER" ]]; then
     echo "           Supermon — look for the \"ASL3 Herald\" link at the bottom after logging in"
 fi
 echo ""
+if $TW_DETECTED; then
+    warn "An existing Time-Weather-Announce install was detected on this system."
+    warn "If you enable Hourly Time & Weather in Herald, disable TW's own cron entry"
+    warn "yourself first (crontab -u asterisk -e) to avoid double announcements."
+    echo ""
+fi

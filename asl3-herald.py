@@ -990,8 +990,18 @@ def fetch_weather_cached(state, provider, location, tempest_token, tempest_stati
 # frames are directly concatenable — no re-encoding needed).
 
 def _tw_find_sound(name):
-    path = os.path.join(TW_SOUND_BASE, name + ".gsm")
-    return path if os.path.exists(path) else None
+    # Most snippets (greetings, condition words, digits) live directly in
+    # TW_SOUND_BASE, but a few condition words the METAR mapper can produce
+    # (e.g. "mist") only exist under its wx/ subdirectory in the shipped
+    # sound pack — check both, matching weather.sh's own multi-directory
+    # search for condition words.
+    for candidate in (
+        os.path.join(TW_SOUND_BASE, name + ".gsm"),
+        os.path.join(TW_SOUND_BASE, "wx", name + ".gsm"),
+    ):
+        if os.path.exists(candidate):
+            return candidate
+    return None
 
 def tw_add_number(n, files):
     n = int(abs(n))
@@ -1007,6 +1017,18 @@ def tw_add_number(n, files):
         files.append(os.path.join(TW_SOUND_BASE, "digits", f"{tens}.gsm"))
         if ones > 0:
             files.append(os.path.join(TW_SOUND_BASE, "digits", f"{ones}.gsm"))
+
+def tw_gsm_duration(path):
+    """GSM 06.10 full-rate is a fixed 33-bytes-per-20ms frame format with no
+    file header, so the duration is exact from file size alone. Used instead
+    of audio_duration() (soxi) because soxi reliably reports 0 for these raw
+    headerless GSM files even though it can read them fine otherwise
+    (confirmed against the actual shipped sound files)."""
+    try:
+        size = os.path.getsize(path)
+        return (size / 33) * 0.020
+    except OSError:
+        return None
 
 def build_timeweather_audio(tw_cfg, weather, now_dt, out_path):
     """Builds the announcement WAV/GSM file. Returns True on success."""
@@ -1081,7 +1103,7 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path):
 
         if wcfg.get("AnnounceFeelsLike", False) and weather.get("feels_like_f") is not None:
             files.append(os.path.join(TW_SOUND_BASE, "silence", "1.gsm"))
-            feels_file = _tw_find_sound("feels-like") or _tw_find_sound(os.path.join("wx", "heat-index"))
+            feels_file = _tw_find_sound("feels-like") or _tw_find_sound("heat-index")
             if feels_file:
                 files.append(feels_file)
             feels = _convert(weather["feels_like_f"])
@@ -1165,7 +1187,7 @@ def play_timeweather(tw_cfg, state, node, now, now_dt):
     minute_key = now_dt.strftime("%Y-%m-%d %H:%M")
     state["timeweather_played"] = minute_key
     state["timeweather_pending"] = False
-    duration = audio_duration(out_path) or DEFAULT_ANNOUNCEMENT_DURATION
+    duration = tw_gsm_duration(out_path) or audio_duration(out_path) or DEFAULT_ANNOUNCEMENT_DURATION
     state["timeweather_busy_until"] = now + min(duration, MAX_BUSY_SECONDS) + BUSY_GRACE_SECONDS
     save_state(state)
     return True
