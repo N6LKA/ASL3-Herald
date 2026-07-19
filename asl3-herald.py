@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import time
+import glob
 import json
 import signal
 import socket
@@ -305,7 +306,6 @@ def load_state():
         "timeweather_busy_until": 0.0,
         "timeweather_weather_cache": None,
         "timeweather_tempest_station": None,
-        "timeweather_last_audio_file": None,
     }
     try:
         if os.path.exists(STATE_FILE):
@@ -1040,6 +1040,27 @@ def tw_gsm_duration(path):
     except OSError:
         return None
 
+def cleanup_old_timeweather_files(current_out_path, now):
+    """Removes every past occurrence's announcement file older than
+    MAX_BUSY_SECONDS - a full directory sweep rather than tracking a single
+    "previous file" pointer, so nothing can be orphaned forever if several
+    occurrences happen close together (e.g. a human re-testing a few times
+    within the safety window)."""
+    pattern = os.path.join(TW_TEMP_OUTDIR, "asl3-herald-timeweather-*.gsm")
+    try:
+        candidates = glob.glob(pattern)
+    except OSError:
+        return
+    for path in candidates:
+        if path == current_out_path:
+            continue
+        try:
+            age = now - os.path.getmtime(path)
+            if age > MAX_BUSY_SECONDS:
+                os.remove(path)
+        except OSError as e:
+            log_debug(f"Time & Weather: could not remove old audio file {path}: {e}")
+
 def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
     """Builds the announcement WAV/GSM file. Returns True on success.
     Any caller-visible problems are both logged (log_warn) and appended to
@@ -1225,26 +1246,21 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, test_mode=False, warnings
     # single occurrence, so it needs a fresh name every time instead.
     out_path = os.path.join(TW_TEMP_OUTDIR, f"asl3-herald-timeweather-{int(now * 1000)}.gsm")
 
-    # Best-effort cleanup of the file from the *previous* occurrence. Only
-    # once it's actually old enough that any realistic playback is long done
-    # - confirmed live that issuing "rpt localplay" and Asterisk actually
-    # opening the file are NOT simultaneous (channel setup / joining the
-    # softmix bridge takes some real time first), so deleting the previous
-    # file unconditionally on the very next call - as this used to do - can
-    # delete it out from under Asterisk before it ever opens it, if a human
-    # clicks Test again faster than that setup takes (which they will, when
-    # each attempt looks like it silently failed). Gating on age instead of
-    # "is there a next call yet" avoids that regardless of how fast someone
-    # re-tests. MAX_BUSY_SECONDS is already the system's own notion of the
-    # longest a single occurrence could plausibly still be playing.
-    old_path = state.get("timeweather_last_audio_file")
-    if old_path and old_path != out_path and os.path.exists(old_path):
-        try:
-            age = now - os.path.getmtime(old_path)
-            if age > MAX_BUSY_SECONDS:
-                os.remove(old_path)
-        except OSError as e:
-            log_debug(f"Time & Weather: could not remove previous audio file {old_path}: {e}")
+    # Best-effort cleanup of every OLD occurrence's file (a full directory
+    # sweep, not just "the one previous path"). A single-pointer tracker
+    # (remembering only the last file written) can orphan earlier files
+    # forever: if a human re-tests within the safety window below, the
+    # pointer just moves to the newest file and whatever it was pointing at
+    # is forgotten, with nothing left to ever clean it up. Sweeping the whole
+    # directory guarantees nothing accumulates indefinitely regardless of how
+    # many rapid clicks happen in a burst. Only removes files older than
+    # MAX_BUSY_SECONDS - the system's own existing notion of the longest a
+    # single occurrence could plausibly still be playing - for the same
+    # reason a single-pointer delete-on-next-call was unsafe (see previous
+    # commits): issuing "rpt localplay" and Asterisk actually opening the
+    # file are not simultaneous, so deleting too eagerly can pull the file
+    # out from under Asterisk before it ever opens it.
+    cleanup_old_timeweather_files(out_path, now)
 
     if not build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=warnings):
         return False
@@ -1268,7 +1284,6 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, test_mode=False, warnings
     fresh_state = load_state()
     fresh_state["timeweather_weather_cache"] = state.get("timeweather_weather_cache")
     fresh_state["timeweather_tempest_station"] = state.get("timeweather_tempest_station")
-    fresh_state["timeweather_last_audio_file"] = out_path
     log_playback(fresh_state, entry_type, label, out_path, node)
 
     if not test_mode:
