@@ -1030,8 +1030,14 @@ def tw_gsm_duration(path):
     except OSError:
         return None
 
-def build_timeweather_audio(tw_cfg, weather, now_dt, out_path):
-    """Builds the announcement WAV/GSM file. Returns True on success."""
+def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
+    """Builds the announcement WAV/GSM file. Returns True on success.
+    Any caller-visible problems are both logged (log_warn) and appended to
+    `warnings` if a list is passed in, so on-demand callers (herald
+    test-timeweather / the web UI's Test button) can surface them instead of
+    losing them to the daemon's own log."""
+    if warnings is None:
+        warnings = []
     files = []
     hour, minute = now_dt.hour, now_dt.minute
     time_format = str(tw_cfg.get("TimeFormat", "12"))
@@ -1120,10 +1126,13 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path):
 
     missing = [f for f in files if not os.path.exists(f)]
     if missing:
+        names = ", ".join(os.path.basename(m) for m in missing[:3])
         log_warn(f"Time & Weather: missing sound file(s), skipping: {missing[:3]}")
+        warnings.append(f"Missing sound file(s): {names}")
         return False
     if not files:
         log_warn("Time & Weather: nothing to announce (check config)")
+        warnings.append("Nothing to announce - check config")
         return False
 
     try:
@@ -1163,12 +1172,15 @@ def should_play_timeweather(tw_cfg, state, node, now_dt):
 
     return True
 
-def play_timeweather(tw_cfg, state, node, now, now_dt, test_mode=False):
+def play_timeweather(tw_cfg, state, node, now, now_dt, test_mode=False, warnings=None):
     """test_mode=True is a manual on-demand preview (herald test-timeweather /
     the web UI's Test button): still fetches real weather and plays it, but
     never touches the daemon's own scheduling state (timeweather_played/
     _pending/_busy_until) so it can't interfere with the next real scheduled
-    occurrence."""
+    occurrence. `warnings`, if passed, collects human-readable problem
+    descriptions for on-demand callers to surface (see build_timeweather_audio)."""
+    if warnings is None:
+        warnings = []
     wcfg = tw_cfg.get("Weather", {}) or {}
     weather = None
     if wcfg.get("Enable", True):
@@ -1180,9 +1192,10 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, test_mode=False):
         )
         if not weather:
             log_warn("Time & Weather: no weather data available, announcing time only")
+            warnings.append("No weather data available - announced time only")
 
     out_path = os.path.join(TW_TEMP_OUTDIR, "asl3-herald-timeweather.gsm")
-    if not build_timeweather_audio(tw_cfg, weather, now_dt, out_path):
+    if not build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=warnings):
         return False
 
     entry_type = "test-timeweather" if test_mode else "timeweather"
@@ -1294,6 +1307,17 @@ def timeweather_with_health(tw):
     out.setdefault("Schedule", {}).setdefault("Cron", DEFAULT_TW_CRON)
 
     swp_installed, swp_weather_available = skywarnplus_weather_status()
+
+    # install.sh only pre-selects "skywarnplus" for a genuinely brand-new
+    # config; an existing Herald install upgrading to pick up this feature
+    # never gets that file mutation (existing configs are never touched), so
+    # its Provider key is simply absent. Default the *displayed* value the
+    # same smart way here, purely at read time - this doesn't write anything
+    # to disk, it just means the UI shows the same recommended default
+    # either way until the user actually saves a choice.
+    if "Provider" not in wcfg:
+        wcfg["Provider"] = "skywarnplus" if swp_installed else "auto"
+
     out["_health"] = {
         "sound_files_installed": os.path.exists(os.path.join(TW_SOUND_BASE, "the-time-is.gsm")),
         "skywarnplus_installed": swp_installed,
@@ -1656,11 +1680,17 @@ def cmd_test_timeweather(config):
         return
     state = load_state()
     now_dt = datetime.now()
-    ok = play_timeweather(cfg["timeweather"], state, node, time.time(), now_dt, test_mode=True)
+    warnings = []
+    ok = play_timeweather(cfg["timeweather"], state, node, time.time(), now_dt, test_mode=True, warnings=warnings)
     if ok:
-        print(json.dumps({"success": True, "message": "Playing Hourly Time & Weather test announcement"}))
+        message = "Playing Hourly Time & Weather test announcement"
+        if warnings:
+            message += " (" + "; ".join(warnings) + ")"
+        print(json.dumps({"success": True, "message": message}))
     else:
-        print(json.dumps({"success": False, "message": "Could not build announcement - check sound files and weather config"}))
+        message = "Could not build announcement"
+        message += ": " + "; ".join(warnings) if warnings else " - check sound files and weather config"
+        print(json.dumps({"success": False, "message": message}))
 
 def build_arg_parser():
     parser = argparse.ArgumentParser(prog="asl3-herald.py")
