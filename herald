@@ -101,10 +101,10 @@ Hourly Time & Weather (smart-greeting time + current conditions, clock-triggered
   node to unkey before playing, same as Scheduled Announcements.
 
   For an on-demand DTMF trigger (e.g. "press 57 for the time and weather"),
-  add a function in rpt.conf that runs: sudo /usr/local/bin/herald test-timeweather
-  install.sh already installs a sudoers rule scoping the asterisk user to
-  that exact command (nothing broader), since app_rpt's own DTMF functions
-  run as asterisk, not root.
+  add a function in rpt.conf that runs: /usr/local/bin/herald test-timeweather
+  No sudo and no special permissions needed - unlike every other mutating
+  herald command, this one never touches asl3-herald.conf, so it works
+  directly as whatever user app_rpt's DTMF functions run as (asterisk).
 EOF
 }
 
@@ -509,7 +509,14 @@ cmd_update_timeweather() {
 }
 
 cmd_test_timeweather() {
-    need_root "$@"
+    # Deliberately no need_root here, unlike every other mutating command -
+    # this one never touches asl3-herald.conf (the thing that actually needs
+    # root elsewhere). It only fetches weather, writes a temp audio file
+    # (world-writable directory, see asl3-herald.py), and best-effort logs
+    # playback history (silently skipped if the caller can't write the
+    # shared state file - never fatal). Safe to call directly from an
+    # app_rpt DTMF function, which runs as the asterisk user with no sudo
+    # and no way to escalate - see the DTMF section in `herald --help`.
     python3 "$DAEMON_PY" test-timeweather
 }
 

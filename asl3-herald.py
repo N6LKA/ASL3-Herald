@@ -1175,7 +1175,20 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
     try:
         out_dir = os.path.dirname(out_path)
         os.makedirs(out_dir, exist_ok=True)
-        os.chmod(out_dir, 0o755)  # umask-independent, same reasoning as the file chmod below
+        # 0o1777 (world-writable + sticky bit, same as /tmp itself): this
+        # directory is written by whichever process plays Time & Weather,
+        # which can be root (the daemon's own scheduled occurrences, or a
+        # web-UI-triggered test) OR the unprivileged `asterisk` user (a DTMF-
+        # triggered test-timeweather call - see cmd_test_timeweather in the
+        # herald script, deliberately not root-gated). Only the process that
+        # first creates the directory after each boot can chmod it (you can't
+        # chmod something you don't own) - every other invocation hits
+        # PermissionError here and that's fine to ignore, since the directory
+        # is already correctly permissioned from whoever created it first.
+        try:
+            os.chmod(out_dir, 0o1777)
+        except OSError as e:
+            log_debug(f"Time & Weather: could not chmod {out_dir} (already set by another user, fine): {e}")
         with open(out_path, "wb") as out:
             for f in files:
                 with open(f, "rb") as src:

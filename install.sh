@@ -290,11 +290,23 @@ mkdir -p "$CONFIG_DIR" "$ANNOUNCE_DIR"
 # systemd unit has PrivateTmp=yes (common default, confirmed live on N6LKA's
 # node), leaving Asterisk (and anyone checking via SSH) unable to find the
 # file at all. /run is a tmpfs (wiped on reboot/power loss, same as /tmp
-# would have been) but isn't subject to PrivateTmp's isolation. Also
-# recreated here on every install/restart since /run itself doesn't survive
-# a reboot, though asl3-herald.py creates it on demand too if needed sooner.
-mkdir -p /run/asl3-herald/timeweather-tmp
-chmod 755 /run/asl3-herald/timeweather-tmp
+# would have been) but isn't subject to PrivateTmp's isolation. 1777 (world-
+# writable + sticky bit, same as /tmp itself) because this gets written by
+# root (the daemon's own occurrences, or a web-triggered test) AND by the
+# unprivileged asterisk user (a DTMF-triggered test-timeweather call, which
+# is deliberately not root-gated - see herald --help).
+#
+# Installed via systemd-tmpfiles rather than a plain mkdir here, so the
+# directory reliably exists again immediately on every future boot too -
+# before Asterisk starts, and before any DTMF-triggered call could possibly
+# happen. Without this, the very first post-boot call being a DTMF trigger
+# (asterisk user, no root) would fail: only root can create new entries
+# directly under /run, so asterisk can't create /run/asl3-herald itself if
+# it doesn't already exist (asl3-herald.py's own on-demand mkdir is still
+# there as a fallback for whichever caller runs first, but shouldn't
+# normally be needed once this is installed).
+fetch_repo_file "tmpfiles.d/asl3-herald.conf" "/etc/tmpfiles.d/asl3-herald.conf"
+systemd-tmpfiles --create /etc/tmpfiles.d/asl3-herald.conf
 
 if [[ -f "$CONFIG_DIR/asl3-herald.conf" ]]; then
     warn "Config already exists — not overwriting: $CONFIG_DIR/asl3-herald.conf"
@@ -401,24 +413,6 @@ www-data ALL=(root) NOPASSWD: $HERALD_BIN
 EOF
 chmod 0440 "$SUDOERS_WEB"
 chown root:root "$SUDOERS_WEB"
-
-# DTMF-triggered on-demand Time & Weather playback (e.g. "press 57 to hear
-# the time and weather now"). app_rpt's own DTMF "cmd" functions execute as
-# whatever user Asterisk itself runs as (asterisk, not root) - this rule is
-# scoped to the exact single command line, not all of `herald`, since a DTMF
-# code is reachable by anyone with radio access to the node, a lower-trust
-# path than the web UI's own login. You still need to add the actual DTMF
-# function entry yourself in rpt.conf, calling:
-#   sudo /usr/local/bin/herald test-timeweather
-SUDOERS_DTMF="/etc/sudoers.d/asl3-herald-dtmf"
-info "Writing sudoers rule for asterisk (test-timeweather only, for DTMF) ..."
-cat > "$SUDOERS_DTMF" << EOF
-# $SUDOERS_DTMF
-# managed by asl3-herald install.sh — do not edit manually
-asterisk ALL=(root) NOPASSWD: $HERALD_BIN test-timeweather
-EOF
-chmod 0440 "$SUDOERS_DTMF"
-chown root:root "$SUDOERS_DTMF"
 
 # Allmon3 integration — a dedicated page installed directly into Allmon3's
 # own web root (not /asl3-herald/), so it can load Allmon3's real
