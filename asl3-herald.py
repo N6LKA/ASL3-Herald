@@ -296,6 +296,7 @@ def load_state():
         "timeweather_busy_until": 0.0,
         "timeweather_weather_cache": None,
         "timeweather_tempest_station": None,
+        "timeweather_last_audio_file": None,
     }
     try:
         if os.path.exists(STATE_FILE):
@@ -1194,7 +1195,29 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, test_mode=False, warnings
             log_warn("Time & Weather: no weather data available, announcing time only")
             warnings.append("No weather data available - announced time only")
 
-    out_path = os.path.join(TW_TEMP_OUTDIR, "asl3-herald-timeweather.gsm")
+    # A unique filename per occurrence (rather than one fixed name reused
+    # every time) - confirmed live that reusing a fixed filename could play
+    # stale content (an announcement several minutes old played with the
+    # wrong time), most likely some layer between here and the audio
+    # actually reaching the repeater caching by filename. Every other Herald
+    # feature (Rotation/Scheduled) already avoids this by using a distinct,
+    # stable filename per entry; Time & Weather's content changes every
+    # single occurrence, so it needs a fresh name every time instead.
+    out_path = os.path.join(TW_TEMP_OUTDIR, f"asl3-herald-timeweather-{int(now * 1000)}.gsm")
+
+    # Best-effort cleanup of the file from the *previous* occurrence. Done
+    # here (start of this call) rather than right after play_file() below,
+    # since play_file() only issues the play command and returns immediately
+    # - the previous file could still be mid-playback for several more
+    # seconds. By the time any next occurrence happens (next cron tick or
+    # next manual test), that playback is long finished.
+    old_path = state.get("timeweather_last_audio_file")
+    if old_path and old_path != out_path and os.path.exists(old_path):
+        try:
+            os.remove(old_path)
+        except OSError as e:
+            log_debug(f"Time & Weather: could not remove previous audio file {old_path}: {e}")
+
     if not build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=warnings):
         return False
 
@@ -1217,6 +1240,7 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, test_mode=False, warnings
     fresh_state = load_state()
     fresh_state["timeweather_weather_cache"] = state.get("timeweather_weather_cache")
     fresh_state["timeweather_tempest_station"] = state.get("timeweather_tempest_station")
+    fresh_state["timeweather_last_audio_file"] = out_path
     log_playback(fresh_state, entry_type, label, out_path, node)
 
     if not test_mode:
