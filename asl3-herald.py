@@ -14,6 +14,7 @@ import sys
 import time
 import glob
 import json
+import uuid
 import signal
 import socket
 import argparse
@@ -62,6 +63,21 @@ TW_TEMP_OUTDIR  = "/run/asl3-herald/timeweather-tmp"
 SWP_WEATHER_FILE = "/tmp/SkywarnPlus/swp-data.json"
 DEFAULT_TW_CRON = "0 * * * *"
 DEFAULT_TW_WEATHER_CACHE_MIN = 10
+
+# On-demand test-play request/result files, used only by the web UI's Test
+# button. It asks the already-running daemon to do the test-play itself
+# (writing this small request is the only part that still needs root, via
+# the existing www-data sudoers rule) rather than doing the weather-fetch/
+# build/play work in a separate one-off process - a one-off process spawned
+# through Apache/PHP inherits Apache's own mount namespace (PrivateTmp),
+# which can't see files other programs (e.g. SkywarnPlus) write to /tmp.
+# The daemon itself is a plain systemd service, never spawned by Apache, so
+# it reads /tmp normally. DTMF-triggered test-timeweather calls don't need
+# any of this - they run directly as the asterisk user, which was never
+# subject to the same namespace isolation in the first place.
+TW_TEST_REQUEST_FILE = os.path.join(INSTALL_DIR, "timeweather-test-request.json")
+TW_TEST_RESULT_FILE  = os.path.join(INSTALL_DIR, "timeweather-test-result.json")
+TW_TEST_REQUEST_MAX_AGE_SECONDS = 30
 
 try:
     with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "version.txt")) as _vf:
@@ -1330,6 +1346,50 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, test_mode=False, warnings
     state.update(fresh_state)
     return True
 
+def process_timeweather_test_request(tw_cfg, state, node):
+    """Called once per main-loop iteration. If the web UI's Test button has
+    left a request file (see cmd_request_test_timeweather()), perform the
+    test-play here in the daemon's own process and write the result for
+    timeweather_test.php to pick up. A stale request (older than
+    TW_TEST_REQUEST_MAX_AGE_SECONDS - e.g. the daemon was down or busy when
+    it was written) is silently discarded rather than firing a surprise
+    test-play whenever the daemon eventually gets to it."""
+    if not os.path.exists(TW_TEST_REQUEST_FILE):
+        return
+
+    request_id = None
+    requested_at = 0
+    try:
+        with open(TW_TEST_REQUEST_FILE) as f:
+            req = json.load(f)
+        request_id = req.get("request_id")
+        requested_at = req.get("requested_at", 0)
+    except Exception as e:
+        log_warn(f"Time & Weather: could not read test request: {e}")
+    try:
+        os.remove(TW_TEST_REQUEST_FILE)
+    except OSError:
+        pass
+
+    if not request_id:
+        return
+
+    if (time.time() - requested_at) > TW_TEST_REQUEST_MAX_AGE_SECONDS:
+        log_debug(f"Time & Weather: discarding stale test request {request_id}")
+        return
+
+    warnings = []
+    ok = play_timeweather(tw_cfg, state, node, time.time(), datetime.now(),
+                           test_mode=True, warnings=warnings)
+    result = dict(timeweather_test_result_dict(ok, warnings))
+    result["request_id"] = request_id
+    try:
+        with open(TW_TEST_RESULT_FILE, "w") as f:
+            json.dump(result, f)
+        os.chmod(TW_TEST_RESULT_FILE, 0o644)
+    except OSError as e:
+        log_error(f"Time & Weather: could not write test result: {e}")
+
 # ── Config extraction helper ──────────────────────────────────────────────────
 
 def extract_config(config):
@@ -1789,7 +1849,20 @@ def cmd_update_timeweather(config, args):
     save_config(config)
     print(json.dumps({"success": True, "message": "Time & Weather settings updated"}))
 
+def timeweather_test_result_dict(ok, warnings):
+    if ok:
+        message = "Playing Hourly Time & Weather test announcement"
+        if warnings:
+            message += " (" + "; ".join(warnings) + ")"
+        return {"success": True, "message": message}
+    message = "Could not build announcement"
+    message += ": " + "; ".join(warnings) if warnings else " - check sound files and weather config"
+    return {"success": False, "message": message}
+
 def cmd_test_timeweather(config):
+    """Direct, immediate test-play - used by DTMF (runs as the asterisk
+    user, never spawned by Apache, so it was never subject to the
+    PrivateTmp issue that motivated cmd_request_test_timeweather below)."""
     cfg = extract_config(config)
     node = cfg["node"]
     if not node:
@@ -1799,15 +1872,29 @@ def cmd_test_timeweather(config):
     now_dt = datetime.now()
     warnings = []
     ok = play_timeweather(cfg["timeweather"], state, node, time.time(), now_dt, test_mode=True, warnings=warnings)
-    if ok:
-        message = "Playing Hourly Time & Weather test announcement"
-        if warnings:
-            message += " (" + "; ".join(warnings) + ")"
-        print(json.dumps({"success": True, "message": message}))
-    else:
-        message = "Could not build announcement"
-        message += ": " + "; ".join(warnings) if warnings else " - check sound files and weather config"
-        print(json.dumps({"success": False, "message": message}))
+    print(json.dumps(timeweather_test_result_dict(ok, warnings)))
+
+def cmd_request_test_timeweather():
+    """Called by the web UI (via the existing www-data sudoers rule) to ask
+    the already-running daemon to perform the test-play itself, instead of
+    doing the weather-fetch/build/play work in this one-off process. See
+    TW_TEST_REQUEST_FILE's comment for why: a process spawned through
+    Apache/PHP inherits Apache's own PrivateTmp mount namespace, which
+    can't see /tmp/SkywarnPlus/swp-data.json (written by a plain root cron
+    job, completely outside that namespace) - but the daemon itself is a
+    plain systemd service, never spawned by Apache, so it reads /tmp
+    normally. Writing this tiny request file is the only part that still
+    needs root; it doesn't touch anything Apache's namespace would hide."""
+    request_id = uuid.uuid4().hex
+    try:
+        os.makedirs(os.path.dirname(TW_TEST_REQUEST_FILE), exist_ok=True)
+        with open(TW_TEST_REQUEST_FILE, "w") as f:
+            json.dump({"request_id": request_id, "requested_at": time.time()}, f)
+        os.chmod(TW_TEST_REQUEST_FILE, 0o644)
+    except OSError as e:
+        print(json.dumps({"success": False, "message": f"Could not write test request: {e}"}))
+        return
+    print(json.dumps({"success": True, "request_id": request_id}))
 
 def build_arg_parser():
     parser = argparse.ArgumentParser(prog="asl3-herald.py")
@@ -1906,6 +1993,7 @@ def build_arg_parser():
     p_tw.add_argument("--tempest-station", dest="tempest_station")
 
     sub.add_parser("test-timeweather", help="Test-play the Hourly Time & Weather announcement immediately")
+    sub.add_parser("request-timeweather-test", help="Ask the running daemon to test-play Time & Weather (used by the web UI)")
 
     return parser
 
@@ -1953,6 +2041,8 @@ def cli_main():
         cmd_update_timeweather(config, args)
     elif args.command == "test-timeweather":
         cmd_test_timeweather(config)
+    elif args.command == "request-timeweather-test":
+        cmd_request_test_timeweather()
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -2168,6 +2258,14 @@ def main():
                         last_kerchunks = cur
                         log_debug(f"Unkey detected (kerchunks now {cur})")
                         unkey_detected = True
+
+            # ── On-demand test request (from the web UI's Test button) ────
+            # See TW_TEST_REQUEST_FILE's comment / cmd_request_test_timeweather()
+            # for why this indirection exists: the daemon (this process) is
+            # never spawned by Apache, so it can read /tmp/SkywarnPlus/... -
+            # a web-triggered one-off `herald test-timeweather` process
+            # could not.
+            process_timeweather_test_request(timeweather, state, node)
 
             # ── Hourly Time & Weather (highest priority, time-driven) ──────
             # Checked before Scheduled Announcements so it always plays first

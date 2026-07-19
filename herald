@@ -92,9 +92,12 @@ Hourly Time & Weather (smart-greeting time + current conditions, clock-triggered
                      [--announce-humidity true|false] [--cache-max-age <minutes>]
                      [--tempest-token <token>] [--tempest-station <id>]
                                            Update Hourly Time & Weather settings
-  test-timeweather                        Test-play the announcement immediately
-                                           (real weather fetch, doesn't affect the
-                                           next scheduled occurrence)
+  test-timeweather                        Test-play the announcement immediately, in
+                                           this process (real weather fetch, doesn't
+                                           affect the next scheduled occurrence)
+  request-timeweather-test                Ask the running daemon to test-play instead
+                                           (used internally by the web UI's Test
+                                           button - see below for why it's different)
 
   Takes priority over Scheduled Announcements when both are due at the same
   moment (Scheduled just retries on the next poll cycle), and waits for the
@@ -105,6 +108,14 @@ Hourly Time & Weather (smart-greeting time + current conditions, clock-triggered
   No sudo and no special permissions needed - unlike every other mutating
   herald command, this one never touches asl3-herald.conf, so it works
   directly as whatever user app_rpt's DTMF functions run as (asterisk).
+
+  The web UI's own Test button uses request-timeweather-test instead of
+  calling test-timeweather directly: a process invoked through Apache/PHP
+  can inherit Apache's own PrivateTmp sandbox (common default), which hides
+  data other programs write to /tmp (e.g. SkywarnPlus's shared weather
+  file) from it. Asking the already-running daemon to do the test-play
+  itself avoids that, since the daemon is a plain systemd service, never
+  spawned by Apache.
 EOF
 }
 
@@ -517,7 +528,25 @@ cmd_test_timeweather() {
     # shared state file - never fatal). Safe to call directly from an
     # app_rpt DTMF function, which runs as the asterisk user with no sudo
     # and no way to escalate - see the DTMF section in `herald --help`.
+    #
+    # NOT used by the web UI's Test button - see cmd_request_test_timeweather
+    # below for why.
     python3 "$DAEMON_PY" test-timeweather
+}
+
+cmd_request_test_timeweather() {
+    # Used by the web UI's Test button instead of cmd_test_timeweather above.
+    # A process invoked through Apache/PHP (even via sudo - mount namespaces
+    # follow the process tree, not the UID) inherits Apache's own PrivateTmp
+    # sandbox if the vhost has that set, which hides /tmp/SkywarnPlus/... from
+    # it - so doing the actual weather-fetch/build/play work in a one-off
+    # process spawned this way can silently fail to see SkywarnPlus's shared
+    # data. Instead, this just leaves a small request file for the already-
+    # running daemon (a plain systemd service, never spawned by Apache) to
+    # notice and act on itself. Needs root only to write that tiny file into
+    # asl3-herald's own config directory - not for anything namespace-related.
+    need_root "$@"
+    python3 "$DAEMON_PY" request-timeweather-test
 }
 
 cmd_reorder_rotation() {
@@ -772,6 +801,7 @@ case "$CMD" in
     update-settings)      cmd_update_settings    "$@" ;;
     update-timeweather)   cmd_update_timeweather "$@" ;;
     test-timeweather)     cmd_test_timeweather   "$@" ;;
+    request-timeweather-test) cmd_request_test_timeweather "$@" ;;
     playback-history)     cmd_playback_history   "$@" ;;
     clear-history)        cmd_clear_history      "$@" ;;
     export-config)        cmd_export_config      "$@" ;;
