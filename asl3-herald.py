@@ -1202,15 +1202,34 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, test_mode=False, warnings
     label = "Hourly Time & Weather (Test)" if test_mode else "Hourly Time & Weather"
     log_info(f"Playing {label} announcement")
     play_file(node, out_path)
-    log_playback(state, entry_type, label, out_path, node)
+
+    # The weather fetch above can take several real seconds (network calls),
+    # during which the long-running daemon process (a separate process from
+    # `herald test-timeweather` / any other one-off CLI invocation) may have
+    # saved its own state to disk - e.g. a real scheduled occurrence firing
+    # in that window. Re-reading fresh right before this save (rather than
+    # reusing the possibly-stale snapshot `state` held since the top of this
+    # call) avoids blindly overwriting that with an outdated copy, which
+    # would silently erase whatever the daemon just wrote (confirmed live:
+    # a manual test play's playback_history entry was wiped out by the next
+    # real hourly run). Preserves this call's own weather-cache/station-id
+    # writes, which were already applied to `state` earlier in this function.
+    fresh_state = load_state()
+    fresh_state["timeweather_weather_cache"] = state.get("timeweather_weather_cache")
+    fresh_state["timeweather_tempest_station"] = state.get("timeweather_tempest_station")
+    log_playback(fresh_state, entry_type, label, out_path, node)
 
     if not test_mode:
         minute_key = now_dt.strftime("%Y-%m-%d %H:%M")
-        state["timeweather_played"] = minute_key
-        state["timeweather_pending"] = False
+        fresh_state["timeweather_played"] = minute_key
+        fresh_state["timeweather_pending"] = False
         duration = tw_gsm_duration(out_path) or audio_duration(out_path) or DEFAULT_ANNOUNCEMENT_DURATION
-        state["timeweather_busy_until"] = now + min(duration, MAX_BUSY_SECONDS) + BUSY_GRACE_SECONDS
-    save_state(state)
+        fresh_state["timeweather_busy_until"] = now + min(duration, MAX_BUSY_SECONDS) + BUSY_GRACE_SECONDS
+    save_state(fresh_state)
+    # Keep the caller's own `state` object (the daemon's long-lived instance,
+    # in the non-test path) in sync with what was actually just persisted.
+    state.clear()
+    state.update(fresh_state)
     return True
 
 # ── Config extraction helper ──────────────────────────────────────────────────
