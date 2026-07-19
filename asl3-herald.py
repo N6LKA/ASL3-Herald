@@ -2160,6 +2160,17 @@ def main():
         sys.exit(1)
 
     state = load_state()
+    # Belt-and-suspenders alongside save_state()'s own chmod: fixes an
+    # existing state file left over from before this world-writable fix
+    # shipped, right at startup, rather than waiting for whatever the next
+    # save_state() call happens to be (which could be a while - a DTMF-
+    # triggered play as the unprivileged asterisk user shouldn't have to
+    # wait on that to get write access to its own state).
+    if os.path.exists(STATE_FILE):
+        try:
+            os.chmod(STATE_FILE, 0o666)
+        except OSError as e:
+            log_debug(f"Could not chmod {STATE_FILE} at startup: {e}")
 
     # ── AMI setup ──────────────────────────────────────────────────────────
     # Credentials are read from /etc/allmon3/allmon3.ini or
