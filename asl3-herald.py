@@ -49,10 +49,16 @@ TW_COORD_CACHE  = os.path.join(INSTALL_DIR, "timeweather-coords.cache")
 # same path - Apache commonly runs with systemd's PrivateTmp=true, which
 # gives it (and anything it spawns, even via sudo - namespaces follow the
 # process tree, not the UID) its own isolated /tmp invisible to every other
-# process, including Asterisk and an interactive SSH shell. Rotation/
-# Scheduled announcements have never hit this because they've never used
-# /tmp at all - they live under INSTALL_DIR, same as this now does.
-TW_TEMP_OUTDIR  = os.path.join(INSTALL_DIR, "timeweather-tmp")
+# process, including Asterisk and an interactive SSH shell.
+#
+# /run is the correct alternative rather than a persistent directory under
+# INSTALL_DIR: it's a standard Linux tmpfs, wiped fresh on every reboot or
+# power loss (the same property that made /tmp look attractive), but
+# systemd's PrivateTmp only isolates /tmp and /var/tmp specifically - never
+# /run - so it doesn't have the namespace problem above. Created on demand
+# by build_timeweather_audio() since /run's own contents don't survive a
+# reboot either.
+TW_TEMP_OUTDIR  = "/run/asl3-herald/timeweather-tmp"
 SWP_WEATHER_FILE = "/tmp/SkywarnPlus/swp-data.json"
 DEFAULT_TW_CRON = "0 * * * *"
 DEFAULT_TW_WEATHER_CACHE_MIN = 10

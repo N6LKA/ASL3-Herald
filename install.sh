@@ -282,13 +282,19 @@ chmod +x "$HERALD_BIN"
 
 # ── Config directory ───────────────────────────────────────────────────────────
 
-# timeweather-tmp: deliberately NOT /tmp - a web-UI-triggered `sudo herald
-# test-timeweather` (invoked via Apache/PHP) writes successfully but into
-# Apache's own isolated /tmp when the vhost's systemd unit has PrivateTmp=yes
-# (common default), leaving Asterisk (and anyone checking via SSH) unable to
-# find the file at all. Confirmed live on N6LKA's node.
-mkdir -p "$CONFIG_DIR" "$ANNOUNCE_DIR" "$CONFIG_DIR/timeweather-tmp"
-chmod 755 "$CONFIG_DIR/timeweather-tmp"
+mkdir -p "$CONFIG_DIR" "$ANNOUNCE_DIR"
+
+# Hourly Time & Weather's temp audio directory - deliberately /run, not /tmp:
+# a web-UI-triggered `sudo herald test-timeweather` (invoked via Apache/PHP)
+# writes successfully but into Apache's own isolated /tmp when the vhost's
+# systemd unit has PrivateTmp=yes (common default, confirmed live on N6LKA's
+# node), leaving Asterisk (and anyone checking via SSH) unable to find the
+# file at all. /run is a tmpfs (wiped on reboot/power loss, same as /tmp
+# would have been) but isn't subject to PrivateTmp's isolation. Also
+# recreated here on every install/restart since /run itself doesn't survive
+# a reboot, though asl3-herald.py creates it on demand too if needed sooner.
+mkdir -p /run/asl3-herald/timeweather-tmp
+chmod 755 /run/asl3-herald/timeweather-tmp
 
 if [[ -f "$CONFIG_DIR/asl3-herald.conf" ]]; then
     warn "Config already exists — not overwriting: $CONFIG_DIR/asl3-herald.conf"
