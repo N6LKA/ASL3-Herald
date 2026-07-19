@@ -282,7 +282,13 @@ chmod +x "$HERALD_BIN"
 
 # ── Config directory ───────────────────────────────────────────────────────────
 
-mkdir -p "$CONFIG_DIR" "$ANNOUNCE_DIR"
+# timeweather-tmp: deliberately NOT /tmp - a web-UI-triggered `sudo herald
+# test-timeweather` (invoked via Apache/PHP) writes successfully but into
+# Apache's own isolated /tmp when the vhost's systemd unit has PrivateTmp=yes
+# (common default), leaving Asterisk (and anyone checking via SSH) unable to
+# find the file at all. Confirmed live on N6LKA's node.
+mkdir -p "$CONFIG_DIR" "$ANNOUNCE_DIR" "$CONFIG_DIR/timeweather-tmp"
+chmod 755 "$CONFIG_DIR/timeweather-tmp"
 
 if [[ -f "$CONFIG_DIR/asl3-herald.conf" ]]; then
     warn "Config already exists — not overwriting: $CONFIG_DIR/asl3-herald.conf"
