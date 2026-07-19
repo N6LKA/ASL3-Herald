@@ -293,6 +293,7 @@
     const twHealth = tw._health || {};
     document.getElementById('tw-enable').checked = !!tw.Enable;
     document.getElementById('tw-time-format').value = tw.TimeFormat || '12';
+    document.getElementById('tw-smart-greeting').checked = tw.SmartGreeting !== false;
     applyTwCronToPicker((tw.Schedule && tw.Schedule.Cron) || '0 * * * *');
     document.getElementById('tw-weather-enable').checked = twWeather.Enable !== false;
     document.getElementById('tw-provider').value = twWeather.Provider || 'auto';
@@ -617,6 +618,7 @@
       body: JSON.stringify({
         enable: document.getElementById('tw-enable').checked,
         time_format: document.getElementById('tw-time-format').value,
+        smart_greeting: document.getElementById('tw-smart-greeting').checked,
         cron: readTwCronFromPicker(),
         weather_enable: document.getElementById('tw-weather-enable').checked,
         provider: document.getElementById('tw-provider').value,

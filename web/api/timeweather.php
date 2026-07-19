@@ -19,6 +19,8 @@ if (!in_array($timeFormat, ['12', '24'], true)) {
     herald_json_response(['success' => false, 'message' => 'Invalid time format'], 400);
 }
 
+$smartGreeting = ($input['smart_greeting'] ?? false) ? 'true' : 'false';
+
 $cron = trim($input['cron'] ?? '0 * * * *');
 if (!preg_match('/^[\d\*\/,\-]+ [\d\*\/,\-]+ [\d\*\/,\-]+ [\d\*\/,\-]+ [\d\*\/,\-]+$/', $cron)) {
     herald_json_response(['success' => false, 'message' => 'Invalid cron expression (expected 5 fields: MIN HOUR DOM MON DOW)'], 400);
@@ -64,6 +66,7 @@ herald_respond_from_cli(herald_run_sudo([
     'update-timeweather',
     '--enable', $enable,
     '--time-format', $timeFormat,
+    '--smart-greeting', $smartGreeting,
     '--cron', $cron,
     '--weather-enable', $weatherEnable,
     '--provider', $provider,

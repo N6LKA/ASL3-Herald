@@ -110,9 +110,13 @@ Scheduled: []
 TimeWeather:
   Enable: false
 
-  # "12" = smart greeting (Good morning/afternoon/evening) + 12-hour time + AM/PM
-  # "24" = 24-hour time, no greeting
+  # "12" = 12-hour time + AM/PM
+  # "24" = 24-hour time
   TimeFormat: "12"
+
+  # Play "Good morning/afternoon/evening" before the time, based on the hour.
+  # Independent of TimeFormat - works with either 12- or 24-hour time.
+  SmartGreeting: true
 
   # Same cron format as Scheduled Announcements above. Default: top of every hour.
   Schedule:

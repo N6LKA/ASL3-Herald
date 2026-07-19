@@ -45,7 +45,7 @@ ANNOUNCE_DIR = os.path.join(INSTALL_DIR, "announcements")
 TW_SOUND_BASE   = "/usr/local/share/asterisk/sounds/custom"
 TW_COORD_CACHE  = os.path.join(INSTALL_DIR, "timeweather-coords.cache")
 # Deliberately NOT /tmp: confirmed live that a web-UI-triggered `sudo herald
-# test-timeweather` call (invoked from Apache/PHP) can write successfully
+# play-timeweather` call (invoked from Apache/PHP) can write successfully
 # while Asterisk still reports "No such file or directory" for the exact
 # same path - Apache commonly runs with systemd's PrivateTmp=true, which
 # gives it (and anything it spawns, even via sudo - namespaces follow the
@@ -72,7 +72,7 @@ DEFAULT_TW_WEATHER_CACHE_MIN = 10
 # through Apache/PHP inherits Apache's own mount namespace (PrivateTmp),
 # which can't see files other programs (e.g. SkywarnPlus) write to /tmp.
 # The daemon itself is a plain systemd service, never spawned by Apache, so
-# it reads /tmp normally. DTMF-triggered test-timeweather calls don't need
+# it reads /tmp normally. DTMF-triggered play-timeweather calls don't need
 # any of this - they run directly as the asterisk user, which was never
 # subject to the same namespace isolation in the first place.
 TW_TEST_REQUEST_FILE = os.path.join(INSTALL_DIR, "timeweather-test-request.json")
@@ -341,6 +341,16 @@ def save_state(state):
     try:
         with open(STATE_FILE, "w") as f:
             json.dump(state, f, indent=2)
+        # World-writable: a DTMF-triggered `herald play-timeweather` runs as
+        # the unprivileged `asterisk` user (no sudo, no root), but still
+        # needs to persist timeweather_busy_until/playback_history here like
+        # every other caller. Only the process that first creates the file
+        # can chmod it - once it's 666, every later writer (root or
+        # asterisk) can open it for writing regardless of who wrote it last.
+        try:
+            os.chmod(STATE_FILE, 0o666)
+        except OSError as e:
+            log_debug(f"Could not chmod {STATE_FILE} (fine if already correctly permissioned): {e}")
     except Exception as e:
         log_error(f"Failed to save state: {e}")
 
@@ -1099,13 +1109,29 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
     """Builds the announcement WAV/GSM file. Returns True on success.
     Any caller-visible problems are both logged (log_warn) and appended to
     `warnings` if a list is passed in, so on-demand callers (herald
-    test-timeweather / the web UI's Test button) can surface them instead of
-    losing them to the daemon's own log."""
+    play-timeweather / test-timeweather / the web UI's Test button) can
+    surface them instead of losing them to the daemon's own log."""
     if warnings is None:
         warnings = []
     files = []
     hour, minute = now_dt.hour, now_dt.minute
     time_format = str(tw_cfg.get("TimeFormat", "12"))
+    # Independent of TimeFormat - a smart greeting (Good morning/afternoon/
+    # evening) can play before the time regardless of whether the time
+    # itself is announced in 12- or 24-hour format. Previously these two
+    # were conflated into a single TimeFormat value (only "12+greeting" and
+    # "24+no greeting" were reachable); default True to match that prior
+    # 12-hour behavior for anyone upgrading.
+    smart_greeting = tw_cfg.get("SmartGreeting", True)
+
+    if smart_greeting:
+        if hour < 12:
+            greeting = "good-morning"
+        elif hour < 18:
+            greeting = "good-afternoon"
+        else:
+            greeting = "good-evening"
+        files.append(os.path.join(TW_SOUND_BASE, f"{greeting}.gsm"))
 
     if time_format == "24":
         files.append(os.path.join(TW_SOUND_BASE, "the-time-is.gsm"))
@@ -1121,14 +1147,7 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
             if ones > 0:
                 files.append(os.path.join(TW_SOUND_BASE, "digits", f"{ones}.gsm"))
     else:
-        if hour < 12:
-            ampm, greeting = "AM", "good-morning"
-        elif hour < 18:
-            ampm, greeting = "PM", "good-afternoon"
-        else:
-            ampm, greeting = "PM", "good-evening"
-        files.append(os.path.join(TW_SOUND_BASE, f"{greeting}.gsm"))
-
+        ampm = "AM" if hour < 12 else "PM"
         hour12 = hour - 12 if hour > 12 else (12 if hour == 0 else hour)
         files.append(os.path.join(TW_SOUND_BASE, "the-time-is.gsm"))
         files.append(os.path.join(TW_SOUND_BASE, "digits", f"{hour12}.gsm"))
@@ -1207,7 +1226,7 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
         # directory is written by whichever process plays Time & Weather,
         # which can be root (the daemon's own scheduled occurrences, or a
         # web-UI-triggered test) OR the unprivileged `asterisk` user (a DTMF-
-        # triggered test-timeweather call - see cmd_test_timeweather in the
+        # triggered play-timeweather call - see cmd_play_timeweather in the
         # herald script, deliberately not root-gated). Only the process that
         # first creates the directory after each boot can chmod it (you can't
         # chmod something you don't own) - every other invocation hits
@@ -1225,7 +1244,7 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
         # occurrence (see the caller), so its permissions are whatever the
         # calling process's umask happens to produce - which can differ
         # between the daemon's own systemd context and a web-UI-triggered
-        # `sudo herald test-timeweather` (PHP -> sudo -> root) call. Asterisk
+        # `sudo herald play-timeweather` (PHP -> sudo -> root) call. Asterisk
         # itself runs as its own dedicated user (not root), and needs to be
         # able to read this file regardless of which path created it.
         os.chmod(out_path, 0o644)
@@ -1261,13 +1280,28 @@ def should_play_timeweather(tw_cfg, state, node, now_dt):
 
     return True
 
-def play_timeweather(tw_cfg, state, node, now, now_dt, test_mode=False, warnings=None):
-    """test_mode=True is a manual on-demand preview (herald test-timeweather /
-    the web UI's Test button): still fetches real weather and plays it, but
-    never touches the daemon's own scheduling state (timeweather_played/
-    _pending/_busy_until) so it can't interfere with the next real scheduled
-    occurrence. `warnings`, if passed, collects human-readable problem
-    descriptions for on-demand callers to surface (see build_timeweather_audio)."""
+def play_timeweather(tw_cfg, state, node, now, now_dt, mode="scheduled", warnings=None):
+    """mode controls both playback-history labeling and which scheduling
+    state gets touched:
+
+      "scheduled" - a real cron-triggered occurrence from the main loop.
+                    Marks timeweather_played/_pending so the hourly cron
+                    gate doesn't fire again this minute, and sets
+                    timeweather_busy_until so a simultaneously-due Scheduled
+                    Announcement waits for this to finish.
+      "dtmf"      - a real on-demand play triggered by a DTMF command (heard
+                    live on the air - see cmd_play_timeweather). Sets
+                    timeweather_busy_until for the same collision-avoidance
+                    reason as "scheduled", but deliberately does NOT touch
+                    timeweather_played/_pending - it's independent of the
+                    hourly schedule and must never suppress the next real
+                    scheduled occurrence.
+      "test"      - a manual preview (herald test-timeweather / the web UI's
+                    Test button): never touches ANY scheduling state, so it
+                    can't interfere with real playback timing at all.
+
+    `warnings`, if passed, collects human-readable problem descriptions for
+    on-demand callers to surface (see build_timeweather_audio)."""
     if warnings is None:
         warnings = []
     wcfg = tw_cfg.get("Weather", {}) or {}
@@ -1312,8 +1346,12 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, test_mode=False, warnings
     if not build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=warnings):
         return False
 
-    entry_type = "test-timeweather" if test_mode else "timeweather"
-    label = "Hourly Time & Weather (Test)" if test_mode else "Hourly Time & Weather"
+    entry_type = {"scheduled": "timeweather", "dtmf": "dtmf-timeweather", "test": "test-timeweather"}[mode]
+    label = {
+        "scheduled": "Hourly Time & Weather",
+        "dtmf": "Hourly Time & Weather (DTMF)",
+        "test": "Hourly Time & Weather (Test)",
+    }[mode]
     log_info(f"Playing {label} announcement")
     play_file(node, out_path)
 
@@ -1333,15 +1371,16 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, test_mode=False, warnings
     fresh_state["timeweather_tempest_station"] = state.get("timeweather_tempest_station")
     log_playback(fresh_state, entry_type, label, out_path, node)
 
-    if not test_mode:
+    if mode in ("scheduled", "dtmf"):
+        duration = tw_gsm_duration(out_path) or audio_duration(out_path) or DEFAULT_ANNOUNCEMENT_DURATION
+        fresh_state["timeweather_busy_until"] = now + min(duration, MAX_BUSY_SECONDS) + BUSY_GRACE_SECONDS
+    if mode == "scheduled":
         minute_key = now_dt.strftime("%Y-%m-%d %H:%M")
         fresh_state["timeweather_played"] = minute_key
         fresh_state["timeweather_pending"] = False
-        duration = tw_gsm_duration(out_path) or audio_duration(out_path) or DEFAULT_ANNOUNCEMENT_DURATION
-        fresh_state["timeweather_busy_until"] = now + min(duration, MAX_BUSY_SECONDS) + BUSY_GRACE_SECONDS
     save_state(fresh_state)
     # Keep the caller's own `state` object (the daemon's long-lived instance,
-    # in the non-test path) in sync with what was actually just persisted.
+    # in the "scheduled" path) in sync with what was actually just persisted.
     state.clear()
     state.update(fresh_state)
     return True
@@ -1380,7 +1419,7 @@ def process_timeweather_test_request(tw_cfg, state, node):
 
     warnings = []
     ok = play_timeweather(tw_cfg, state, node, time.time(), datetime.now(),
-                           test_mode=True, warnings=warnings)
+                           mode="test", warnings=warnings)
     result = dict(timeweather_test_result_dict(ok, warnings))
     result["request_id"] = request_id
     try:
@@ -1819,6 +1858,8 @@ def cmd_update_timeweather(config, args):
         tw["Enable"] = (args.enable == "true")
     if args.time_format is not None:
         tw["TimeFormat"] = args.time_format
+    if args.smart_greeting is not None:
+        tw["SmartGreeting"] = (args.smart_greeting == "true")
     if args.cron is not None:
         tw.setdefault("Schedule", {})["Cron"] = args.cron
 
@@ -1849,9 +1890,10 @@ def cmd_update_timeweather(config, args):
     save_config(config)
     print(json.dumps({"success": True, "message": "Time & Weather settings updated"}))
 
-def timeweather_test_result_dict(ok, warnings):
+def timeweather_test_result_dict(ok, warnings, mode="test"):
     if ok:
-        message = "Playing Hourly Time & Weather test announcement"
+        message = ("Playing Hourly Time & Weather announcement" if mode == "dtmf"
+                   else "Playing Hourly Time & Weather test announcement")
         if warnings:
             message += " (" + "; ".join(warnings) + ")"
         return {"success": True, "message": message}
@@ -1860,9 +1902,11 @@ def timeweather_test_result_dict(ok, warnings):
     return {"success": False, "message": message}
 
 def cmd_test_timeweather(config):
-    """Direct, immediate test-play - used by DTMF (runs as the asterisk
-    user, never spawned by Apache, so it was never subject to the
-    PrivateTmp issue that motivated cmd_request_test_timeweather below)."""
+    """Manual preview, for troubleshooting from the CLI or the web UI's Test
+    button - never touches scheduling state. NOT intended for DTMF; use
+    cmd_play_timeweather (herald play-timeweather) for that instead, so a
+    real on-demand play logs to Playback History correctly instead of as
+    "(Test)"."""
     cfg = extract_config(config)
     node = cfg["node"]
     if not node:
@@ -1871,8 +1915,29 @@ def cmd_test_timeweather(config):
     state = load_state()
     now_dt = datetime.now()
     warnings = []
-    ok = play_timeweather(cfg["timeweather"], state, node, time.time(), now_dt, test_mode=True, warnings=warnings)
-    print(json.dumps(timeweather_test_result_dict(ok, warnings)))
+    ok = play_timeweather(cfg["timeweather"], state, node, time.time(), now_dt, mode="test", warnings=warnings)
+    print(json.dumps(timeweather_test_result_dict(ok, warnings, mode="test")))
+
+def cmd_play_timeweather(config):
+    """Real, immediate on-demand play - designed for DTMF triggers (runs as
+    the asterisk user, never spawned by Apache, so it was never subject to
+    the PrivateTmp issue that motivated cmd_request_test_timeweather below).
+    Unlike cmd_test_timeweather, this logs to Playback History as a real
+    Hourly Time & Weather occurrence (not "(Test)"), and sets
+    timeweather_busy_until so a simultaneously-due Scheduled Announcement
+    waits for it - but deliberately does NOT touch timeweather_played/
+    _pending, since it's independent of the hourly cron schedule and must
+    never suppress the next real scheduled occurrence."""
+    cfg = extract_config(config)
+    node = cfg["node"]
+    if not node:
+        print(json.dumps({"success": False, "message": "Node not set in config"}))
+        return
+    state = load_state()
+    now_dt = datetime.now()
+    warnings = []
+    ok = play_timeweather(cfg["timeweather"], state, node, time.time(), now_dt, mode="dtmf", warnings=warnings)
+    print(json.dumps(timeweather_test_result_dict(ok, warnings, mode="dtmf")))
 
 def cmd_request_test_timeweather():
     """Called by the web UI (via the existing www-data sudoers rule) to ask
@@ -1980,6 +2045,7 @@ def build_arg_parser():
     p_tw = sub.add_parser("update-timeweather", help="Update Hourly Time & Weather settings")
     p_tw.add_argument("--enable", choices=["true", "false"])
     p_tw.add_argument("--time-format", dest="time_format", choices=["12", "24"])
+    p_tw.add_argument("--smart-greeting", dest="smart_greeting", choices=["true", "false"])
     p_tw.add_argument("--cron")
     p_tw.add_argument("--weather-enable", dest="weather_enable", choices=["true", "false"])
     p_tw.add_argument("--provider", choices=["auto", "metar", "openmeteo", "tempest", "skywarnplus"])
@@ -1992,7 +2058,8 @@ def build_arg_parser():
     p_tw.add_argument("--tempest-token", dest="tempest_token")
     p_tw.add_argument("--tempest-station", dest="tempest_station")
 
-    sub.add_parser("test-timeweather", help="Test-play the Hourly Time & Weather announcement immediately")
+    sub.add_parser("test-timeweather", help="Preview the Hourly Time & Weather announcement (doesn't affect scheduling; use play-timeweather for DTMF)")
+    sub.add_parser("play-timeweather", help="Play Hourly Time & Weather as a real on-demand occurrence (for DTMF triggers)")
     sub.add_parser("request-timeweather-test", help="Ask the running daemon to test-play Time & Weather (used by the web UI)")
 
     return parser
@@ -2041,6 +2108,8 @@ def cli_main():
         cmd_update_timeweather(config, args)
     elif args.command == "test-timeweather":
         cmd_test_timeweather(config)
+    elif args.command == "play-timeweather":
+        cmd_play_timeweather(config)
     elif args.command == "request-timeweather-test":
         cmd_request_test_timeweather()
 

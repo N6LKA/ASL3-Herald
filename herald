@@ -84,7 +84,8 @@ Settings:
                                            Update general daemon settings
 
 Hourly Time & Weather (smart-greeting time + current conditions, clock-triggered):
-  update-timeweather [--enable true|false] [--time-format 12|24] [--cron "MIN HOUR DOM MON DOW"]
+  update-timeweather [--enable true|false] [--time-format 12|24]
+                     [--smart-greeting true|false] [--cron "MIN HOUR DOM MON DOW"]
                      [--weather-enable true|false]
                      [--provider auto|metar|openmeteo|tempest|skywarnplus]
                      [--location <zip|icao>] [--temp-unit F|C]
@@ -92,9 +93,16 @@ Hourly Time & Weather (smart-greeting time + current conditions, clock-triggered
                      [--announce-humidity true|false] [--cache-max-age <minutes>]
                      [--tempest-token <token>] [--tempest-station <id>]
                                            Update Hourly Time & Weather settings
-  test-timeweather                        Test-play the announcement immediately, in
-                                           this process (real weather fetch, doesn't
-                                           affect the next scheduled occurrence)
+  play-timeweather                         Play the announcement right now, as a real
+                                           on-demand occurrence - use this for DTMF.
+                                           Logs to Playback History as a normal Hourly
+                                           Time & Weather entry (not "(Test)"), and
+                                           still won't suppress or double-fire the next
+                                           real scheduled hourly occurrence
+  test-timeweather                        Preview the announcement (real weather
+                                           fetch, logged as "(Test)"); doesn't affect
+                                           scheduling at all. For troubleshooting from
+                                           the CLI, not for DTMF - use play-timeweather
   request-timeweather-test                Ask the running daemon to test-play instead
                                            (used internally by the web UI's Test
                                            button - see below for why it's different)
@@ -104,7 +112,7 @@ Hourly Time & Weather (smart-greeting time + current conditions, clock-triggered
   node to unkey before playing, same as Scheduled Announcements.
 
   For an on-demand DTMF trigger (e.g. "press 57 for the time and weather"),
-  add a function in rpt.conf that runs: /usr/local/bin/herald test-timeweather
+  add a function in rpt.conf that runs: /usr/local/bin/herald play-timeweather
   No sudo and no special permissions needed - unlike every other mutating
   herald command, this one never touches asl3-herald.conf, so it works
   directly as whatever user app_rpt's DTMF functions run as (asterisk).
@@ -523,15 +531,25 @@ cmd_test_timeweather() {
     # Deliberately no need_root here, unlike every other mutating command -
     # this one never touches asl3-herald.conf (the thing that actually needs
     # root elsewhere). It only fetches weather, writes a temp audio file
-    # (world-writable directory, see asl3-herald.py), and best-effort logs
-    # playback history (silently skipped if the caller can't write the
-    # shared state file - never fatal). Safe to call directly from an
-    # app_rpt DTMF function, which runs as the asterisk user with no sudo
-    # and no way to escalate - see the DTMF section in `herald --help`.
+    # (world-writable directory, see asl3-herald.py), and logs playback
+    # history to the shared state file (also made world-writable by
+    # save_state(), for the same reason). Manual preview only - never
+    # touches scheduling state. NOT for DTMF - see cmd_play_timeweather.
     #
     # NOT used by the web UI's Test button - see cmd_request_test_timeweather
     # below for why.
     python3 "$DAEMON_PY" test-timeweather
+}
+
+cmd_play_timeweather() {
+    # Deliberately no need_root here - see cmd_test_timeweather above, same
+    # reasoning. This is the one to wire up to a DTMF function in rpt.conf:
+    # it's a real on-demand occurrence, logged to Playback History as plain
+    # "Hourly Time & Weather" (not "(Test)"), and briefly blocks a
+    # simultaneously-due Scheduled Announcement from colliding with it - but
+    # never marks the hourly cron slot as already-played, so it can't
+    # suppress the next real scheduled occurrence.
+    python3 "$DAEMON_PY" play-timeweather
 }
 
 cmd_request_test_timeweather() {
@@ -801,6 +819,7 @@ case "$CMD" in
     update-settings)      cmd_update_settings    "$@" ;;
     update-timeweather)   cmd_update_timeweather "$@" ;;
     test-timeweather)     cmd_test_timeweather   "$@" ;;
+    play-timeweather)     cmd_play_timeweather   "$@" ;;
     request-timeweather-test) cmd_request_test_timeweather "$@" ;;
     playback-history)     cmd_playback_history   "$@" ;;
     clear-history)        cmd_clear_history      "$@" ;;

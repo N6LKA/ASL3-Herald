@@ -447,9 +447,17 @@
 
     <label style="margin-top:16px;">Time Format</label>
     <select id="tw-time-format" style="width:220px;">
-      <option value="12">12-hour, with smart greeting (Good morning/afternoon/evening)</option>
-      <option value="24">24-hour, no greeting</option>
+      <option value="12">12-hour (with AM/PM)</option>
+      <option value="24">24-hour</option>
     </select>
+
+    <div class="toggle-row" style="margin-top:14px;">
+      <label class="toggle-switch">
+        <input type="checkbox" id="tw-smart-greeting">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Smart Greeting (Good morning/afternoon/evening, based on the hour)</span>
+    </div>
   </div>
 
   <div class="card">
