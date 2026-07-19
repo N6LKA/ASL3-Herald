@@ -1141,6 +1141,14 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
             for f in files:
                 with open(f, "rb") as src:
                     out.write(src.read())
+        # Explicit, not umask-dependent: this file is a brand-new inode every
+        # occurrence (see the caller), so its permissions are whatever the
+        # calling process's umask happens to produce - which can differ
+        # between the daemon's own systemd context and a web-UI-triggered
+        # `sudo herald test-timeweather` (PHP -> sudo -> root) call. Asterisk
+        # itself runs as its own dedicated user (not root), and needs to be
+        # able to read this file regardless of which path created it.
+        os.chmod(out_path, 0o644)
         return True
     except Exception as e:
         log_error(f"Time & Weather: failed writing {out_path}: {e}")
