@@ -980,7 +980,19 @@ def fetch_weather_cached(state, provider, location, tempest_token, tempest_stati
                           cache_max_age_min=DEFAULT_TW_WEATHER_CACHE_MIN, default_country="us"):
     """Throttled wrapper: reuses the last successful reading if it's still
     fresh, and falls back to a stale reading (rather than nothing) if a fresh
-    fetch fails outright."""
+    fetch fails outright.
+
+    The skywarnplus provider is exempt from this throttle entirely - it's
+    just a local file read (SkywarnPlus already manages its own Tempest/
+    Wunderground/wttr fetch freshness independently), not a live API call,
+    so there's no cost to reading it fresh every time. Confirmed live:
+    without this, Herald could report weather up to CacheMaxAgeMin stale
+    relative to what SkywarnPlus's own file (and therefore Allmon3/Supermon,
+    which read that file directly with no extra caching layer) already show
+    as current."""
+    if provider == "skywarnplus":
+        return fetch_weather_skywarnplus()
+
     cache = state.get("timeweather_weather_cache")
     if cache and cache.get("provider") == provider:
         try:
