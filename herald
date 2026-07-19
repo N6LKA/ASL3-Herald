@@ -82,6 +82,23 @@ Settings:
                   [--swp-enable true|false] [--swp-wxfile <path>]
                   [--swp-threshold <n>]
                                            Update general daemon settings
+
+Hourly Time & Weather (smart-greeting time + current conditions, clock-triggered):
+  update-timeweather [--enable true|false] [--time-format 12|24] [--cron "MIN HOUR DOM MON DOW"]
+                     [--weather-enable true|false]
+                     [--provider auto|metar|openmeteo|tempest|skywarnplus]
+                     [--location <zip|icao>] [--temp-unit F|C]
+                     [--announce-condition true|false] [--announce-feels-like true|false]
+                     [--announce-humidity true|false] [--cache-max-age <minutes>]
+                     [--tempest-token <token>] [--tempest-station <id>]
+                                           Update Hourly Time & Weather settings
+  test-timeweather                        Test-play the announcement immediately
+                                           (real weather fetch, doesn't affect the
+                                           next scheduled occurrence)
+
+  Takes priority over Scheduled Announcements when both are due at the same
+  moment (Scheduled just retries on the next poll cycle), and waits for the
+  node to unkey before playing, same as Scheduled Announcements.
 EOF
 }
 
@@ -479,6 +496,17 @@ cmd_update_settings() {
     cmd_reload 2>/dev/null || true
 }
 
+cmd_update_timeweather() {
+    need_root "$@"
+    python3 "$DAEMON_PY" update-timeweather "$@"
+    cmd_reload 2>/dev/null || true
+}
+
+cmd_test_timeweather() {
+    need_root "$@"
+    python3 "$DAEMON_PY" test-timeweather
+}
+
 cmd_reorder_rotation() {
     need_root "$@"
     local name="$1" direction="$2"
@@ -729,6 +757,8 @@ case "$CMD" in
     toggle-schedule)      cmd_toggle_schedule    "$@" ;;
     toggle-rotation)      cmd_toggle_rotation    "$@" ;;
     update-settings)      cmd_update_settings    "$@" ;;
+    update-timeweather)   cmd_update_timeweather "$@" ;;
+    test-timeweather)     cmd_test_timeweather   "$@" ;;
     playback-history)     cmd_playback_history   "$@" ;;
     clear-history)        cmd_clear_history      "$@" ;;
     export-config)        cmd_export_config      "$@" ;;

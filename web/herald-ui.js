@@ -288,8 +288,61 @@
       stbody.appendChild(tr);
     });
 
+    const tw = data.timeweather || {};
+    const twWeather = tw.Weather || {};
+    const twHealth = tw._health || {};
+    document.getElementById('tw-enable').checked = !!tw.Enable;
+    document.getElementById('tw-time-format').value = tw.TimeFormat || '12';
+    applyTwCronToPicker((tw.Schedule && tw.Schedule.Cron) || '0 * * * *');
+    document.getElementById('tw-weather-enable').checked = twWeather.Enable !== false;
+    document.getElementById('tw-provider').value = twWeather.Provider || 'auto';
+    document.getElementById('tw-location').value = twWeather.Location || '';
+    document.getElementById('tw-temp-unit').value = twWeather.TemperatureUnit || 'F';
+    document.getElementById('tw-announce-condition').checked = twWeather.AnnounceCondition !== false;
+    document.getElementById('tw-announce-feels-like').checked = !!twWeather.AnnounceFeelsLike;
+    document.getElementById('tw-announce-humidity').checked = !!twWeather.AnnounceHumidity;
+    document.getElementById('tw-cache-max-age').value = twWeather.CacheMaxAgeMin || 10;
+    document.getElementById('tw-tempest-token').value = (twWeather.Tempest && twWeather.Tempest.Token) || '';
+    document.getElementById('tw-tempest-station').value = (twWeather.Tempest && twWeather.Tempest.StationID) || '';
+    twSwpInstalled = !!twHealth.skywarnplus_installed;
+    updateTwProviderFields();
+
+    document.getElementById('tw-sounds-warning').style.display =
+      twHealth.sound_files_installed === false ? 'block' : 'none';
+
     wireRowButtons();
     loadHistory();
+  }
+
+  // ── Hourly Time & Weather ───────────────────────────────────────────────────────────────
+  let twSwpInstalled = false;
+
+  function applyTwCronToPicker(cronExpr) {
+    const parts = String(cronExpr || '0 * * * *').split(/\s+/);
+    document.getElementById('tw-cron-min').value  = parts[0] || '0';
+    document.getElementById('tw-cron-hour').value = parts[1] || '*';
+    document.getElementById('tw-cron-dom').value  = parts[2] || '*';
+    document.getElementById('tw-cron-mon').value  = parts[3] || '*';
+    document.getElementById('tw-cron-dow').value  = parts[4] || '*';
+  }
+
+  function readTwCronFromPicker() {
+    return [
+      document.getElementById('tw-cron-min').value.trim()  || '0',
+      document.getElementById('tw-cron-hour').value.trim() || '*',
+      document.getElementById('tw-cron-dom').value.trim()  || '*',
+      document.getElementById('tw-cron-mon').value.trim()  || '*',
+      document.getElementById('tw-cron-dow').value.trim()  || '*',
+    ].join(' ');
+  }
+
+  function updateTwProviderFields() {
+    const provider = document.getElementById('tw-provider').value;
+    document.getElementById('tw-tempest-fields').style.display = provider === 'tempest' ? 'block' : 'none';
+    document.getElementById('tw-location-field').style.display =
+      (provider === 'tempest' || provider === 'skywarnplus') ? 'none' : 'block';
+    document.getElementById('tw-swp-banner').style.display =
+      (twSwpInstalled && provider !== 'skywarnplus') ? 'block' : 'none';
   }
 
   // ── Playback history ───────────────────────────────────────────────────────────────────
@@ -307,8 +360,10 @@
       rotation: 'Tail Message',
       wx: 'Tail Message (WX)',
       scheduled: 'Scheduled Announcement',
+      timeweather: 'Hourly Time & Weather',
       'test-tail': 'Tail Message (Test)',
       'test-scheduled': 'Scheduled Announcement (Test)',
+      'test-timeweather': 'Hourly Time & Weather (Test)',
       test: 'Manual Test',
     };
     history.forEach(h => {
@@ -546,6 +601,44 @@
     });
     showMsg(msgEl, data.message || (data.success ? 'Settings saved and reloaded' : 'Failed'), data.success);
     if (data.success) loadAll();
+  });
+
+  // ── Hourly Time & Weather ──────────────────────────────────────────────────────────────────
+  document.getElementById('tw-cron-hourly').addEventListener('click', () => {
+    applyTwCronToPicker('0 * * * *');
+  });
+
+  document.getElementById('tw-provider').addEventListener('change', updateTwProviderFields);
+
+  document.getElementById('btn-save-timeweather').addEventListener('click', async () => {
+    const msgEl = document.getElementById('timeweather-msg');
+    const data = await api('timeweather.php', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        enable: document.getElementById('tw-enable').checked,
+        time_format: document.getElementById('tw-time-format').value,
+        cron: readTwCronFromPicker(),
+        weather_enable: document.getElementById('tw-weather-enable').checked,
+        provider: document.getElementById('tw-provider').value,
+        location: document.getElementById('tw-location').value.trim(),
+        temp_unit: document.getElementById('tw-temp-unit').value,
+        announce_condition: document.getElementById('tw-announce-condition').checked,
+        announce_feels_like: document.getElementById('tw-announce-feels-like').checked,
+        announce_humidity: document.getElementById('tw-announce-humidity').checked,
+        cache_max_age: document.getElementById('tw-cache-max-age').value,
+        tempest_token: document.getElementById('tw-tempest-token').value.trim(),
+        tempest_station: document.getElementById('tw-tempest-station').value.trim(),
+      }),
+    });
+    showMsg(msgEl, data.message || (data.success ? 'Settings saved and reloaded' : 'Failed'), data.success);
+    if (data.success) loadAll();
+  });
+
+  document.getElementById('btn-test-timeweather').addEventListener('click', async () => {
+    const msgEl = document.getElementById('timeweather-msg');
+    const data = await api('timeweather_test.php', { method: 'POST' });
+    showMsg(msgEl, data.message || (data.success ? 'Playing now' : 'Failed'), data.success);
+    if (data.success) loadHistory();
   });
 
   // ── Add / edit tail message ────────────────────────────────────────────────────────────────

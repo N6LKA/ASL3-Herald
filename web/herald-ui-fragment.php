@@ -160,6 +160,14 @@
   }
   #herald-ui .toggle-switch input:checked + .toggle-slider { background-color: #27ae60; }
   #herald-ui .toggle-switch input:checked + .toggle-slider:before { transform: translateX(26px); }
+  #herald-ui .banner-info {
+    background: #eaf6ff; border: 1px solid #a9d6f5; border-radius: 6px;
+    padding: 10px 14px; margin-bottom: 14px; font-size: 0.92em; color: #1a5276;
+  }
+  #herald-ui .banner-warn {
+    background: #fff8e1; border: 1px solid #f0d78c; border-radius: 6px;
+    padding: 10px 14px; margin-bottom: 14px; font-size: 0.92em; color: #7a5c00;
+  }
 </style>
 
 <div class="status-bar" id="herald-status-bar">
@@ -174,8 +182,9 @@
   <button class="tab-btn active" data-tab="info">How It Works</button>
   <button class="tab-btn" data-tab="tail">Tail Messages</button>
   <button class="tab-btn" data-tab="scheduled">Scheduled Announcements</button>
+  <button class="tab-btn" data-tab="timeweather">Hourly Time & Weather</button>
   <button class="tab-btn" data-tab="history">Playback History</button>
-  <button class="tab-btn" data-tab="settings">Settings</button>
+  <button class="tab-btn" data-tab="settings">Global Settings</button>
 </div>
 
 <!-- ══════════════════ HOW IT WORKS ══════════════════ -->
@@ -210,6 +219,16 @@
     <div style="background:#fdecea; border:1px solid #e74c3c; border-radius:6px; padding:10px 14px; margin-top:8px;">
       <strong>⚠ Use Global Play Mode with caution.</strong> Selecting Global sends the announcement audio to <em>every node currently linked to yours</em> — other clubs' repeaters, remote nodes, and any other systems in your AllStar network. Only choose Global if you are certain all connected nodes should receive this announcement. When in doubt, use Local.
     </div>
+  </div>
+
+  <div class="card">
+    <h3>Hourly Time & Weather <span class="muted" style="font-weight:normal; font-size:0.85em;">(Clock-Triggered)</span></h3>
+    <p>Announces the current time (with an optional smart greeting — Good morning/afternoon/evening) followed by current weather conditions, on a cron schedule like Scheduled Announcements — top of every hour by default. Unlike a fixed recording, the audio is generated fresh every time it plays.</p>
+    <ul style="margin: 8px 0 8px 20px; line-height: 1.8;">
+      <li><strong>Takes priority over Scheduled Announcements</strong> — if both are due at the same moment, Time & Weather always plays first; the Scheduled entry just plays right after instead of being skipped.</li>
+      <li><strong>Waits for the node to unkey</strong>, same as Scheduled Announcements.</li>
+      <li>Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or — if SkywarnPlus is already installed — its already-fetched weather data, avoiding a second independent poller.</li>
+    </ul>
   </div>
 </div>
 
@@ -402,6 +421,150 @@
         </table>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ══════════════════ HOURLY TIME & WEATHER ══════════════════ -->
+<div class="tab-panel" id="tab-timeweather">
+  <div class="card">
+    <h3>Hourly Time & Weather</h3>
+    <p class="muted">A smart-greeting time announcement plus current weather conditions, generated fresh every time it plays. Takes priority over Scheduled Announcements when both are due at the same moment — a Scheduled entry just plays right after this one finishes.</p>
+
+    <div id="tw-swp-banner" class="banner-info" style="display:none;">
+      SkywarnPlus is installed on this system. Using the <strong>SkywarnPlus</strong> weather provider below avoids running a second, independent weather poller.
+    </div>
+    <div id="tw-sounds-warning" class="banner-warn" style="display:none;">
+      The sound files this feature needs (digits, greetings, weather condition words) don't appear to be installed. Re-run <code>install.sh</code> to install them.
+    </div>
+
+    <div class="toggle-row">
+      <label class="toggle-switch">
+        <input type="checkbox" id="tw-enable">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Enable Hourly Time & Weather</span>
+    </div>
+
+    <label style="margin-top:16px;">Time Format</label>
+    <select id="tw-time-format" style="width:220px;">
+      <option value="12">12-hour, with smart greeting (Good morning/afternoon/evening)</option>
+      <option value="24">24-hour, no greeting</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <h3>Schedule</h3>
+    <p class="muted">Same cron format as Scheduled Announcements.</p>
+    <button id="tw-cron-hourly" style="margin-bottom:10px;">Every Hour (default)</button>
+    <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-top:6px;">
+      <div style="text-align:center;">
+        <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Minute</div>
+        <input type="text" id="tw-cron-min"  value="0" style="width:72px; text-align:center; display:block; margin:0 auto;">
+        <div style="font-size:0.88em; color:#666; margin-top:4px;">0–59</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Hour</div>
+        <input type="text" id="tw-cron-hour" value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
+        <div style="font-size:0.88em; color:#666; margin-top:4px;">0–23</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Day of Month</div>
+        <input type="text" id="tw-cron-dom"  value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
+        <div style="font-size:0.88em; color:#666; margin-top:4px;">1–31</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Month</div>
+        <input type="text" id="tw-cron-mon"  value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
+        <div style="font-size:0.88em; color:#666; margin-top:4px;">1–12</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Day of Week</div>
+        <input type="text" id="tw-cron-dow"  value="*" style="width:110px; text-align:center; display:block; margin:0 auto;">
+        <div style="font-size:0.88em; color:#666; margin-top:4px;">0=Sun … 6=Sat</div>
+      </div>
+    </div>
+    <div style="margin-top:10px; font-size:1em; color:#333;">
+      <strong>Syntax:</strong> &nbsp;<code>*</code> = every &nbsp;&nbsp; <code>*/n</code> = every n &nbsp;&nbsp; <code>n,m</code> = specific values &nbsp;&nbsp; <code>n-m</code> = range
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Weather</h3>
+    <div class="toggle-row">
+      <label class="toggle-switch">
+        <input type="checkbox" id="tw-weather-enable">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Announce current weather conditions (off = time only)</span>
+    </div>
+
+    <div class="field-row" style="margin-top:14px;">
+      <div>
+        <label>Weather Provider</label>
+        <select id="tw-provider" style="width:220px;">
+          <option value="auto">Auto (METAR for airport codes, Open-Meteo otherwise)</option>
+          <option value="metar">NOAA METAR (ICAO airport codes only)</option>
+          <option value="openmeteo">Open-Meteo (free, no key, any location)</option>
+          <option value="tempest">My WeatherFlow Tempest station</option>
+          <option value="skywarnplus">SkywarnPlus (reads its already-fetched weather)</option>
+        </select>
+      </div>
+      <div id="tw-location-field">
+        <label>Location (ZIP/postal code or ICAO airport code)</label>
+        <input type="text" id="tw-location" style="width:180px;" placeholder="e.g. 92320 or KONT">
+      </div>
+      <div>
+        <label>Temperature Unit</label>
+        <select id="tw-temp-unit" style="width:90px;">
+          <option value="F">°F</option>
+          <option value="C">°C</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="tw-tempest-fields" style="display:none; margin-top:10px;">
+      <div class="field-row">
+        <div>
+          <label>Tempest Personal Access Token</label>
+          <input type="text" id="tw-tempest-token" style="width:280px;" placeholder="tempest.earth/account">
+        </div>
+        <div>
+          <label>Tempest Station ID (optional)</label>
+          <input type="text" id="tw-tempest-station" style="width:140px;" placeholder="auto-detect if blank">
+        </div>
+      </div>
+    </div>
+
+    <div class="toggle-row" style="margin-top:14px;">
+      <label class="toggle-switch">
+        <input type="checkbox" id="tw-announce-condition">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Announce conditions (clear, rain, cloudy, ...)</span>
+    </div>
+    <div class="toggle-row">
+      <label class="toggle-switch">
+        <input type="checkbox" id="tw-announce-feels-like">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Announce feels-like temperature (if available from the provider)</span>
+    </div>
+    <div class="toggle-row">
+      <label class="toggle-switch">
+        <input type="checkbox" id="tw-announce-humidity">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Announce humidity percentage (if available from the provider)</span>
+    </div>
+
+    <label style="margin-top:14px;">Weather Cache (minutes)</label>
+    <input type="text" id="tw-cache-max-age" style="width:80px;">
+    <span class="muted" style="margin-left:8px;">Skip re-fetching weather if the last reading is still this fresh — independent of how often the announcement itself plays.</span>
+
+    <br><br>
+    <button class="btn-primary" id="btn-save-timeweather">Save &amp; Reload</button>
+    <button class="btn-play" id="btn-test-timeweather">Test (local playback)</button>
+    <div class="msg" id="timeweather-msg"></div>
   </div>
 </div>
 

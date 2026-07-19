@@ -1163,7 +1163,12 @@ def should_play_timeweather(tw_cfg, state, node, now_dt):
 
     return True
 
-def play_timeweather(tw_cfg, state, node, now, now_dt):
+def play_timeweather(tw_cfg, state, node, now, now_dt, test_mode=False):
+    """test_mode=True is a manual on-demand preview (herald test-timeweather /
+    the web UI's Test button): still fetches real weather and plays it, but
+    never touches the daemon's own scheduling state (timeweather_played/
+    _pending/_busy_until) so it can't interfere with the next real scheduled
+    occurrence."""
     wcfg = tw_cfg.get("Weather", {}) or {}
     weather = None
     if wcfg.get("Enable", True):
@@ -1180,15 +1185,18 @@ def play_timeweather(tw_cfg, state, node, now, now_dt):
     if not build_timeweather_audio(tw_cfg, weather, now_dt, out_path):
         return False
 
-    log_info("Playing Hourly Time & Weather announcement")
+    entry_type = "test-timeweather" if test_mode else "timeweather"
+    label = "Hourly Time & Weather (Test)" if test_mode else "Hourly Time & Weather"
+    log_info(f"Playing {label} announcement")
     play_file(node, out_path)
-    log_playback(state, "timeweather", "Hourly Time & Weather", out_path, node)
+    log_playback(state, entry_type, label, out_path, node)
 
-    minute_key = now_dt.strftime("%Y-%m-%d %H:%M")
-    state["timeweather_played"] = minute_key
-    state["timeweather_pending"] = False
-    duration = tw_gsm_duration(out_path) or audio_duration(out_path) or DEFAULT_ANNOUNCEMENT_DURATION
-    state["timeweather_busy_until"] = now + min(duration, MAX_BUSY_SECONDS) + BUSY_GRACE_SECONDS
+    if not test_mode:
+        minute_key = now_dt.strftime("%Y-%m-%d %H:%M")
+        state["timeweather_played"] = minute_key
+        state["timeweather_pending"] = False
+        duration = tw_gsm_duration(out_path) or audio_duration(out_path) or DEFAULT_ANNOUNCEMENT_DURATION
+        state["timeweather_busy_until"] = now + min(duration, MAX_BUSY_SECONDS) + BUSY_GRACE_SECONDS
     save_state(state)
     return True
 
@@ -1640,6 +1648,20 @@ def cmd_update_timeweather(config, args):
     save_config(config)
     print(json.dumps({"success": True, "message": "Time & Weather settings updated"}))
 
+def cmd_test_timeweather(config):
+    cfg = extract_config(config)
+    node = cfg["node"]
+    if not node:
+        print(json.dumps({"success": False, "message": "Node not set in config"}))
+        return
+    state = load_state()
+    now_dt = datetime.now()
+    ok = play_timeweather(cfg["timeweather"], state, node, time.time(), now_dt, test_mode=True)
+    if ok:
+        print(json.dumps({"success": True, "message": "Playing Hourly Time & Weather test announcement"}))
+    else:
+        print(json.dumps({"success": False, "message": "Could not build announcement - check sound files and weather config"}))
+
 def build_arg_parser():
     parser = argparse.ArgumentParser(prog="asl3-herald.py")
     sub = parser.add_subparsers(dest="command")
@@ -1736,6 +1758,8 @@ def build_arg_parser():
     p_tw.add_argument("--tempest-token", dest="tempest_token")
     p_tw.add_argument("--tempest-station", dest="tempest_station")
 
+    sub.add_parser("test-timeweather", help="Test-play the Hourly Time & Weather announcement immediately")
+
     return parser
 
 def cli_main():
@@ -1780,6 +1804,8 @@ def cli_main():
         cmd_update_settings(config, args)
     elif args.command == "update-timeweather":
         cmd_update_timeweather(config, args)
+    elif args.command == "test-timeweather":
+        cmd_test_timeweather(config)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
