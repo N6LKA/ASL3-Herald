@@ -273,6 +273,13 @@ SOUNDS_DIR="/usr/local/share/asterisk/sounds/custom"
 info "Installing Hourly Time & Weather sound files to $SOUNDS_DIR ..."
 mkdir -p "$SOUNDS_DIR"
 unzip -o -q "$REPO_TMP_DIR/sounds/sound_files.zip" -d "$SOUNDS_DIR"
+# unzip restores the permission bits stored in the archive verbatim, which
+# were restrictive (readable only by whoever packaged it) - confirmed live
+# this left every sound file unreadable by the asterisk user, breaking DTMF-
+# triggered Time & Weather (which runs as asterisk, not root) even though
+# the daemon/web UI (root) could read them fine. a+rX: readable by everyone,
+# executable only where it already was (i.e. directories, not the files).
+chmod -R a+rX "$SOUNDS_DIR"
 
 # ── Herald management command ──────────────────────────────────────────────────
 
