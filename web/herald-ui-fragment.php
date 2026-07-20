@@ -446,30 +446,36 @@
       <span class="toggle-label">Enable Time & Weather Announcements</span>
     </div>
 
-    <div class="toggle-row" style="margin-top:14px;">
-      <label class="toggle-switch">
-        <input type="checkbox" id="tw-smart-greeting">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">Use Smart Greeting (Good morning/afternoon/evening, based on the hour)</span>
-    </div>
-    <p class="muted" style="margin-top:4px;">Plays before the announcement either way — with time, with weather, or with both.</p>
+    <div id="tw-options-block">
+      <div class="toggle-row" style="margin-top:14px;">
+        <label class="toggle-switch">
+          <input type="checkbox" id="tw-smart-greeting">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Use Smart Greeting (Good morning/afternoon/evening, based on the hour)</span>
+      </div>
+      <p class="muted" style="margin-top:4px;">Plays before the announcement either way — with time, with weather, or with both.</p>
 
-    <p class="muted" style="margin-top:12px; margin-bottom:4px;">Choose what's included below — time, weather, or both. Each one reveals its own settings once turned on.</p>
+      <p class="muted" style="margin-top:12px; margin-bottom:4px;">Choose what's included below — time, weather, or both. Each one reveals its own settings once turned on.</p>
 
-    <div class="toggle-row" style="margin-top:8px;">
-      <label class="toggle-switch">
-        <input type="checkbox" id="tw-announce-time">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">Announce Time</span>
-    </div>
-    <div class="toggle-row">
-      <label class="toggle-switch">
-        <input type="checkbox" id="tw-weather-enable">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">Announce Weather</span>
+      <div class="toggle-row" style="margin-top:8px;">
+        <label class="toggle-switch">
+          <input type="checkbox" id="tw-announce-time">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Announce Time</span>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle-switch">
+          <input type="checkbox" id="tw-weather-enable">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Announce Weather</span>
+      </div>
+
+      <div id="tw-nothing-warning" class="banner-warn" style="display:none; margin-top:14px;">
+        Time and Weather are both off, so nothing will be announced. Turn on at least one above, or turn off "Enable Time & Weather Announcements" to disable this feature entirely.
+      </div>
     </div>
   </div>
 
@@ -554,7 +560,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" id="tw-schedule-card">
     <h3>Schedule</h3>
     <p class="muted">Same cron format as Scheduled Announcements.</p>
     <button id="tw-cron-hourly" style="margin-bottom:10px;">Every Hour (default)</button>
@@ -588,8 +594,9 @@
     <div style="margin-top:10px; font-size:1em; color:#333;">
       <strong>Syntax:</strong> &nbsp;<code>*</code> = every &nbsp;&nbsp; <code>*/n</code> = every n &nbsp;&nbsp; <code>n,m</code> = specific values &nbsp;&nbsp; <code>n-m</code> = range
     </div>
+  </div>
 
-    <br>
+  <div class="card">
     <button class="btn-primary" id="btn-save-timeweather">Save &amp; Reload</button>
     <button class="btn-play" id="btn-test-timeweather">Test (local playback)</button>
     <div class="msg" id="timeweather-msg"></div>

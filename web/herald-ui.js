@@ -356,10 +356,22 @@
   // Time/Weather cards only make sense once their own toggle is on -
   // matches the "What to Announce" card's toggles right above them.
   function updateTwSectionVisibility() {
-    document.getElementById('tw-time-card').style.display =
-      document.getElementById('tw-announce-time').checked ? 'block' : 'none';
-    document.getElementById('tw-weather-card').style.display =
-      document.getElementById('tw-weather-enable').checked ? 'block' : 'none';
+    const enabled = document.getElementById('tw-enable').checked;
+    const announceTime = document.getElementById('tw-announce-time').checked;
+    const announceWeather = document.getElementById('tw-weather-enable').checked;
+    const hasContent = announceTime || announceWeather;
+
+    // Master switch off: hide every option (nothing to configure), but
+    // leave Save & Reload reachable so the disabled state can still be
+    // saved, and hide Test since there'd be nothing to test.
+    document.getElementById('tw-options-block').style.display = enabled ? 'block' : 'none';
+    document.getElementById('tw-time-card').style.display = (enabled && announceTime) ? 'block' : 'none';
+    document.getElementById('tw-weather-card').style.display = (enabled && announceWeather) ? 'block' : 'none';
+    // Nothing to schedule if neither Time nor Weather is on - a smart
+    // greeting alone was never a supported standalone announcement.
+    document.getElementById('tw-schedule-card').style.display = (enabled && hasContent) ? 'block' : 'none';
+    document.getElementById('btn-test-timeweather').style.display = (enabled && hasContent) ? 'inline-block' : 'none';
+    document.getElementById('tw-nothing-warning').style.display = (enabled && !hasContent) ? 'block' : 'none';
   }
 
   // ── Playback history ───────────────────────────────────────────────────────────────────
@@ -627,6 +639,7 @@
   });
 
   document.getElementById('tw-provider').addEventListener('change', updateTwProviderFields);
+  document.getElementById('tw-enable').addEventListener('change', updateTwSectionVisibility);
   document.getElementById('tw-announce-time').addEventListener('change', updateTwSectionVisibility);
   document.getElementById('tw-weather-enable').addEventListener('change', updateTwSectionVisibility);
 

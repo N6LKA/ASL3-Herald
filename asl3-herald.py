@@ -1115,14 +1115,17 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
         warnings = []
     files = []
     hour, minute = now_dt.hour, now_dt.minute
-    # Independent settings - any combination is valid: time only, weather
-    # only, both, or (with both off) an announcement with nothing to say,
-    # caught by the "nothing to announce" check below. Smart Greeting is
-    # its own toggle too, so "Good afternoon" can play with or without the
-    # time digits themselves.
+    # Independent settings - time only, weather only, or both is valid.
+    # Smart Greeting is its own toggle too, so "Good afternoon" can play
+    # with or without the time digits themselves - but it never counts as
+    # content on its own (content_added below): a greeting isn't a real
+    # announcement by itself, so "Time and Weather both off" (or a weather
+    # fetch that came back empty) must still fail rather than silently
+    # playing just the greeting.
     announce_time = tw_cfg.get("AnnounceTime", True)
     time_format = str(tw_cfg.get("TimeFormat", "12"))
     smart_greeting = tw_cfg.get("SmartGreeting", True)
+    content_added = False
 
     if smart_greeting:
         if hour < 12:
@@ -1134,6 +1137,7 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
         files.append(os.path.join(TW_SOUND_BASE, f"{greeting}.gsm"))
 
     if announce_time and time_format == "24":
+        content_added = True
         files.append(os.path.join(TW_SOUND_BASE, "the-time-is.gsm"))
         tw_add_number(hour, files)
         if minute == 0:
@@ -1147,6 +1151,7 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
             if ones > 0:
                 files.append(os.path.join(TW_SOUND_BASE, "digits", f"{ones}.gsm"))
     elif announce_time:
+        content_added = True
         ampm = "AM" if hour < 12 else "PM"
         hour12 = hour - 12 if hour > 12 else (12 if hour == 0 else hour)
         files.append(os.path.join(TW_SOUND_BASE, "the-time-is.gsm"))
@@ -1166,6 +1171,7 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
 
     wcfg = tw_cfg.get("Weather", {}) or {}
     if wcfg.get("Enable", True) and weather:
+        content_added = True
         unit_c = str(wcfg.get("TemperatureUnit", "F")).upper() == "C"
 
         def _convert(f_val):
@@ -1214,9 +1220,9 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
         log_warn(f"Time & Weather: missing sound file(s), skipping: {missing[:3]}")
         warnings.append(f"Missing sound file(s): {names}")
         return False
-    if not files:
-        log_warn("Time & Weather: nothing to announce (check config)")
-        warnings.append("Nothing to announce - check config")
+    if not content_added:
+        log_warn("Time & Weather: nothing to announce (Time and Weather both off, or no weather data)")
+        warnings.append("Nothing to announce - enable Time and/or Weather (or check weather data)")
         return False
 
     try:
