@@ -462,6 +462,14 @@
       </label>
       <span class="toggle-label">Announce Weather</span>
     </div>
+    <div class="toggle-row" style="margin-top:14px;">
+      <label class="toggle-switch">
+        <input type="checkbox" id="tw-smart-greeting">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Smart Greeting (Good morning/afternoon/evening, based on the hour)</span>
+    </div>
+    <p class="muted" style="margin-top:4px;">Plays before the announcement either way — with time, with weather, or with both.</p>
   </div>
 
   <div class="card" id="tw-time-card">
@@ -471,14 +479,6 @@
       <option value="12">12-hour (with AM/PM)</option>
       <option value="24">24-hour</option>
     </select>
-
-    <div class="toggle-row" style="margin-top:14px;">
-      <label class="toggle-switch">
-        <input type="checkbox" id="tw-smart-greeting">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">Smart Greeting (Good morning/afternoon/evening, based on the hour)</span>
-    </div>
   </div>
 
   <div class="card" id="tw-weather-card">
