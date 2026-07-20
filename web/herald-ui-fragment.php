@@ -446,6 +446,15 @@
       <span class="toggle-label">Enable Time & Weather Announcements</span>
     </div>
 
+    <div class="toggle-row" style="margin-top:14px;">
+      <label class="toggle-switch">
+        <input type="checkbox" id="tw-smart-greeting">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Use Smart Greeting (Good morning/afternoon/evening, based on the hour)</span>
+    </div>
+    <p class="muted" style="margin-top:4px;">Plays before the announcement either way — with time, with weather, or with both.</p>
+
     <p class="muted" style="margin-top:12px; margin-bottom:4px;">Choose what's included below — time, weather, or both. Each one reveals its own settings once turned on.</p>
 
     <div class="toggle-row" style="margin-top:8px;">
@@ -462,14 +471,6 @@
       </label>
       <span class="toggle-label">Announce Weather</span>
     </div>
-    <div class="toggle-row" style="margin-top:14px;">
-      <label class="toggle-switch">
-        <input type="checkbox" id="tw-smart-greeting">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">Use Smart Greeting (Good morning/afternoon/evening, based on the hour)</span>
-    </div>
-    <p class="muted" style="margin-top:4px;">Plays before the announcement either way — with time, with weather, or with both.</p>
   </div>
 
   <div class="card" id="tw-time-card">
