@@ -370,7 +370,11 @@
     // Nothing to schedule if neither Time nor Weather is on - a smart
     // greeting alone was never a supported standalone announcement.
     document.getElementById('tw-schedule-card').style.display = (enabled && hasContent) ? 'block' : 'none';
-    document.getElementById('btn-test-timeweather').style.display = (enabled && hasContent) ? 'inline-block' : 'none';
+    // A plain style.display here loses to the "#herald-ui button { display:
+    // inline-block !important }" rule (added to defeat Bootstrap's flex
+    // stretching on Allmon3 host pages) - toggle a class with matching
+    // !important + higher specificity instead.
+    document.getElementById('btn-test-timeweather').classList.toggle('tw-hidden', !(enabled && hasContent));
     document.getElementById('tw-nothing-warning').style.display = (enabled && !hasContent) ? 'block' : 'none';
   }
 

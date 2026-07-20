@@ -71,6 +71,12 @@
     display: inline-block !important;
     width: auto !important;
   }
+  /* Higher specificity than "#herald-ui button" above (extra class), so JS
+     can still hide a button (e.g. Time & Weather's Test button when there's
+     nothing to test) despite that rule's !important. */
+  #herald-ui button.tw-hidden {
+    display: none !important;
+  }
   #herald-ui .btn-danger { background: #e74c3c; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-play   { background: #2980b9; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-primary{ background: #27ae60; color: #fff; border: none; border-radius: 4px; padding: 8px 16px; }
