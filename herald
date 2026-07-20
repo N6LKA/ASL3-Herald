@@ -82,6 +82,49 @@ Settings:
                   [--swp-enable true|false] [--swp-wxfile <path>]
                   [--swp-threshold <n>]
                                            Update general daemon settings
+
+Time & Weather Announcements (time and/or current conditions, schedule- or DTMF-triggered):
+  update-timeweather [--enable true|false] [--announce-time true|false]
+                     [--time-format 12|24] [--smart-greeting true|false]
+                     [--cron "MIN HOUR DOM MON DOW"]
+                     [--weather-enable true|false]
+                     [--provider auto|metar|openmeteo|tempest|skywarnplus]
+                     [--location <zip|icao>] [--temp-unit F|C]
+                     [--announce-condition true|false] [--announce-feels-like true|false]
+                     [--announce-humidity true|false] [--cache-max-age <minutes>]
+                     [--tempest-token <token>] [--tempest-station <id>]
+                                           Update Time & Weather Announcements settings
+  play-timeweather                         Play the announcement right now, as a real
+                                           on-demand occurrence - use this for DTMF.
+                                           Logs to Playback History as a normal Hourly
+                                           Time & Weather entry (not "(Test)"), and
+                                           still won't suppress or double-fire the next
+                                           real scheduled hourly occurrence
+  test-timeweather                        Preview the announcement (real weather
+                                           fetch, logged as "(Test)"); doesn't affect
+                                           scheduling at all. For troubleshooting from
+                                           the CLI, not for DTMF - use play-timeweather
+  request-timeweather-test                Ask the running daemon to test-play instead
+                                           (used internally by the web UI's Test
+                                           button - see below for why it's different)
+
+  Takes priority over Scheduled Announcements when both are due at the same
+  moment (Scheduled just retries on the next poll cycle), and waits for the
+  node to unkey before playing, same as Scheduled Announcements.
+
+  For an on-demand DTMF trigger (e.g. "press 57 for the time and weather"),
+  add a function in rpt.conf that runs: /usr/local/bin/herald play-timeweather
+  No sudo and no special permissions needed - unlike every other mutating
+  herald command, this one never touches asl3-herald.conf, so it works
+  directly as whatever user app_rpt's DTMF functions run as (asterisk).
+
+  The web UI's own Test button uses request-timeweather-test instead of
+  calling test-timeweather directly: a process invoked through Apache/PHP
+  can inherit Apache's own PrivateTmp sandbox (common default), which hides
+  data other programs write to /tmp (e.g. SkywarnPlus's shared weather
+  file) from it. Asking the already-running daemon to do the test-play
+  itself avoids that, since the daemon is a plain systemd service, never
+  spawned by Apache.
 EOF
 }
 
@@ -479,6 +522,52 @@ cmd_update_settings() {
     cmd_reload 2>/dev/null || true
 }
 
+cmd_update_timeweather() {
+    need_root "$@"
+    python3 "$DAEMON_PY" update-timeweather "$@"
+    cmd_reload 2>/dev/null || true
+}
+
+cmd_test_timeweather() {
+    # Deliberately no need_root here, unlike every other mutating command -
+    # this one never touches asl3-herald.conf (the thing that actually needs
+    # root elsewhere). It only fetches weather, writes a temp audio file
+    # (world-writable directory, see asl3-herald.py), and logs playback
+    # history to the shared state file (also made world-writable by
+    # save_state(), for the same reason). Manual preview only - never
+    # touches scheduling state. NOT for DTMF - see cmd_play_timeweather.
+    #
+    # NOT used by the web UI's Test button - see cmd_request_test_timeweather
+    # below for why.
+    python3 "$DAEMON_PY" test-timeweather
+}
+
+cmd_play_timeweather() {
+    # Deliberately no need_root here - see cmd_test_timeweather above, same
+    # reasoning. This is the one to wire up to a DTMF function in rpt.conf:
+    # it's a real on-demand occurrence, logged to Playback History as plain
+    # "Time & Weather Announcements" (not "(Test)"), and briefly blocks a
+    # simultaneously-due Scheduled Announcement from colliding with it - but
+    # never marks the scheduled slot as already-played, so it can't
+    # suppress the next real scheduled occurrence.
+    python3 "$DAEMON_PY" play-timeweather
+}
+
+cmd_request_test_timeweather() {
+    # Used by the web UI's Test button instead of cmd_test_timeweather above.
+    # A process invoked through Apache/PHP (even via sudo - mount namespaces
+    # follow the process tree, not the UID) inherits Apache's own PrivateTmp
+    # sandbox if the vhost has that set, which hides /tmp/SkywarnPlus/... from
+    # it - so doing the actual weather-fetch/build/play work in a one-off
+    # process spawned this way can silently fail to see SkywarnPlus's shared
+    # data. Instead, this just leaves a small request file for the already-
+    # running daemon (a plain systemd service, never spawned by Apache) to
+    # notice and act on itself. Needs root only to write that tiny file into
+    # asl3-herald's own config directory - not for anything namespace-related.
+    need_root "$@"
+    python3 "$DAEMON_PY" request-timeweather-test
+}
+
 cmd_reorder_rotation() {
     need_root "$@"
     local name="$1" direction="$2"
@@ -729,6 +818,10 @@ case "$CMD" in
     toggle-schedule)      cmd_toggle_schedule    "$@" ;;
     toggle-rotation)      cmd_toggle_rotation    "$@" ;;
     update-settings)      cmd_update_settings    "$@" ;;
+    update-timeweather)   cmd_update_timeweather "$@" ;;
+    test-timeweather)     cmd_test_timeweather   "$@" ;;
+    play-timeweather)     cmd_play_timeweather   "$@" ;;
+    request-timeweather-test) cmd_request_test_timeweather "$@" ;;
     playback-history)     cmd_playback_history   "$@" ;;
     clear-history)        cmd_clear_history      "$@" ;;
     export-config)        cmd_export_config      "$@" ;;

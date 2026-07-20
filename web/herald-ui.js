@@ -288,8 +288,94 @@
       stbody.appendChild(tr);
     });
 
+    const tw = data.timeweather || {};
+    const twWeather = tw.Weather || {};
+    const twHealth = tw._health || {};
+    document.getElementById('tw-enable').checked = !!tw.Enable;
+    document.getElementById('tw-announce-time').checked = tw.AnnounceTime !== false;
+    document.getElementById('tw-time-format').value = tw.TimeFormat || '12';
+    document.getElementById('tw-smart-greeting').checked = tw.SmartGreeting !== false;
+    applyTwCronToPicker((tw.Schedule && tw.Schedule.Cron) || '0 * * * *');
+    document.getElementById('tw-weather-enable').checked = twWeather.Enable !== false;
+    document.getElementById('tw-provider').value = twWeather.Provider || 'auto';
+    document.getElementById('tw-location').value = twWeather.Location || '';
+    document.getElementById('tw-temp-unit').value = twWeather.TemperatureUnit || 'F';
+    document.getElementById('tw-announce-condition').checked = twWeather.AnnounceCondition !== false;
+    document.getElementById('tw-announce-feels-like').checked = !!twWeather.AnnounceFeelsLike;
+    document.getElementById('tw-announce-humidity').checked = !!twWeather.AnnounceHumidity;
+    document.getElementById('tw-cache-max-age').value = twWeather.CacheMaxAgeMin || 10;
+    document.getElementById('tw-tempest-token').value = (twWeather.Tempest && twWeather.Tempest.Token) || '';
+    document.getElementById('tw-tempest-station').value = (twWeather.Tempest && twWeather.Tempest.StationID) || '';
+    twSwpInstalled = !!twHealth.skywarnplus_installed;
+    updateTwProviderFields();
+    updateTwSectionVisibility();
+
+    document.getElementById('tw-sounds-warning').style.display =
+      twHealth.sound_files_installed === false ? 'block' : 'none';
+
     wireRowButtons();
     loadHistory();
+  }
+
+  // ── Time & Weather Announcements ──────────────────────────────────────────────────────────
+  let twSwpInstalled = false;
+
+  function applyTwCronToPicker(cronExpr) {
+    const parts = String(cronExpr || '0 * * * *').split(/\s+/);
+    document.getElementById('tw-cron-min').value  = parts[0] || '0';
+    document.getElementById('tw-cron-hour').value = parts[1] || '*';
+    document.getElementById('tw-cron-dom').value  = parts[2] || '*';
+    document.getElementById('tw-cron-mon').value  = parts[3] || '*';
+    document.getElementById('tw-cron-dow').value  = parts[4] || '*';
+  }
+
+  function readTwCronFromPicker() {
+    return [
+      document.getElementById('tw-cron-min').value.trim()  || '0',
+      document.getElementById('tw-cron-hour').value.trim() || '*',
+      document.getElementById('tw-cron-dom').value.trim()  || '*',
+      document.getElementById('tw-cron-mon').value.trim()  || '*',
+      document.getElementById('tw-cron-dow').value.trim()  || '*',
+    ].join(' ');
+  }
+
+  function updateTwProviderFields() {
+    const provider = document.getElementById('tw-provider').value;
+    document.getElementById('tw-tempest-fields').style.display = provider === 'tempest' ? 'block' : 'none';
+    document.getElementById('tw-location-field').style.display =
+      (provider === 'tempest' || provider === 'skywarnplus') ? 'none' : 'block';
+    document.getElementById('tw-swp-banner').style.display =
+      (twSwpInstalled && provider !== 'skywarnplus') ? 'block' : 'none';
+    // The skywarnplus provider is a local file read, not a live API call -
+    // fetch_weather_cached() bypasses Herald's own throttle for it entirely
+    // (SkywarnPlus already manages its own fetch freshness), so this
+    // setting has no effect for that provider.
+    document.getElementById('tw-cache-field').style.display = provider === 'skywarnplus' ? 'none' : 'block';
+  }
+
+  // Time/Weather cards only make sense once their own toggle is on -
+  // matches the "What to Announce" card's toggles right above them.
+  function updateTwSectionVisibility() {
+    const enabled = document.getElementById('tw-enable').checked;
+    const announceTime = document.getElementById('tw-announce-time').checked;
+    const announceWeather = document.getElementById('tw-weather-enable').checked;
+    const hasContent = announceTime || announceWeather;
+
+    // Master switch off: hide every option (nothing to configure), but
+    // leave Save & Reload reachable so the disabled state can still be
+    // saved, and hide Test since there'd be nothing to test.
+    document.getElementById('tw-options-block').style.display = enabled ? 'block' : 'none';
+    document.getElementById('tw-time-card').style.display = (enabled && announceTime) ? 'block' : 'none';
+    document.getElementById('tw-weather-card').style.display = (enabled && announceWeather) ? 'block' : 'none';
+    // Nothing to schedule if neither Time nor Weather is on - a smart
+    // greeting alone was never a supported standalone announcement.
+    document.getElementById('tw-schedule-card').style.display = (enabled && hasContent) ? 'block' : 'none';
+    // A plain style.display here loses to the "#herald-ui button { display:
+    // inline-block !important }" rule (added to defeat Bootstrap's flex
+    // stretching on Allmon3 host pages) - toggle a class with matching
+    // !important + higher specificity instead.
+    document.getElementById('btn-test-timeweather').classList.toggle('tw-hidden', !(enabled && hasContent));
+    document.getElementById('tw-nothing-warning').style.display = (enabled && !hasContent) ? 'block' : 'none';
   }
 
   // ── Playback history ───────────────────────────────────────────────────────────────────
@@ -307,8 +393,11 @@
       rotation: 'Tail Message',
       wx: 'Tail Message (WX)',
       scheduled: 'Scheduled Announcement',
+      timeweather: 'Time & Weather Announcements',
+      'dtmf-timeweather': 'Time & Weather Announcements (DTMF)',
       'test-tail': 'Tail Message (Test)',
       'test-scheduled': 'Scheduled Announcement (Test)',
+      'test-timeweather': 'Time & Weather Announcements (Test)',
       test: 'Manual Test',
     };
     history.forEach(h => {
@@ -546,6 +635,49 @@
     });
     showMsg(msgEl, data.message || (data.success ? 'Settings saved and reloaded' : 'Failed'), data.success);
     if (data.success) loadAll();
+  });
+
+  // ── Time & Weather Announcements ─────────────────────────────────────────────────────────────
+  document.getElementById('tw-cron-hourly').addEventListener('click', () => {
+    applyTwCronToPicker('0 * * * *');
+  });
+
+  document.getElementById('tw-provider').addEventListener('change', updateTwProviderFields);
+  document.getElementById('tw-enable').addEventListener('change', updateTwSectionVisibility);
+  document.getElementById('tw-announce-time').addEventListener('change', updateTwSectionVisibility);
+  document.getElementById('tw-weather-enable').addEventListener('change', updateTwSectionVisibility);
+
+  document.getElementById('btn-save-timeweather').addEventListener('click', async () => {
+    const msgEl = document.getElementById('timeweather-msg');
+    const data = await api('timeweather.php', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        enable: document.getElementById('tw-enable').checked,
+        announce_time: document.getElementById('tw-announce-time').checked,
+        time_format: document.getElementById('tw-time-format').value,
+        smart_greeting: document.getElementById('tw-smart-greeting').checked,
+        cron: readTwCronFromPicker(),
+        weather_enable: document.getElementById('tw-weather-enable').checked,
+        provider: document.getElementById('tw-provider').value,
+        location: document.getElementById('tw-location').value.trim(),
+        temp_unit: document.getElementById('tw-temp-unit').value,
+        announce_condition: document.getElementById('tw-announce-condition').checked,
+        announce_feels_like: document.getElementById('tw-announce-feels-like').checked,
+        announce_humidity: document.getElementById('tw-announce-humidity').checked,
+        cache_max_age: document.getElementById('tw-cache-max-age').value,
+        tempest_token: document.getElementById('tw-tempest-token').value.trim(),
+        tempest_station: document.getElementById('tw-tempest-station').value.trim(),
+      }),
+    });
+    showMsg(msgEl, data.message || (data.success ? 'Settings saved and reloaded' : 'Failed'), data.success);
+    if (data.success) loadAll();
+  });
+
+  document.getElementById('btn-test-timeweather').addEventListener('click', async () => {
+    const msgEl = document.getElementById('timeweather-msg');
+    const data = await api('timeweather_test.php', { method: 'POST' });
+    showMsg(msgEl, data.message || (data.success ? 'Playing now' : 'Failed'), data.success);
+    if (data.success) loadHistory();
   });
 
   // ── Add / edit tail message ────────────────────────────────────────────────────────────────

@@ -82,6 +82,24 @@ if [[ -f "$CONFIG_DIR_EARLY/asl3-herald.conf" ]] && \
     HAS_CONFIG=true
 fi
 
+# SkywarnPlus, if installed, already fetches weather data on its own — the
+# Time & Weather Announcements feature's "skywarnplus" provider reads that instead
+# of polling an API a second time. Detected here so a brand-new config can
+# default to it (see the config-generation section below).
+SWP_DETECTED=false
+[[ -f /usr/local/bin/SkywarnPlus/SkywarnPlus.py ]] && SWP_DETECTED=true
+
+# A standalone Time-Weather-Announce install runs its own cron job for the
+# same hourly time+weather announcement. We never touch it automatically —
+# there are too many variants/forks to detect reliably — but if we spot
+# unmistakable signs of one, warn in the summary so the user knows to
+# disable its cron themselves before turning on Time & Weather Announcements here.
+TW_DETECTED=false
+if [[ -d /etc/asterisk/scripts/saytime-weather ]] || \
+   crontab -u asterisk -l 2>/dev/null | grep -q "saytime\.pl"; then
+    TW_DETECTED=true
+fi
+
 if [[ $EUID -ne 0 ]]; then
     error "This installer must be run as root. Use: curl -fsSL ... | sudo bash"
 fi
@@ -102,6 +120,7 @@ command -v python3 &>/dev/null || PKGS+=(python3)
 python3 -c "import yaml" 2>/dev/null     || PKGS+=(python3-yaml)
 command -v sox &>/dev/null               || PKGS+=(sox)
 dpkg -s libsox-fmt-mp3 &>/dev/null        || PKGS+=(libsox-fmt-mp3)
+command -v unzip &>/dev/null             || PKGS+=(unzip)
 
 if [[ ${#PKGS[@]} -gt 0 ]]; then
     info "Installing: ${PKGS[*]}"
@@ -245,6 +264,23 @@ fetch_repo_file "asl3-herald.py" "$INSTALL_DIR/asl3-herald.py"
 fetch_repo_file "version.txt"    "$INSTALL_DIR/version.txt"
 chmod +x "$INSTALL_DIR/asl3-herald.py"
 
+# ── Sound files for Time & Weather Announcements ───────────────────────────────
+# Same pre-recorded digit/greeting/condition-word GSM snippets used by
+# Time-Weather-Announce, installed to the same shared location other ASL3
+# programs use — installed unconditionally (not gated on TimeWeather.Enable)
+# so the feature works immediately if enabled later without a reinstall.
+SOUNDS_DIR="/usr/local/share/asterisk/sounds/custom"
+info "Installing Time & Weather Announcements sound files to $SOUNDS_DIR ..."
+mkdir -p "$SOUNDS_DIR"
+unzip -o -q "$REPO_TMP_DIR/sounds/sound_files.zip" -d "$SOUNDS_DIR"
+# unzip restores the permission bits stored in the archive verbatim, which
+# were restrictive (readable only by whoever packaged it) - confirmed live
+# this left every sound file unreadable by the asterisk user, breaking DTMF-
+# triggered Time & Weather (which runs as asterisk, not root) even though
+# the daemon/web UI (root) could read them fine. a+rX: readable by everyone,
+# executable only where it already was (i.e. directories, not the files).
+chmod -R a+rX "$SOUNDS_DIR"
+
 # ── Herald management command ──────────────────────────────────────────────────
 
 info "Installing herald command to $HERALD_BIN ..."
@@ -254,6 +290,30 @@ chmod +x "$HERALD_BIN"
 # ── Config directory ───────────────────────────────────────────────────────────
 
 mkdir -p "$CONFIG_DIR" "$ANNOUNCE_DIR"
+
+# Time & Weather Announcements' temp audio directory - deliberately /run, not /tmp:
+# a web-UI-triggered `sudo herald test-timeweather` (invoked via Apache/PHP)
+# writes successfully but into Apache's own isolated /tmp when the vhost's
+# systemd unit has PrivateTmp=yes (common default, confirmed live on N6LKA's
+# node), leaving Asterisk (and anyone checking via SSH) unable to find the
+# file at all. /run is a tmpfs (wiped on reboot/power loss, same as /tmp
+# would have been) but isn't subject to PrivateTmp's isolation. 1777 (world-
+# writable + sticky bit, same as /tmp itself) because this gets written by
+# root (the daemon's own occurrences, or a web-triggered test) AND by the
+# unprivileged asterisk user (a DTMF-triggered test-timeweather call, which
+# is deliberately not root-gated - see herald --help).
+#
+# Installed via systemd-tmpfiles rather than a plain mkdir here, so the
+# directory reliably exists again immediately on every future boot too -
+# before Asterisk starts, and before any DTMF-triggered call could possibly
+# happen. Without this, the very first post-boot call being a DTMF trigger
+# (asterisk user, no root) would fail: only root can create new entries
+# directly under /run, so asterisk can't create /run/asl3-herald itself if
+# it doesn't already exist (asl3-herald.py's own on-demand mkdir is still
+# there as a fallback for whichever caller runs first, but shouldn't
+# normally be needed once this is installed).
+fetch_repo_file "tmpfiles.d/asl3-herald.conf" "/etc/tmpfiles.d/asl3-herald.conf"
+systemd-tmpfiles --create /etc/tmpfiles.d/asl3-herald.conf
 
 if [[ -f "$CONFIG_DIR/asl3-herald.conf" ]]; then
     warn "Config already exists — not overwriting: $CONFIG_DIR/asl3-herald.conf"
@@ -299,6 +359,11 @@ else
     # (Supermon / other frontends) at startup and on every SIGHUP reload.
     # No action needed here.
 
+    if $SWP_DETECTED; then
+        sed -i "s/^    Provider: auto/    Provider: skywarnplus/" "$CONFIG_DIR/asl3-herald.conf"
+        info "SkywarnPlus detected — Time & Weather's provider defaulted to 'skywarnplus' (avoids a second independent weather poller)."
+    fi
+
     warn "Review the rest of the config before starting: $CONFIG_DIR/asl3-herald.conf"
 fi
 
@@ -338,7 +403,7 @@ mkdir -p "$WEB_DIR/api" "$WEB_DIR/img"
 for f in herald-common.php herald-ui-fragment.php herald-ui.js; do
     fetch_repo_file "web/$f" "$WEB_DIR/$f"
 done
-for f in list.php voices.php play.php reload.php toggle.php toggle_scheduled.php toggle_rotation.php remove.php add_rotation.php add_scheduled.php edit_rotation.php edit_scheduled.php settings.php reorder_rotation.php playback_history.php clear_history.php config_export.php config_import.php version_check.php; do
+for f in list.php voices.php play.php reload.php toggle.php toggle_scheduled.php toggle_rotation.php remove.php add_rotation.php add_scheduled.php edit_rotation.php edit_scheduled.php settings.php reorder_rotation.php playback_history.php clear_history.php config_export.php config_import.php version_check.php timeweather.php timeweather_test.php; do
     fetch_repo_file "web/api/$f" "$WEB_DIR/api/$f"
 done
 for f in asl3-herald-icon.svg asl3-herald-banner.svg; do
@@ -503,7 +568,7 @@ echo "  1. Edit config:   nano $CONFIG_DIR/asl3-herald.conf"
 echo "  2. Add a message: sudo herald add \"This is W1ABC, repeater ID.\" --name id"
 echo "  3. List voices:   herald voices"
 echo ""
-echo "  Manage:  herald <status|enable|disable|reload|voices|add|add-file|list|remove|play|add-schedule|add-schedule-file|toggle-schedule|reorder-rotation|playback-history|export-config|import-config>"
+echo "  Manage:  herald <status|enable|disable|reload|voices|add|add-file|list|remove|play|add-schedule|add-schedule-file|toggle-schedule|reorder-rotation|playback-history|export-config|import-config|update-timeweather|test-timeweather>"
 echo ""
 echo "  Web UI:  installed to $WEB_DIR"
 if [[ -d /etc/allmon3 ]]; then
@@ -515,3 +580,9 @@ if [[ -f "$SUPERMON_FOOTER" ]]; then
     echo "           Supermon — look for the \"ASL3 Herald\" link at the bottom after logging in"
 fi
 echo ""
+if $TW_DETECTED; then
+    warn "An existing Time-Weather-Announce install was detected on this system."
+    warn "If you enable Time & Weather Announcements in Herald, disable TW's own cron entry"
+    warn "yourself first (crontab -u asterisk -e) to avoid double announcements."
+    echo ""
+fi

@@ -102,3 +102,60 @@ Scheduled: []
   #   Week: 2
   #   File: /etc/asterisk/scripts/asl3-herald/announcements/breakfast-net.wav
   #   PlayMode: local
+
+# Time & Weather Announcements — a time and/or current-conditions announcement,
+# generated fresh every time it plays (not a fixed file like
+# Rotation/Scheduled). Takes priority over Scheduled Announcements when both
+# are due at the same moment (Scheduled just retries on the next poll cycle).
+TimeWeather:
+  Enable: false
+
+  # Include the time announcement. Independent of Weather.Enable below - any
+  # combination is valid (time only, weather only, or both).
+  AnnounceTime: true
+
+  # "12" = 12-hour time + AM/PM
+  # "24" = 24-hour time
+  TimeFormat: "12"
+
+  # Play "Good morning/afternoon/evening" before the time, based on the hour.
+  # Independent of TimeFormat - works with either 12- or 24-hour time.
+  SmartGreeting: true
+
+  # Same cron format as Scheduled Announcements above. Default: top of every hour.
+  Schedule:
+    Cron: "0 * * * *"
+
+  Weather:
+    Enable: true
+
+    # auto        - ICAO airport codes use METAR (falling back to Open-Meteo),
+    #               everything else uses Open-Meteo (falling back to METAR)
+    # metar       - Force NOAA METAR (ICAO airport codes only)
+    # openmeteo   - Force Open-Meteo (free, no API key, any ZIP/postal/ICAO code)
+    # tempest     - Your own WeatherFlow Tempest station (requires Tempest.Token below)
+    # skywarnplus - Read already-fetched weather from SkywarnPlus's
+    #               /tmp/SkywarnPlus/swp-data.json instead of polling an API here.
+    #               Requires SkywarnPlus installed with WeatherEnable: true in
+    #               its own config.yaml. Recommended if SkywarnPlus is already
+    #               installed, to avoid two independent pollers hitting the
+    #               same weather source.
+    Provider: auto
+
+    # ZIP/postal code or ICAO airport code (e.g. "92320" or "KONT").
+    # Ignored for the tempest and skywarnplus providers.
+    Location: ""
+
+    TemperatureUnit: F  # F or C
+
+    AnnounceCondition: true    # "weather conditions clear/rain/cloudy/..."
+    AnnounceFeelsLike: false   # also announce feels-like temperature, if available
+    AnnounceHumidity: false    # also announce humidity percentage, if available
+
+    # How fresh (minutes) the last successful weather reading must be before
+    # fetching again. Independent of how often the announcement itself plays.
+    CacheMaxAgeMin: 10
+
+    Tempest:
+      Token: ""       # WeatherFlow Personal Access Token — tempest.earth/account
+      StationID: ""   # leave blank to auto-detect (cached after first lookup)
