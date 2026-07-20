@@ -572,7 +572,7 @@ def should_play_scheduled(sched, state, node, now):
         log_warn(f"Scheduled file not found: {filepath}  ({name})")
         return False
 
-    # Hourly Time & Weather takes priority over Scheduled Announcements when
+    # Time & Weather Announcements take priority over Scheduled Announcements when
     # both are due at the same moment — same pending/retry pattern as the
     # keyed-node case below, so the scheduled entry plays right after T&W
     # finishes instead of being skipped outright.
@@ -601,7 +601,7 @@ def should_play_scheduled(sched, state, node, now):
 
     return True
 
-# ── Hourly Time & Weather ──────────────────────────────────────────────────────
+# ── Time & Weather Announcements ────────────────────────────────────────────────
 # Ported from Time-Weather-Announce (saytime.pl / weather.sh) into native
 # Python so weather fetch + audio assembly live in one process/language with
 # the rest of the daemon, instead of shelling out to a second script.
@@ -1348,9 +1348,9 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, mode="scheduled", warning
 
     entry_type = {"scheduled": "timeweather", "dtmf": "dtmf-timeweather", "test": "test-timeweather"}[mode]
     label = {
-        "scheduled": "Hourly Time & Weather",
-        "dtmf": "Hourly Time & Weather (DTMF)",
-        "test": "Hourly Time & Weather (Test)",
+        "scheduled": "Time & Weather Announcements",
+        "dtmf": "Time & Weather Announcements (DTMF)",
+        "test": "Time & Weather Announcements (Test)",
     }[mode]
     log_info(f"Playing {label} announcement")
     play_file(node, out_path)
@@ -1894,8 +1894,8 @@ def cmd_update_timeweather(config, args):
 
 def timeweather_test_result_dict(ok, warnings, mode="test"):
     if ok:
-        message = ("Playing Hourly Time & Weather announcement" if mode == "dtmf"
-                   else "Playing Hourly Time & Weather test announcement")
+        message = ("Playing Time & Weather Announcements" if mode == "dtmf"
+                   else "Playing Time & Weather Announcements (test)")
         if warnings:
             message += " (" + "; ".join(warnings) + ")"
         return {"success": True, "message": message}
@@ -1925,7 +1925,7 @@ def cmd_play_timeweather(config):
     the asterisk user, never spawned by Apache, so it was never subject to
     the PrivateTmp issue that motivated cmd_request_test_timeweather below).
     Unlike cmd_test_timeweather, this logs to Playback History as a real
-    Hourly Time & Weather occurrence (not "(Test)"), and sets
+    Time & Weather Announcements occurrence (not "(Test)"), and sets
     timeweather_busy_until so a simultaneously-due Scheduled Announcement
     waits for it - but deliberately does NOT touch timeweather_played/
     _pending, since it's independent of the hourly cron schedule and must
@@ -2044,7 +2044,7 @@ def build_arg_parser():
     p_settings.add_argument("--swp-wxfile",    dest="swp_wxfile")
     p_settings.add_argument("--swp-threshold", dest="swp_threshold", type=int)
 
-    p_tw = sub.add_parser("update-timeweather", help="Update Hourly Time & Weather settings")
+    p_tw = sub.add_parser("update-timeweather", help="Update Time & Weather Announcements settings")
     p_tw.add_argument("--enable", choices=["true", "false"])
     p_tw.add_argument("--announce-time", dest="announce_time", choices=["true", "false"])
     p_tw.add_argument("--time-format", dest="time_format", choices=["12", "24"])
@@ -2061,8 +2061,8 @@ def build_arg_parser():
     p_tw.add_argument("--tempest-token", dest="tempest_token")
     p_tw.add_argument("--tempest-station", dest="tempest_station")
 
-    sub.add_parser("test-timeweather", help="Preview the Hourly Time & Weather announcement (doesn't affect scheduling; use play-timeweather for DTMF)")
-    sub.add_parser("play-timeweather", help="Play Hourly Time & Weather as a real on-demand occurrence (for DTMF triggers)")
+    sub.add_parser("test-timeweather", help="Preview the Time & Weather Announcement (doesn't affect scheduling; use play-timeweather for DTMF)")
+    sub.add_parser("play-timeweather", help="Play Time & Weather Announcement as a real on-demand occurrence (for DTMF triggers)")
     sub.add_parser("request-timeweather-test", help="Ask the running daemon to test-play Time & Weather (used by the web UI)")
 
     return parser
@@ -2350,7 +2350,7 @@ def main():
             # could not.
             process_timeweather_test_request(timeweather, state, node)
 
-            # ── Hourly Time & Weather (highest priority, time-driven) ──────
+            # ── Time & Weather Announcements (highest priority, time-driven) ──
             # Checked before Scheduled Announcements so it always plays first
             # if both are due at the same moment; should_play_scheduled()
             # defers any Scheduled entry until timeweather_busy_until clears.

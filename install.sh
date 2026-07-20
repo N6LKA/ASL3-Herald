@@ -83,7 +83,7 @@ if [[ -f "$CONFIG_DIR_EARLY/asl3-herald.conf" ]] && \
 fi
 
 # SkywarnPlus, if installed, already fetches weather data on its own — the
-# Hourly Time & Weather feature's "skywarnplus" provider reads that instead
+# Time & Weather Announcements feature's "skywarnplus" provider reads that instead
 # of polling an API a second time. Detected here so a brand-new config can
 # default to it (see the config-generation section below).
 SWP_DETECTED=false
@@ -93,7 +93,7 @@ SWP_DETECTED=false
 # same hourly time+weather announcement. We never touch it automatically —
 # there are too many variants/forks to detect reliably — but if we spot
 # unmistakable signs of one, warn in the summary so the user knows to
-# disable its cron themselves before turning on Hourly Time & Weather here.
+# disable its cron themselves before turning on Time & Weather Announcements here.
 TW_DETECTED=false
 if [[ -d /etc/asterisk/scripts/saytime-weather ]] || \
    crontab -u asterisk -l 2>/dev/null | grep -q "saytime\.pl"; then
@@ -264,13 +264,13 @@ fetch_repo_file "asl3-herald.py" "$INSTALL_DIR/asl3-herald.py"
 fetch_repo_file "version.txt"    "$INSTALL_DIR/version.txt"
 chmod +x "$INSTALL_DIR/asl3-herald.py"
 
-# ── Sound files for Hourly Time & Weather ──────────────────────────────────────
+# ── Sound files for Time & Weather Announcements ───────────────────────────────
 # Same pre-recorded digit/greeting/condition-word GSM snippets used by
 # Time-Weather-Announce, installed to the same shared location other ASL3
 # programs use — installed unconditionally (not gated on TimeWeather.Enable)
 # so the feature works immediately if enabled later without a reinstall.
 SOUNDS_DIR="/usr/local/share/asterisk/sounds/custom"
-info "Installing Hourly Time & Weather sound files to $SOUNDS_DIR ..."
+info "Installing Time & Weather Announcements sound files to $SOUNDS_DIR ..."
 mkdir -p "$SOUNDS_DIR"
 unzip -o -q "$REPO_TMP_DIR/sounds/sound_files.zip" -d "$SOUNDS_DIR"
 # unzip restores the permission bits stored in the archive verbatim, which
@@ -291,7 +291,7 @@ chmod +x "$HERALD_BIN"
 
 mkdir -p "$CONFIG_DIR" "$ANNOUNCE_DIR"
 
-# Hourly Time & Weather's temp audio directory - deliberately /run, not /tmp:
+# Time & Weather Announcements' temp audio directory - deliberately /run, not /tmp:
 # a web-UI-triggered `sudo herald test-timeweather` (invoked via Apache/PHP)
 # writes successfully but into Apache's own isolated /tmp when the vhost's
 # systemd unit has PrivateTmp=yes (common default, confirmed live on N6LKA's
@@ -582,7 +582,7 @@ fi
 echo ""
 if $TW_DETECTED; then
     warn "An existing Time-Weather-Announce install was detected on this system."
-    warn "If you enable Hourly Time & Weather in Herald, disable TW's own cron entry"
+    warn "If you enable Time & Weather Announcements in Herald, disable TW's own cron entry"
     warn "yourself first (crontab -u asterisk -e) to avoid double announcements."
     echo ""
 fi

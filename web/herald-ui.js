@@ -317,7 +317,7 @@
     loadHistory();
   }
 
-  // ── Hourly Time & Weather ───────────────────────────────────────────────────────────────
+  // ── Time & Weather Announcements ──────────────────────────────────────────────────────────
   let twSwpInstalled = false;
 
   function applyTwCronToPicker(cronExpr) {
@@ -372,10 +372,11 @@
       rotation: 'Tail Message',
       wx: 'Tail Message (WX)',
       scheduled: 'Scheduled Announcement',
-      timeweather: 'Hourly Time & Weather',
+      timeweather: 'Time & Weather Announcements',
+      'dtmf-timeweather': 'Time & Weather Announcements (DTMF)',
       'test-tail': 'Tail Message (Test)',
       'test-scheduled': 'Scheduled Announcement (Test)',
-      'test-timeweather': 'Hourly Time & Weather (Test)',
+      'test-timeweather': 'Time & Weather Announcements (Test)',
       test: 'Manual Test',
     };
     history.forEach(h => {
@@ -615,7 +616,7 @@
     if (data.success) loadAll();
   });
 
-  // ── Hourly Time & Weather ──────────────────────────────────────────────────────────────────
+  // ── Time & Weather Announcements ─────────────────────────────────────────────────────────────
   document.getElementById('tw-cron-hourly').addEventListener('click', () => {
     applyTwCronToPicker('0 * * * *');
   });

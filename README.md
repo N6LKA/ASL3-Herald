@@ -6,13 +6,13 @@
 
 **Enhanced tail message daemon for ASL3/app_rpt with advanced announcement features.**
 
-`asl3-herald` is a drop-in replacement and enhancement for the native `app_rpt` tail message function. It provides reliable unkey detection, rotating messages, SkywarnPlus weather alert integration with priority playback, cron-style scheduled announcements, neural TTS voices, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
+`asl3-herald` is a drop-in replacement and enhancement for the native `app_rpt` tail message function. It provides reliable unkey detection, rotating messages, SkywarnPlus weather alert integration with priority playback, cron-style scheduled announcements, built-in time & weather announcements (an enhanced take on the classic `saytime.pl`/`weather.sh`), neural TTS voices, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
 
 ---
 
 ## What It Does
 
-`asl3-herald` covers two distinct functions:
+`asl3-herald` covers three distinct functions:
 
 - **Tail Messages** — unkey-triggered, reactive to node activity:
   - **Reliable unkey detection** — uses the Asterisk Manager Interface (AMI) for real-time, event-driven unkey detection that fires at the actual unkey (before the courtesy tone), giving a seamless native-feel tail message; falls back to the legacy `rpt stats` kerchunk counter if AMI credentials aren't available
@@ -28,6 +28,12 @@
   - **Takes precedence over tail messages** — if a scheduled announcement and a tail message would both fire at the same moment, the scheduled announcement always plays; the tail message simply retries on its next unkey once the announcement has finished, with no penalty against `MinInterval`
   - **Per-announcement enable/disable** — disable an entry without removing it (`herald toggle-schedule <name>` or the web UI Status toggle); re-enable it the same way
 - **Per-entry enable/disable for tail messages** — disable individual rotation entries without removing them (`herald toggle-rotation <name>` or the web UI Status toggle); disabled entries are skipped during the unkey cycle
+
+- **Time & Weather Announcements** — a built-in, enhanced take on the classic `saytime.pl` / `weather.sh` scripts many ASL3/AllStar repeaters have run for years, so there's no separate program to install and keep in sync:
+  - Announces the current time (12- or 24-hour, with an optional "Good morning/afternoon/evening" smart greeting) and/or current weather conditions — time only, weather only, or both, independently configurable
+  - Runs on the same cron-style schedule as Scheduled Announcements (top of every hour by default, but any pattern works) and **takes priority over Scheduled Announcements** if both are due at the same moment
+  - Also triggerable **on demand over DTMF** (map a function in `rpt.conf` to `herald play-timeweather`), independent of the schedule
+  - Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or — if SkywarnPlus is already installed — its already-fetched data, avoiding a second independent poller
 
 Both Tail Messages and Scheduled Announcements can be edited in place (name, text, voice, schedule, play mode) via `herald edit-rotation` / `herald edit-schedule` or the web UI, instead of removing and re-adding.
 
@@ -320,6 +326,8 @@ Every poll, **scheduled announcements are checked first**, before the unkey/tail
 A newly-appeared or changed WX alert always plays immediately, taking priority over the rotation. But a **persistent** alert (unchanged since it last played — detected via `wx-tail.wav`'s own modification time, not a separate/optional SkywarnPlus feed) alternates with the rotation on each unkey instead of playing every single time, so a long-running alert (common in some areas, e.g. summer heat warnings) doesn't shut the rotation out entirely. As soon as the alert changes or a new one appears, it immediately jumps back to the front of the line.
 
 **Scheduled announcements** run on a separate time-based path, unaffected by the tail message interval or node activity. They are driven by a standard 5-field cron expression (`MIN HOUR DOM MON DOW`) and can fire once at a specific time, at a repeating interval (e.g. `*/20 * * * *` = every 20 minutes), or on any cron-expressible schedule. Each entry fires at most once per matching minute; a `*/20` entry fires three times an hour, not once per day. If the node is currently keyed when a scheduled announcement is due, it holds off and keeps re-checking every poll — even after the matching minute has passed — until the node unkeys, rather than missing the announcement or talking over live traffic. Once a scheduled announcement plays, its estimated audio duration (via `soxi`, or an 8-second fallback estimate) holds off any tail message for that long, so the two never overlap — this is also how a scheduled announcement takes precedence when both would fire at the same moment.
+
+**Time & Weather Announcements** use the same cron-based path as Scheduled Announcements, but are checked first, so they take priority if both are due at the same moment — the Scheduled entry simply retries on the next poll cycle rather than being skipped. The announcement audio (time and/or weather, per config) is regenerated fresh every time it plays, unlike a fixed recording. It can also be triggered on demand via a DTMF function mapped to `herald play-timeweather`, independent of the cron schedule — logged to Playback History as a normal occurrence (not a test), without suppressing the next real scheduled occurrence.
 
 State (rotation index, WX alternation, scheduled "waiting for unkey" status, and last played times) is saved to a JSON file so it survives service restarts.
 

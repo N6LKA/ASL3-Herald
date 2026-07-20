@@ -182,7 +182,7 @@
   <button class="tab-btn active" data-tab="info">How It Works</button>
   <button class="tab-btn" data-tab="tail">Tail Messages</button>
   <button class="tab-btn" data-tab="scheduled">Scheduled Announcements</button>
-  <button class="tab-btn" data-tab="timeweather">Hourly Time & Weather</button>
+  <button class="tab-btn" data-tab="timeweather">Time & Weather Announcements</button>
   <button class="tab-btn" data-tab="history">Playback History</button>
   <button class="tab-btn" data-tab="settings">Global Settings</button>
 </div>
@@ -222,13 +222,13 @@
   </div>
 
   <div class="card">
-    <h3>Hourly Time & Weather <span class="muted" style="font-weight:normal; font-size:0.85em;">(Clock-Triggered or On-Demand via DTMF)</span></h3>
-    <p>Announces the current time (with an optional smart greeting — Good morning/afternoon/evening) followed by current weather conditions, on a cron schedule like Scheduled Announcements — top of every hour by default. Unlike a fixed recording, the audio is generated fresh every time it plays.</p>
+    <h3>Time & Weather Announcements <span class="muted" style="font-weight:normal; font-size:0.85em;">(Clock-Triggered or On-Demand via DTMF)</span></h3>
+    <p>Announces the current time (with an optional smart greeting — Good morning/afternoon/evening) and/or current weather conditions, on a cron schedule like Scheduled Announcements — top of every hour by default, but any cron pattern works. Unlike a fixed recording, the audio is generated fresh every time it plays.</p>
     <ul style="margin: 8px 0 8px 20px; line-height: 1.8;">
       <li><strong>Takes priority over Scheduled Announcements</strong> — if both are due at the same moment, Time & Weather always plays first; the Scheduled entry just plays right after instead of being skipped.</li>
       <li><strong>Waits for the node to unkey</strong>, same as Scheduled Announcements.</li>
       <li>Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or — if SkywarnPlus is already installed — its already-fetched weather data, avoiding a second independent poller.</li>
-      <li>Can also be triggered <strong>on demand over DTMF</strong> (e.g. a "press this code for the time and weather" function), independent of the hourly schedule above. Add a function to your node's <code>rpt.conf</code> that runs <code>/usr/local/bin/herald play-timeweather</code> — pick whichever DTMF code fits your existing setup, this doesn't need to be any specific digit.</li>
+      <li>Can also be triggered <strong>on demand over DTMF</strong> (e.g. a "press this code for the time and weather" function), independent of the schedule above (which doesn't have to be hourly - any cron pattern works). Add a function to your node's <code>rpt.conf</code> that runs <code>/usr/local/bin/herald play-timeweather</code> — pick whichever DTMF code fits your existing setup, this doesn't need to be any specific digit.</li>
     </ul>
   </div>
 </div>
@@ -425,17 +425,17 @@
   </div>
 </div>
 
-<!-- ══════════════════ HOURLY TIME & WEATHER ══════════════════ -->
+<!-- ══════════════════ TIME & WEATHER ANNOUNCEMENTS ══════════════════ -->
 <div class="tab-panel" id="tab-timeweather">
   <div class="card">
-    <h3>Hourly Time & Weather</h3>
+    <h3>Time & Weather Announcements</h3>
     <p class="muted">Announces the time and/or current weather conditions, generated fresh every time it plays. Takes priority over Scheduled Announcements when both are due at the same moment — a Scheduled entry just plays right after this one finishes.</p>
 
     <div id="tw-sounds-warning" class="banner-warn" style="display:none;">
       The sound files this feature needs (digits, greetings, weather condition words) don't appear to be installed. Re-run <code>install.sh</code> to install them.
     </div>
     <div class="banner-info">
-      Want this on-demand over DTMF too (independent of the hourly schedule below)? Add a function to your node's <code>rpt.conf</code> that runs <code>/usr/local/bin/herald play-timeweather</code> — any DTMF code you like.
+      Want this on-demand over DTMF too (independent of the schedule below)? Add a function to your node's <code>rpt.conf</code> that runs <code>/usr/local/bin/herald play-timeweather</code> — any DTMF code you like.
     </div>
 
     <div class="toggle-row">
@@ -443,7 +443,7 @@
         <input type="checkbox" id="tw-enable">
         <span class="toggle-slider"></span>
       </label>
-      <span class="toggle-label">Enable Hourly Announcements</span>
+      <span class="toggle-label">Enable Time & Weather Announcements</span>
     </div>
 
     <p class="muted" style="margin-top:12px; margin-bottom:4px;">Choose what's included below — time, weather, or both. Each one reveals its own settings once turned on.</p>

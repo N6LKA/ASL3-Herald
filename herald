@@ -83,7 +83,7 @@ Settings:
                   [--swp-threshold <n>]
                                            Update general daemon settings
 
-Hourly Time & Weather (smart-greeting time + current conditions, clock-triggered):
+Time & Weather Announcements (time and/or current conditions, schedule- or DTMF-triggered):
   update-timeweather [--enable true|false] [--announce-time true|false]
                      [--time-format 12|24] [--smart-greeting true|false]
                      [--cron "MIN HOUR DOM MON DOW"]
@@ -93,7 +93,7 @@ Hourly Time & Weather (smart-greeting time + current conditions, clock-triggered
                      [--announce-condition true|false] [--announce-feels-like true|false]
                      [--announce-humidity true|false] [--cache-max-age <minutes>]
                      [--tempest-token <token>] [--tempest-station <id>]
-                                           Update Hourly Time & Weather settings
+                                           Update Time & Weather Announcements settings
   play-timeweather                         Play the announcement right now, as a real
                                            on-demand occurrence - use this for DTMF.
                                            Logs to Playback History as a normal Hourly
@@ -546,9 +546,9 @@ cmd_play_timeweather() {
     # Deliberately no need_root here - see cmd_test_timeweather above, same
     # reasoning. This is the one to wire up to a DTMF function in rpt.conf:
     # it's a real on-demand occurrence, logged to Playback History as plain
-    # "Hourly Time & Weather" (not "(Test)"), and briefly blocks a
+    # "Time & Weather Announcements" (not "(Test)"), and briefly blocks a
     # simultaneously-due Scheduled Announcement from colliding with it - but
-    # never marks the hourly cron slot as already-played, so it can't
+    # never marks the scheduled slot as already-played, so it can't
     # suppress the next real scheduled occurrence.
     python3 "$DAEMON_PY" play-timeweather
 }
