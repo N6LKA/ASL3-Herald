@@ -228,7 +228,7 @@
       <li><strong>Takes priority over Scheduled Announcements</strong> — if both are due at the same moment, Time & Weather always plays first; the Scheduled entry just plays right after instead of being skipped.</li>
       <li><strong>Waits for the node to unkey</strong>, same as Scheduled Announcements.</li>
       <li>Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or — if SkywarnPlus is already installed — its already-fetched weather data, avoiding a second independent poller.</li>
-      <li>Can also be triggered <strong>on demand over DTMF</strong> (e.g. a "press this code for the time and weather" function), independent of the schedule above (which doesn't have to be hourly - any cron pattern works). Add a function to your node's <code>rpt.conf</code> that runs <code>/usr/local/bin/herald play-timeweather</code> — pick whichever DTMF code fits your existing setup, this doesn't need to be any specific digit.</li>
+      <li>Can also be triggered <strong>on demand via DTMF</strong>, independent of the schedule above (which doesn't have to be hourly - any cron pattern works). To enable this, add a function to your node's <code>rpt.conf</code> that runs <code>/usr/local/bin/herald play-timeweather</code>. Any DTMF code you like will work.</li>
     </ul>
   </div>
 </div>
@@ -435,7 +435,7 @@
       The sound files this feature needs (digits, greetings, weather condition words) don't appear to be installed. Re-run <code>install.sh</code> to install them.
     </div>
     <div class="banner-info">
-      Want this on-demand over DTMF too (independent of the schedule below)? Add a function to your node's <code>rpt.conf</code> that runs <code>/usr/local/bin/herald play-timeweather</code> — any DTMF code you like.
+      To play this announcement on demand via DTMF (independent of the schedule below), add a function to your node's <code>rpt.conf</code> that runs <code>/usr/local/bin/herald play-timeweather</code>. Any DTMF code you like will work.
     </div>
 
     <div class="toggle-row">
