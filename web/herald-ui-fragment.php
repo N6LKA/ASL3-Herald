@@ -546,9 +546,11 @@
       <span class="toggle-label">Announce humidity percentage (if available from the provider)</span>
     </div>
 
-    <label style="margin-top:14px;">Weather Cache (minutes)</label>
-    <input type="text" id="tw-cache-max-age" style="width:80px;">
-    <span class="muted" style="margin-left:8px;">Skip re-fetching weather if the last reading is still this fresh — independent of how often the announcement itself plays.</span>
+    <div id="tw-cache-field" style="margin-top:14px;">
+      <label>Weather Cache (minutes)</label>
+      <input type="text" id="tw-cache-max-age" style="width:80px;">
+      <span class="muted" style="margin-left:8px;">Skip re-fetching weather if the last reading is still this fresh — independent of how often the announcement itself plays.</span>
+    </div>
   </div>
 
   <div class="card">

@@ -346,6 +346,11 @@
       (provider === 'tempest' || provider === 'skywarnplus') ? 'none' : 'block';
     document.getElementById('tw-swp-banner').style.display =
       (twSwpInstalled && provider !== 'skywarnplus') ? 'block' : 'none';
+    // The skywarnplus provider is a local file read, not a live API call -
+    // fetch_weather_cached() bypasses Herald's own throttle for it entirely
+    // (SkywarnPlus already manages its own fetch freshness), so this
+    // setting has no effect for that provider.
+    document.getElementById('tw-cache-field').style.display = provider === 'skywarnplus' ? 'none' : 'block';
   }
 
   // Time/Weather cards only make sense once their own toggle is on -
