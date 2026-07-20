@@ -6,7 +6,7 @@
 
 **Enhanced tail message daemon for ASL3/app_rpt with advanced announcement features.**
 
-`asl3-herald` is a drop-in replacement and enhancement for the native `app_rpt` tail message function. It provides reliable unkey detection, rotating messages, SkywarnPlus weather alert integration with priority playback, cron-style scheduled announcements, built-in time & weather announcements (an enhanced take on the classic `saytime.pl`/`weather.sh`), neural TTS voices, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
+`asl3-herald` is a drop-in replacement and enhancement for the native `app_rpt` tail message function. It provides reliable unkey detection, rotating messages, [SkywarnPlus](https://github.com/N6LKA/SkywarnPlus) weather alert integration with priority playback, cron-style scheduled announcements, built-in time & weather announcements (an enhanced take on the classic `saytime.pl`/`weather.sh`), neural TTS voices, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
 
 ---
 
