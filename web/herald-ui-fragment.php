@@ -18,6 +18,13 @@
     font-size: 16px;
     max-width: 100%;
     color: #222;
+    /* Host pages differ in their own ambient alignment - Supermon's chrome
+       centers text by default, Allmon3's doesn't. Elements below with their
+       own explicit alignment (table cells, flex toggle-rows) are unaffected
+       either way, but plain headings/labels/paragraphs would otherwise
+       inherit whatever the host page happens to do, which is why headings
+       and form labels showed up centered specifically on Supermon. */
+    text-align: left;
   }
   #herald-ui h3 { margin-bottom: 8px; }
   #herald-ui .card {
