@@ -84,8 +84,9 @@ Settings:
                                            Update general daemon settings
 
 Hourly Time & Weather (smart-greeting time + current conditions, clock-triggered):
-  update-timeweather [--enable true|false] [--time-format 12|24]
-                     [--smart-greeting true|false] [--cron "MIN HOUR DOM MON DOW"]
+  update-timeweather [--enable true|false] [--announce-time true|false]
+                     [--time-format 12|24] [--smart-greeting true|false]
+                     [--cron "MIN HOUR DOM MON DOW"]
                      [--weather-enable true|false]
                      [--provider auto|metar|openmeteo|tempest|skywarnplus]
                      [--location <zip|icao>] [--temp-unit F|C]

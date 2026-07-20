@@ -429,11 +429,8 @@
 <div class="tab-panel" id="tab-timeweather">
   <div class="card">
     <h3>Hourly Time & Weather</h3>
-    <p class="muted">A smart-greeting time announcement plus current weather conditions, generated fresh every time it plays. Takes priority over Scheduled Announcements when both are due at the same moment — a Scheduled entry just plays right after this one finishes.</p>
+    <p class="muted">Announces the time and/or current weather conditions, generated fresh every time it plays. Takes priority over Scheduled Announcements when both are due at the same moment — a Scheduled entry just plays right after this one finishes.</p>
 
-    <div id="tw-swp-banner" class="banner-info" style="display:none;">
-      SkywarnPlus is installed on this system. Using the <strong>SkywarnPlus</strong> weather provider below avoids running a second, independent weather poller.
-    </div>
     <div id="tw-sounds-warning" class="banner-warn" style="display:none;">
       The sound files this feature needs (digits, greetings, weather condition words) don't appear to be installed. Re-run <code>install.sh</code> to install them.
     </div>
@@ -446,10 +443,30 @@
         <input type="checkbox" id="tw-enable">
         <span class="toggle-slider"></span>
       </label>
-      <span class="toggle-label">Enable Hourly Time & Weather</span>
+      <span class="toggle-label">Enable Hourly Announcements</span>
     </div>
 
-    <label style="margin-top:16px;">Time Format</label>
+    <p class="muted" style="margin-top:12px; margin-bottom:4px;">Choose what's included below — time, weather, or both. Each one reveals its own settings once turned on.</p>
+
+    <div class="toggle-row" style="margin-top:8px;">
+      <label class="toggle-switch">
+        <input type="checkbox" id="tw-announce-time">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Announce Time</span>
+    </div>
+    <div class="toggle-row">
+      <label class="toggle-switch">
+        <input type="checkbox" id="tw-weather-enable">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Announce Weather</span>
+    </div>
+  </div>
+
+  <div class="card" id="tw-time-card">
+    <h3>Time</h3>
+    <label>Time Format</label>
     <select id="tw-time-format" style="width:220px;">
       <option value="12">12-hour (with AM/PM)</option>
       <option value="24">24-hour</option>
@@ -464,56 +481,16 @@
     </div>
   </div>
 
-  <div class="card">
-    <h3>Schedule</h3>
-    <p class="muted">Same cron format as Scheduled Announcements.</p>
-    <button id="tw-cron-hourly" style="margin-bottom:10px;">Every Hour (default)</button>
-    <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-top:6px;">
-      <div style="text-align:center;">
-        <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Minute</div>
-        <input type="text" id="tw-cron-min"  value="0" style="width:72px; text-align:center; display:block; margin:0 auto;">
-        <div style="font-size:0.88em; color:#666; margin-top:4px;">0–59</div>
-      </div>
-      <div style="text-align:center;">
-        <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Hour</div>
-        <input type="text" id="tw-cron-hour" value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
-        <div style="font-size:0.88em; color:#666; margin-top:4px;">0–23</div>
-      </div>
-      <div style="text-align:center;">
-        <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Day of Month</div>
-        <input type="text" id="tw-cron-dom"  value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
-        <div style="font-size:0.88em; color:#666; margin-top:4px;">1–31</div>
-      </div>
-      <div style="text-align:center;">
-        <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Month</div>
-        <input type="text" id="tw-cron-mon"  value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
-        <div style="font-size:0.88em; color:#666; margin-top:4px;">1–12</div>
-      </div>
-      <div style="text-align:center;">
-        <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Day of Week</div>
-        <input type="text" id="tw-cron-dow"  value="*" style="width:110px; text-align:center; display:block; margin:0 auto;">
-        <div style="font-size:0.88em; color:#666; margin-top:4px;">0=Sun … 6=Sat</div>
-      </div>
-    </div>
-    <div style="margin-top:10px; font-size:1em; color:#333;">
-      <strong>Syntax:</strong> &nbsp;<code>*</code> = every &nbsp;&nbsp; <code>*/n</code> = every n &nbsp;&nbsp; <code>n,m</code> = specific values &nbsp;&nbsp; <code>n-m</code> = range
-    </div>
-  </div>
-
-  <div class="card">
+  <div class="card" id="tw-weather-card">
     <h3>Weather</h3>
-    <div class="toggle-row">
-      <label class="toggle-switch">
-        <input type="checkbox" id="tw-weather-enable">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">Announce current weather conditions (off = time only)</span>
+    <div id="tw-swp-banner" class="banner-info" style="display:none;">
+      SkywarnPlus is installed on this system. Using the <strong>SkywarnPlus</strong> weather provider below avoids running a second, independent weather poller.
     </div>
 
-    <div class="field-row" style="margin-top:14px;">
+    <div class="field-row">
       <div>
         <label>Weather Provider</label>
-        <select id="tw-provider" style="width:220px;">
+        <select id="tw-provider" style="width:340px;">
           <option value="auto">Auto (METAR for airport codes, Open-Meteo otherwise)</option>
           <option value="metar">NOAA METAR (ICAO airport codes only)</option>
           <option value="openmeteo">Open-Meteo (free, no key, any location)</option>
@@ -572,8 +549,44 @@
     <label style="margin-top:14px;">Weather Cache (minutes)</label>
     <input type="text" id="tw-cache-max-age" style="width:80px;">
     <span class="muted" style="margin-left:8px;">Skip re-fetching weather if the last reading is still this fresh — independent of how often the announcement itself plays.</span>
+  </div>
 
-    <br><br>
+  <div class="card">
+    <h3>Schedule</h3>
+    <p class="muted">Same cron format as Scheduled Announcements.</p>
+    <button id="tw-cron-hourly" style="margin-bottom:10px;">Every Hour (default)</button>
+    <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-top:6px;">
+      <div style="text-align:center;">
+        <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Minute</div>
+        <input type="text" id="tw-cron-min"  value="0" style="width:72px; text-align:center; display:block; margin:0 auto;">
+        <div style="font-size:0.88em; color:#666; margin-top:4px;">0–59</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Hour</div>
+        <input type="text" id="tw-cron-hour" value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
+        <div style="font-size:0.88em; color:#666; margin-top:4px;">0–23</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Day of Month</div>
+        <input type="text" id="tw-cron-dom"  value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
+        <div style="font-size:0.88em; color:#666; margin-top:4px;">1–31</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Month</div>
+        <input type="text" id="tw-cron-mon"  value="*" style="width:72px; text-align:center; display:block; margin:0 auto;">
+        <div style="font-size:0.88em; color:#666; margin-top:4px;">1–12</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Day of Week</div>
+        <input type="text" id="tw-cron-dow"  value="*" style="width:110px; text-align:center; display:block; margin:0 auto;">
+        <div style="font-size:0.88em; color:#666; margin-top:4px;">0=Sun … 6=Sat</div>
+      </div>
+    </div>
+    <div style="margin-top:10px; font-size:1em; color:#333;">
+      <strong>Syntax:</strong> &nbsp;<code>*</code> = every &nbsp;&nbsp; <code>*/n</code> = every n &nbsp;&nbsp; <code>n,m</code> = specific values &nbsp;&nbsp; <code>n-m</code> = range
+    </div>
+
+    <br>
     <button class="btn-primary" id="btn-save-timeweather">Save &amp; Reload</button>
     <button class="btn-play" id="btn-test-timeweather">Test (local playback)</button>
     <div class="msg" id="timeweather-msg"></div>

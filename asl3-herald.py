@@ -1115,13 +1115,13 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
         warnings = []
     files = []
     hour, minute = now_dt.hour, now_dt.minute
+    # Independent settings - any combination is valid: time only, weather
+    # only, both, or (with both off) an announcement with nothing to say,
+    # caught by the "nothing to announce" check below. Smart Greeting is
+    # its own toggle too, so "Good afternoon" can play with or without the
+    # time digits themselves.
+    announce_time = tw_cfg.get("AnnounceTime", True)
     time_format = str(tw_cfg.get("TimeFormat", "12"))
-    # Independent of TimeFormat - a smart greeting (Good morning/afternoon/
-    # evening) can play before the time regardless of whether the time
-    # itself is announced in 12- or 24-hour format. Previously these two
-    # were conflated into a single TimeFormat value (only "12+greeting" and
-    # "24+no greeting" were reachable); default True to match that prior
-    # 12-hour behavior for anyone upgrading.
     smart_greeting = tw_cfg.get("SmartGreeting", True)
 
     if smart_greeting:
@@ -1133,7 +1133,7 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
             greeting = "good-evening"
         files.append(os.path.join(TW_SOUND_BASE, f"{greeting}.gsm"))
 
-    if time_format == "24":
+    if announce_time and time_format == "24":
         files.append(os.path.join(TW_SOUND_BASE, "the-time-is.gsm"))
         tw_add_number(hour, files)
         if minute == 0:
@@ -1146,7 +1146,7 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
             files.append(os.path.join(TW_SOUND_BASE, "digits", f"{tens}.gsm"))
             if ones > 0:
                 files.append(os.path.join(TW_SOUND_BASE, "digits", f"{ones}.gsm"))
-    else:
+    elif announce_time:
         ampm = "AM" if hour < 12 else "PM"
         hour12 = hour - 12 if hour > 12 else (12 if hour == 0 else hour)
         files.append(os.path.join(TW_SOUND_BASE, "the-time-is.gsm"))
@@ -1856,6 +1856,8 @@ def cmd_update_timeweather(config, args):
     tw = config.setdefault("TimeWeather", {})
     if args.enable is not None:
         tw["Enable"] = (args.enable == "true")
+    if args.announce_time is not None:
+        tw["AnnounceTime"] = (args.announce_time == "true")
     if args.time_format is not None:
         tw["TimeFormat"] = args.time_format
     if args.smart_greeting is not None:
@@ -2044,6 +2046,7 @@ def build_arg_parser():
 
     p_tw = sub.add_parser("update-timeweather", help="Update Hourly Time & Weather settings")
     p_tw.add_argument("--enable", choices=["true", "false"])
+    p_tw.add_argument("--announce-time", dest="announce_time", choices=["true", "false"])
     p_tw.add_argument("--time-format", dest="time_format", choices=["12", "24"])
     p_tw.add_argument("--smart-greeting", dest="smart_greeting", choices=["true", "false"])
     p_tw.add_argument("--cron")

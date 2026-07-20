@@ -13,6 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
 $enable = ($input['enable'] ?? false) ? 'true' : 'false';
+$announceTime = ($input['announce_time'] ?? false) ? 'true' : 'false';
 
 $timeFormat = (string) ($input['time_format'] ?? '12');
 if (!in_array($timeFormat, ['12', '24'], true)) {
@@ -65,6 +66,7 @@ if ($tempestStation !== '' && !preg_match('/^[0-9]{1,20}$/', $tempestStation)) {
 herald_respond_from_cli(herald_run_sudo([
     'update-timeweather',
     '--enable', $enable,
+    '--announce-time', $announceTime,
     '--time-format', $timeFormat,
     '--smart-greeting', $smartGreeting,
     '--cron', $cron,

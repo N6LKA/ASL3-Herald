@@ -103,12 +103,16 @@ Scheduled: []
   #   File: /etc/asterisk/scripts/asl3-herald/announcements/breakfast-net.wav
   #   PlayMode: local
 
-# Hourly Time & Weather — a smart-greeting time + current-conditions
-# announcement, generated fresh every time it plays (not a fixed file like
+# Hourly Time & Weather — a time and/or current-conditions announcement,
+# generated fresh every time it plays (not a fixed file like
 # Rotation/Scheduled). Takes priority over Scheduled Announcements when both
 # are due at the same moment (Scheduled just retries on the next poll cycle).
 TimeWeather:
   Enable: false
+
+  # Include the time announcement. Independent of Weather.Enable below - any
+  # combination is valid (time only, weather only, or both).
+  AnnounceTime: true
 
   # "12" = 12-hour time + AM/PM
   # "24" = 24-hour time

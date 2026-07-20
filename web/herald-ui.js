@@ -292,6 +292,7 @@
     const twWeather = tw.Weather || {};
     const twHealth = tw._health || {};
     document.getElementById('tw-enable').checked = !!tw.Enable;
+    document.getElementById('tw-announce-time').checked = tw.AnnounceTime !== false;
     document.getElementById('tw-time-format').value = tw.TimeFormat || '12';
     document.getElementById('tw-smart-greeting').checked = tw.SmartGreeting !== false;
     applyTwCronToPicker((tw.Schedule && tw.Schedule.Cron) || '0 * * * *');
@@ -307,6 +308,7 @@
     document.getElementById('tw-tempest-station').value = (twWeather.Tempest && twWeather.Tempest.StationID) || '';
     twSwpInstalled = !!twHealth.skywarnplus_installed;
     updateTwProviderFields();
+    updateTwSectionVisibility();
 
     document.getElementById('tw-sounds-warning').style.display =
       twHealth.sound_files_installed === false ? 'block' : 'none';
@@ -344,6 +346,15 @@
       (provider === 'tempest' || provider === 'skywarnplus') ? 'none' : 'block';
     document.getElementById('tw-swp-banner').style.display =
       (twSwpInstalled && provider !== 'skywarnplus') ? 'block' : 'none';
+  }
+
+  // Time/Weather cards only make sense once their own toggle is on -
+  // matches the "What to Announce" card's toggles right above them.
+  function updateTwSectionVisibility() {
+    document.getElementById('tw-time-card').style.display =
+      document.getElementById('tw-announce-time').checked ? 'block' : 'none';
+    document.getElementById('tw-weather-card').style.display =
+      document.getElementById('tw-weather-enable').checked ? 'block' : 'none';
   }
 
   // ── Playback history ───────────────────────────────────────────────────────────────────
@@ -610,6 +621,8 @@
   });
 
   document.getElementById('tw-provider').addEventListener('change', updateTwProviderFields);
+  document.getElementById('tw-announce-time').addEventListener('change', updateTwSectionVisibility);
+  document.getElementById('tw-weather-enable').addEventListener('change', updateTwSectionVisibility);
 
   document.getElementById('btn-save-timeweather').addEventListener('click', async () => {
     const msgEl = document.getElementById('timeweather-msg');
@@ -617,6 +630,7 @@
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         enable: document.getElementById('tw-enable').checked,
+        announce_time: document.getElementById('tw-announce-time').checked,
         time_format: document.getElementById('tw-time-format').value,
         smart_greeting: document.getElementById('tw-smart-greeting').checked,
         cron: readTwCronFromPicker(),
