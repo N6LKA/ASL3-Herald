@@ -22,6 +22,11 @@ if (!in_array($timeFormat, ['12', '24'], true)) {
 
 $smartGreeting = ($input['smart_greeting'] ?? false) ? 'true' : 'false';
 
+$mode = (string) ($input['mode'] ?? 'recordings');
+if (!in_array($mode, ['recordings', 'template'], true)) {
+    herald_json_response(['success' => false, 'message' => 'Invalid mode'], 400);
+}
+
 $cron = trim($input['cron'] ?? '0 * * * *');
 if (!preg_match('/^[\d\*\/,\-]+ [\d\*\/,\-]+ [\d\*\/,\-]+ [\d\*\/,\-]+ [\d\*\/,\-]+$/', $cron)) {
     herald_json_response(['success' => false, 'message' => 'Invalid cron expression (expected 5 fields: MIN HOUR DOM MON DOW)'], 400);
@@ -63,9 +68,23 @@ if ($tempestStation !== '' && !preg_match('/^[0-9]{1,20}$/', $tempestStation)) {
     herald_json_response(['success' => false, 'message' => 'Invalid Tempest station ID'], 400);
 }
 
+// Callsign is spoken verbatim by Piper - deliberately permissive (letters,
+// digits, spaces) since the whole point is letting the user space letters
+// out for correct pronunciation (e.g. "N 6 L K A").
+$callsign = trim($input['callsign'] ?? '');
+if ($callsign !== '' && !preg_match('/^[a-zA-Z0-9 -]{1,40}$/', $callsign)) {
+    herald_json_response(['success' => false, 'message' => 'Invalid callsign'], 400);
+}
+
+$lookaheadSeconds = filter_var($input['lookahead_seconds'] ?? 5, FILTER_VALIDATE_INT);
+if ($lookaheadSeconds === false || $lookaheadSeconds < 1 || $lookaheadSeconds > 60) {
+    herald_json_response(['success' => false, 'message' => 'Invalid lookahead seconds (must be 1-60)'], 400);
+}
+
 herald_respond_from_cli(herald_run_sudo([
     'update-timeweather',
     '--enable', $enable,
+    '--mode', $mode,
     '--announce-time', $announceTime,
     '--time-format', $timeFormat,
     '--smart-greeting', $smartGreeting,
@@ -80,4 +99,6 @@ herald_respond_from_cli(herald_run_sudo([
     '--cache-max-age', (string) $cacheMaxAge,
     '--tempest-token', $tempestToken,
     '--tempest-station', $tempestStation,
+    '--callsign', $callsign,
+    '--lookahead-seconds', (string) $lookaheadSeconds,
 ]));

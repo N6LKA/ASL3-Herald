@@ -170,7 +170,7 @@
   async function loadVoices() {
     const data = await api('voices.php');
     const voices = (data && data.voices) || [];
-    ['tail-voice', 'sched-voice'].forEach(id => {
+    ['tail-voice', 'sched-voice', 'tw-msg-voice'].forEach(id => {
       const sel = document.getElementById(id);
       sel.innerHTML = '';
       if (voices.length === 0) {
@@ -290,8 +290,10 @@
 
     const tw = data.timeweather || {};
     const twWeather = tw.Weather || {};
+    const twTemplates = tw.Templates || {};
     const twHealth = tw._health || {};
     document.getElementById('tw-enable').checked = !!tw.Enable;
+    document.querySelector('input[name="tw-mode"][value="' + (tw.Mode === 'template' ? 'template' : 'recordings') + '"]').checked = true;
     document.getElementById('tw-announce-time').checked = tw.AnnounceTime !== false;
     document.getElementById('tw-time-format').value = tw.TimeFormat || '12';
     document.getElementById('tw-smart-greeting').checked = tw.SmartGreeting !== false;
@@ -306,12 +308,34 @@
     document.getElementById('tw-cache-max-age').value = twWeather.CacheMaxAgeMin || 10;
     document.getElementById('tw-tempest-token').value = (twWeather.Tempest && twWeather.Tempest.Token) || '';
     document.getElementById('tw-tempest-station').value = (twWeather.Tempest && twWeather.Tempest.StationID) || '';
+    document.getElementById('tw-callsign').value = twTemplates.Callsign || '';
+    document.getElementById('tw-lookahead-seconds').value = twTemplates.LookaheadSeconds || 5;
     twSwpInstalled = !!twHealth.skywarnplus_installed;
     updateTwProviderFields();
     updateTwSectionVisibility();
 
     document.getElementById('tw-sounds-warning').style.display =
       twHealth.sound_files_installed === false ? 'block' : 'none';
+    document.getElementById('tw-piper-warning').style.display =
+      twHealth.piper_installed === false ? 'block' : 'none';
+
+    const twmbody = document.querySelector('#tw-messages-table tbody');
+    twmbody.innerHTML = '';
+    const twMessages = twTemplates.Messages || [];
+    if (twMessages.length === 0) {
+      twmbody.innerHTML = '<tr><td colspan="3" class="muted">(no messages yet - add one below)</td></tr>';
+    }
+    twMessages.forEach(m => {
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td class="col-wrap">' + escapeAttr(m.Text) + '</td>' +
+        '<td>' + escapeAttr(VOICE_LABELS[m.Voice] || m.Voice) + '</td>' +
+        '<td>' +
+        '<button class="btn-edit" data-type="tw-msg" data-id="' + escapeAttr(m.Id) + '" data-text="' + escapeAttr(m.Text) + '" data-voice="' + escapeAttr(m.Voice) + '">Edit</button>' +
+        '<button class="btn-remove-tw-msg" data-id="' + escapeAttr(m.Id) + '">Remove</button>' +
+        '</td>';
+      twmbody.appendChild(tr);
+    });
 
     wireRowButtons();
     loadHistory();
@@ -357,16 +381,26 @@
   // matches the "What to Announce" card's toggles right above them.
   function updateTwSectionVisibility() {
     const enabled = document.getElementById('tw-enable').checked;
+    const isTemplate = document.getElementById('tw-mode-template').checked;
     const announceTime = document.getElementById('tw-announce-time').checked;
     const announceWeather = document.getElementById('tw-weather-enable').checked;
-    const hasContent = announceTime || announceWeather;
+    // In Template mode, whether there's "content" depends on whether any
+    // message is configured - not on the Recordings-only Announce Time/
+    // Weather toggles, which the daemon doesn't even read in that mode. The
+    // messages table itself (always visible when Template mode is picked)
+    // is where that gets surfaced, so just always allow Save/Test here.
+    const hasContent = isTemplate ? true : (announceTime || announceWeather);
 
     // Master switch off: hide every option (nothing to configure), but
     // leave Save & Reload reachable so the disabled state can still be
     // saved, and hide Test since there'd be nothing to test.
-    document.getElementById('tw-options-block').style.display = enabled ? 'block' : 'none';
-    document.getElementById('tw-time-card').style.display = (enabled && announceTime) ? 'block' : 'none';
-    document.getElementById('tw-weather-card').style.display = (enabled && announceWeather) ? 'block' : 'none';
+    document.getElementById('tw-options-block').style.display = (enabled && !isTemplate) ? 'block' : 'none';
+    document.getElementById('tw-templates-block').style.display = (enabled && isTemplate) ? 'block' : 'none';
+    // Time Format and Weather are shared settings - Template mode's
+    // {time}/{conditions}/{temperature}/etc. tags use them too, so they
+    // stay visible there regardless of the Recordings-only toggles.
+    document.getElementById('tw-time-card').style.display = (enabled && (isTemplate || announceTime)) ? 'block' : 'none';
+    document.getElementById('tw-weather-card').style.display = (enabled && (isTemplate || announceWeather)) ? 'block' : 'none';
     // Nothing to schedule if neither Time nor Weather is on - a smart
     // greeting alone was never a supported standalone announcement.
     document.getElementById('tw-schedule-card').style.display = (enabled && hasContent) ? 'block' : 'none';
@@ -375,7 +409,7 @@
     // stretching on Allmon3 host pages) - toggle a class with matching
     // !important + higher specificity instead.
     document.getElementById('btn-test-timeweather').classList.toggle('tw-hidden', !(enabled && hasContent));
-    document.getElementById('tw-nothing-warning').style.display = (enabled && !hasContent) ? 'block' : 'none';
+    document.getElementById('tw-nothing-warning').style.display = (enabled && !isTemplate && !hasContent) ? 'block' : 'none';
   }
 
   // ── Playback history ───────────────────────────────────────────────────────────────────
@@ -439,7 +473,16 @@
     document.querySelectorAll('.btn-edit').forEach(btn => {
       btn.onclick = () => {
         if (btn.dataset.type === 'tail') startEditTail(btn.dataset);
+        else if (btn.dataset.type === 'tw-msg') startEditTwMsg(btn.dataset);
         else startEditSched(btn.dataset);
+      };
+    });
+    document.querySelectorAll('.btn-remove-tw-msg').forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm('Remove this message?')) return;
+        await api('remove_timeweather_message.php', { method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ id: btn.dataset.id }) });
+        loadAll();
       };
     });
     document.querySelectorAll('.btn-toggle-sched').forEach(btn => {
@@ -569,6 +612,49 @@
   }
   document.getElementById('sched-edit-cancel').addEventListener('click', cancelEditSched);
 
+  // ── Edit Time & Weather template message ────────────────────────────────────────────────────
+  let editingTwMsgId = null;
+
+  function startEditTwMsg(d) {
+    editingTwMsgId = d.id;
+    document.getElementById('tw-msg-text').value = d.text || '';
+    document.getElementById('tw-msg-voice').value = d.voice || '';
+    document.getElementById('tw-msg-form-heading').textContent = 'Edit Message';
+    document.getElementById('btn-add-tw-msg').textContent = 'Save Changes';
+    document.getElementById('tw-msg-edit-cancel').style.display = '';
+    document.getElementById('tw-msg-msg').textContent = '';
+    document.getElementById('tw-msg-text').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function cancelEditTwMsg() {
+    editingTwMsgId = null;
+    document.getElementById('tw-msg-text').value = '';
+    document.getElementById('tw-msg-form-heading').textContent = 'Add a Message';
+    document.getElementById('btn-add-tw-msg').textContent = 'Add Message';
+    document.getElementById('tw-msg-edit-cancel').style.display = 'none';
+    document.getElementById('tw-msg-msg').textContent = '';
+  }
+  document.getElementById('tw-msg-edit-cancel').addEventListener('click', cancelEditTwMsg);
+
+  document.getElementById('btn-add-tw-msg').addEventListener('click', async () => {
+    const msgEl = document.getElementById('tw-msg-msg');
+    const text = document.getElementById('tw-msg-text').value.trim();
+    const voice = document.getElementById('tw-msg-voice').value;
+    if (!text) { showMsg(msgEl, 'Text is required', false); return; }
+
+    const data = editingTwMsgId
+      ? await api('edit_timeweather_message.php', { method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ id: editingTwMsgId, text, voice }) })
+      : await api('add_timeweather_message.php', { method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ text, voice }) });
+
+    showMsg(msgEl, data.message || (data.success ? 'Saved' : 'Failed'), data.success);
+    if (data.success) {
+      cancelEditTwMsg();
+      loadAll();
+    }
+  });
+
   // ── Enable/disable + reload ───────────────────────────────────────────────────────────────────
   document.getElementById('btn-toggle-enable').addEventListener('click', async () => {
     const msgEl = document.getElementById('herald-daemon-msg');
@@ -646,6 +732,7 @@
   document.getElementById('tw-enable').addEventListener('change', updateTwSectionVisibility);
   document.getElementById('tw-announce-time').addEventListener('change', updateTwSectionVisibility);
   document.getElementById('tw-weather-enable').addEventListener('change', updateTwSectionVisibility);
+  document.querySelectorAll('input[name="tw-mode"]').forEach(r => r.addEventListener('change', updateTwSectionVisibility));
 
   document.getElementById('btn-save-timeweather').addEventListener('click', async () => {
     const msgEl = document.getElementById('timeweather-msg');
@@ -653,6 +740,7 @@
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         enable: document.getElementById('tw-enable').checked,
+        mode: document.querySelector('input[name="tw-mode"]:checked').value,
         announce_time: document.getElementById('tw-announce-time').checked,
         time_format: document.getElementById('tw-time-format').value,
         smart_greeting: document.getElementById('tw-smart-greeting').checked,
@@ -667,6 +755,8 @@
         cache_max_age: document.getElementById('tw-cache-max-age').value,
         tempest_token: document.getElementById('tw-tempest-token').value.trim(),
         tempest_station: document.getElementById('tw-tempest-station').value.trim(),
+        callsign: document.getElementById('tw-callsign').value.trim(),
+        lookahead_seconds: document.getElementById('tw-lookahead-seconds').value,
       }),
     });
     showMsg(msgEl, data.message || (data.success ? 'Settings saved and reloaded' : 'Failed'), data.success);

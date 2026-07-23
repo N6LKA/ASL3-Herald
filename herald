@@ -84,7 +84,8 @@ Settings:
                                            Update general daemon settings
 
 Time & Weather Announcements (time and/or current conditions, schedule- or DTMF-triggered):
-  update-timeweather [--enable true|false] [--announce-time true|false]
+  update-timeweather [--enable true|false] [--mode recordings|template]
+                     [--announce-time true|false]
                      [--time-format 12|24] [--smart-greeting true|false]
                      [--cron "MIN HOUR DOM MON DOW"]
                      [--weather-enable true|false]
@@ -93,7 +94,20 @@ Time & Weather Announcements (time and/or current conditions, schedule- or DTMF-
                      [--announce-condition true|false] [--announce-feels-like true|false]
                      [--announce-humidity true|false] [--cache-max-age <minutes>]
                      [--tempest-token <token>] [--tempest-station <id>]
+                     [--callsign <text>] [--lookahead-seconds <n>]
                                            Update Time & Weather Announcements settings
+                                           (--mode/--callsign/--lookahead-seconds apply
+                                           to Template mode; everything else except
+                                           --enable/--cron/--weather-* applies to
+                                           Recordings mode)
+  add-timeweather-message "<text>" [--voice <voice>]
+                                           Add a Template mode message. Tags:
+                                           {smart_greeting} {time} {conditions}
+                                           {temperature} {feels_like} {humidity}
+                                           {callsign}
+  edit-timeweather-message <id> [--text "<text>"] [--voice <voice>]
+                                           Edit a Template mode message
+  remove-timeweather-message <id>          Remove a Template mode message
   play-timeweather                         Play the announcement right now, as a real
                                            on-demand occurrence - use this for DTMF.
                                            Logs to Playback History as a normal Hourly
@@ -553,6 +567,24 @@ cmd_play_timeweather() {
     python3 "$DAEMON_PY" play-timeweather
 }
 
+cmd_add_timeweather_message() {
+    need_root "$@"
+    python3 "$DAEMON_PY" add-timeweather-message "$@"
+    cmd_reload 2>/dev/null || true
+}
+
+cmd_edit_timeweather_message() {
+    need_root "$@"
+    python3 "$DAEMON_PY" edit-timeweather-message "$@"
+    cmd_reload 2>/dev/null || true
+}
+
+cmd_remove_timeweather_message() {
+    need_root "$@"
+    python3 "$DAEMON_PY" remove-timeweather-message "$@"
+    cmd_reload 2>/dev/null || true
+}
+
 cmd_request_test_timeweather() {
     # Used by the web UI's Test button instead of cmd_test_timeweather above.
     # A process invoked through Apache/PHP (even via sudo - mount namespaces
@@ -822,6 +854,9 @@ case "$CMD" in
     test-timeweather)     cmd_test_timeweather   "$@" ;;
     play-timeweather)     cmd_play_timeweather   "$@" ;;
     request-timeweather-test) cmd_request_test_timeweather "$@" ;;
+    add-timeweather-message)    cmd_add_timeweather_message    "$@" ;;
+    edit-timeweather-message)   cmd_edit_timeweather_message   "$@" ;;
+    remove-timeweather-message) cmd_remove_timeweather_message "$@" ;;
     playback-history)     cmd_playback_history   "$@" ;;
     clear-history)        cmd_clear_history      "$@" ;;
     export-config)        cmd_export_config      "$@" ;;

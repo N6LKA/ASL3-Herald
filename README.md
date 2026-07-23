@@ -1,7 +1,7 @@
 ![ASL3-Herald](web/img/asl3-herald-banner.svg)
 
 ![Release Version](https://img.shields.io/github/v/release/N6LKA/ASL3-Herald?label=Version&color=f15d24)
-![Release Date](https://img.shields.io/badge/released-2026--07--20-green)
+![Release Date](https://img.shields.io/badge/released-2026--07--23-green)
 ![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
 
 **Enhanced tail message daemon for ASL3/app_rpt with advanced announcement features.**
@@ -34,6 +34,7 @@
   - Runs on the same cron-style schedule as Scheduled Announcements (top of every hour by default, but any pattern works) and **takes priority over Scheduled Announcements** if both are due at the same moment
   - Also triggerable **on demand over DTMF** (map a function in `rpt.conf` to `herald play-timeweather`), independent of the schedule
   - Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or — if SkywarnPlus is already installed — its already-fetched data, avoiding a second independent poller
+  - **Two modes**: **Recordings** (default) builds the announcement from a pre-recorded sound pack — fast, fixed wording. **Custom Templates** lets you write your own message(s) with tags (`{smart_greeting}` `{time}` `{conditions}` `{temperature}` `{feels_like}` `{humidity}` `{callsign}`), rendered fresh with Piper TTS each time; with more than one message configured, a different one is picked at random each occurrence (never the same one twice in a row). Rendering happens a few seconds ahead of the scheduled moment (configurable) so playback is still instant when it's due.
 
 Both Tail Messages and Scheduled Announcements can be edited in place (name, text, voice, schedule, play mode) via `herald edit-rotation` / `herald edit-schedule` or the web UI, instead of removing and re-adding.
 
@@ -328,6 +329,8 @@ A newly-appeared or changed WX alert always plays immediately, taking priority o
 **Scheduled announcements** run on a separate time-based path, unaffected by the tail message interval or node activity. They are driven by a standard 5-field cron expression (`MIN HOUR DOM MON DOW`) and can fire once at a specific time, at a repeating interval (e.g. `*/20 * * * *` = every 20 minutes), or on any cron-expressible schedule. Each entry fires at most once per matching minute; a `*/20` entry fires three times an hour, not once per day. If the node is currently keyed when a scheduled announcement is due, it holds off and keeps re-checking every poll — even after the matching minute has passed — until the node unkeys, rather than missing the announcement or talking over live traffic. Once a scheduled announcement plays, its estimated audio duration (via `soxi`, or an 8-second fallback estimate) holds off any tail message for that long, so the two never overlap — this is also how a scheduled announcement takes precedence when both would fire at the same moment.
 
 **Time & Weather Announcements** use the same cron-based path as Scheduled Announcements, but are checked first, so they take priority if both are due at the same moment — the Scheduled entry simply retries on the next poll cycle rather than being skipped. The announcement audio (time and/or weather, per config) is regenerated fresh every time it plays, unlike a fixed recording. It can also be triggered on demand via a DTMF function mapped to `herald play-timeweather`, independent of the cron schedule — logged to Playback History as a normal occurrence (not a test), without suppressing the next real scheduled occurrence.
+
+In **Custom Templates mode**, the daemon computes when the schedule will next fire and starts rendering the chosen message with Piper `LookaheadSeconds` ahead of that moment (as a background process, so it never blocks unkey detection or anything else in the poll loop) — by the time the scheduled minute arrives, the file is already sitting there ready to play, same instant feel as Recordings mode. If the node is keyed when that moment arrives, it waits for unkey exactly like Recordings mode; if rendering somehow isn't finished in time, the daemon gives it a short grace period before skipping that occurrence rather than playing nothing or a broken file. DTMF and Test plays render synchronously on demand instead, since those already run outside the daemon's shared poll loop.
 
 State (rotation index, WX alternation, scheduled "waiting for unkey" status, and last played times) is saved to a JSON file so it survives service restarts.
 

@@ -459,6 +459,12 @@
       <span class="toggle-label">Enable Time & Weather Announcements</span>
     </div>
 
+    <div id="tw-mode-row" style="margin-top:14px;">
+      <label style="margin-bottom:6px;">Mode</label>
+      <label style="margin-right:20px; font-weight:normal;"><input type="radio" name="tw-mode" id="tw-mode-recordings" value="recordings" checked> Recordings <span class="muted">(pre-recorded sound pack, fixed wording)</span></label>
+      <label style="font-weight:normal;"><input type="radio" name="tw-mode" id="tw-mode-template" value="template"> Custom Templates <span class="muted">(your own text, rendered with Piper TTS)</span></label>
+    </div>
+
     <div id="tw-options-block">
       <div class="toggle-row" style="margin-top:14px;">
         <label class="toggle-switch">
@@ -489,6 +495,62 @@
       <div id="tw-nothing-warning" class="banner-warn" style="display:none; margin-top:14px;">
         Time and Weather are both off, so nothing will be announced. Turn on at least one above, or turn off "Enable Time & Weather Announcements" to disable this feature entirely.
       </div>
+    </div>
+  </div>
+
+  <div class="card" id="tw-templates-block" style="display:none;">
+    <h3>Custom Templates</h3>
+    <p class="muted">Write your own message and insert live data with tags. A different message is picked at random each time (never the same one twice in a row if you have more than one) and rendered fresh with Piper TTS before it plays.</p>
+
+    <div id="tw-piper-warning" class="banner-warn" style="display:none;">
+      Piper TTS doesn't appear to be installed. Custom Templates requires Piper (used elsewhere in Herald for Rotation/Scheduled TTS) - re-run <code>install.sh</code> to install it.
+    </div>
+
+    <label>Callsign</label>
+    <input type="text" id="tw-callsign" style="width:220px;" placeholder="e.g. N6LKA">
+    <p class="muted" style="margin-top:4px;">Inserted wherever a message uses <code>{callsign}</code> - you write the rest (e.g. "... the {callsign} repeater ..."). If Piper runs the letters together as one word, separate them with spaces here (e.g. "N 6 L K A" instead of "N6LKA") to have it spoken letter-by-letter.</p>
+
+    <table id="tw-messages-table" style="margin-top:16px;">
+      <thead><tr><th>Text</th><th>Voice</th><th>Actions</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="add-form">
+      <h3 id="tw-msg-form-heading">Add a Message</h3>
+
+      <div class="tts-row">
+        <div class="tts-voice">
+          <label>Voice</label>
+          <select id="tw-msg-voice" style="display:block;"></select>
+        </div>
+        <div class="tts-text">
+          <label>Text</label>
+          <textarea id="tw-msg-text" rows="3" placeholder="e.g. {smart_greeting}, welcome to the {callsign} repeater. The time is {time}. Current conditions are {conditions}, {temperature} degrees." style="width:100%;"></textarea>
+        </div>
+      </div>
+
+      <div style="margin-top:10px; padding:10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px; font-size:0.88em; line-height:1.7;">
+        <strong>Available tags</strong><br>
+        <code>{smart_greeting}</code> Good morning/afternoon/evening &nbsp;|&nbsp;
+        <code>{time}</code> current time &nbsp;|&nbsp;
+        <code>{callsign}</code> the Callsign above<br>
+        <code>{conditions}</code> weather conditions &nbsp;|&nbsp;
+        <code>{temperature}</code> temperature &nbsp;|&nbsp;
+        <code>{feels_like}</code> feels-like temperature &nbsp;|&nbsp;
+        <code>{humidity}</code> humidity<br>
+        <span class="muted">Weather tags need Weather enabled below with a working provider. A tag with no data available is silently left blank rather than failing the whole message.</span>
+      </div>
+
+      <br>
+      <button class="btn-primary" id="btn-add-tw-msg">Add Message</button>
+      <button id="tw-msg-edit-cancel" style="display:none;">Cancel Edit</button>
+      <div class="msg" id="tw-msg-msg"></div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <label>Lookahead (seconds) <span class="muted" style="font-weight:normal;">(advanced)</span></label>
+      <input type="text" id="tw-lookahead-seconds" style="width:70px;">
+      <p class="muted" style="margin-top:4px;">How many seconds before a message is due to play the daemon starts rendering it with Piper, so playback is instant at the scheduled moment instead of waiting on TTS. Raise this for more safety margin on a slow system, at the cost of the data being computed that many seconds earlier than the real play moment. Default: 5.</p>
     </div>
   </div>
 
