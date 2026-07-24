@@ -696,9 +696,9 @@
     <div class="banner-info">
       One-time setup: add this line to <code>rpt.conf</code> yourself (Herald never edits rpt.conf) -
       <br><code>idrecording = /etc/asterisk/scripts/asl3-herald/node-id/node-id</code>
-      <br>Then reload so app_rpt picks up the file - try these in order, whichever works on your system:
-      <br><code>sudo asterisk -rx "rpt reload"</code> &nbsp; or &nbsp; <code>sudo asterisk -rx "module reload app_rpt.so"</code> &nbsp; or &nbsp; <code>sudo systemctl restart asterisk</code>
-      <br>You'll need to reload again after every time you generate a new ID below, so app_rpt picks up the change.
+      <br>Then reload once so app_rpt picks it up -
+      <br><code>sudo asterisk -rx "module reload app_rpt.so"</code>
+      <br>That's a one-time step. After that, app_rpt reads the file fresh off disk every time it plays - <strong>Save &amp; Generate ID below takes effect immediately, no reload needed</strong> (confirmed live, including with a DTMF play-ID trigger).
     </div>
 
     <div id="nodeid-status" class="muted" style="margin-top:10px;"></div>

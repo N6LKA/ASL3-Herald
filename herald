@@ -152,15 +152,15 @@ Node ID (replaces the audio content of app_rpt's own idrecording=):
 
   Herald only ever controls the *audio content* of this one file - app_rpt's
   own idtime/politeid timer decides when it plays, completely unchanged. Add
-  this line to rpt.conf yourself (Herald never touches rpt.conf):
+  this line to rpt.conf yourself (Herald never touches rpt.conf), then
+  reload once:
 
       idrecording = $NODE_ID_FILE_NOEXT
-
-  Then reload so app_rpt picks up the new file (try in order, use whichever
-  actually works on your system):
-      sudo asterisk -rx "rpt reload"
       sudo asterisk -rx "module reload app_rpt.so"
-      sudo systemctl restart asterisk
+
+  That's a one-time step. After that, app_rpt reads the file fresh off disk
+  every time it plays - set-node-id takes effect immediately, no reload
+  needed (confirmed live, including with a DTMF play-ID trigger).
 EOF
 }
 

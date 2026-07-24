@@ -844,7 +844,7 @@
     if (!confirm('This overwrites the real Node ID file app_rpt reads. Continue?')) return;
     const data = await api('node_id.php', { method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ text, voice }) });
-    showMsg(msgEl, data.message || (data.success ? 'Node ID generated and saved - reload app_rpt to pick it up' : 'Failed'), data.success);
+    showMsg(msgEl, data.message || (data.success ? 'Node ID generated and saved - live immediately, no reload needed' : 'Failed'), data.success);
     if (data.success) loadAll();
   });
 

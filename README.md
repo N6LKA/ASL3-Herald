@@ -167,19 +167,16 @@ Scheduled:
 
 ## Node ID
 
-Herald can generate the audio content of your station ID with Piper TTS (Node ID tab in the web UI, or `herald set-node-id`/`test-node-id` on the CLI), but it never touches `rpt.conf` or your node's own ID timing — that stays exactly as app_rpt's built-in `idtime`/`politeid` already handle it. Point your existing `idrecording =` line at Herald's generated file, once:
+Herald can generate the audio content of your station ID with Piper TTS (Node ID tab in the web UI, or `herald set-node-id`/`test-node-id` on the CLI), but it never touches `rpt.conf` or your node's own ID timing — that stays exactly as app_rpt's built-in `idtime`/`politeid` already handle it. One-time setup: point your existing `idrecording =` line at Herald's generated file, then reload:
 
 ```
 idrecording = /etc/asterisk/scripts/asl3-herald/node-id/node-id
 ```
-
-Then, both after this one-time setup and after every time you generate a new ID, reload so app_rpt picks up the file — try these in order, whichever actually works on your system:
-
 ```bash
-sudo asterisk -rx "rpt reload"
 sudo asterisk -rx "module reload app_rpt.so"
-sudo systemctl restart asterisk   # last resort - drops active links/connections
 ```
+
+That's it — confirmed live (including with a DTMF play-ID trigger) that app_rpt reads the file fresh off disk every time it plays. After this one-time setup, editing/regenerating the ID from the web UI or `herald set-node-id` takes effect immediately, no reload needed.
 
 `idtalkover` (the CW/voice ID played over an active signal) is untouched by this feature — it keeps using whatever's already configured in `rpt.conf`.
 
