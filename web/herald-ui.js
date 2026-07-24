@@ -298,6 +298,7 @@
     document.getElementById('tw-announce-time').checked = tw.AnnounceTime !== false;
     document.getElementById('tw-time-format').value = tw.TimeFormat || '12';
     document.getElementById('tw-use-oclock').value = tw.UseOclock === true ? 'true' : 'false';
+    document.getElementById('tw-minute-zero-word').value = tw.MinuteZeroWord === 'zero' ? 'zero' : 'oh';
     document.getElementById('tw-smart-greeting').checked = tw.SmartGreeting !== false;
     applyTwCronToPicker((tw.Schedule && tw.Schedule.Cron) || '0 * * * *');
     document.getElementById('tw-weather-enable').checked = twWeather.Enable !== false;
@@ -435,6 +436,9 @@
     // Only meaningful in 12-hour format - 24-hour times don't use "o'clock".
     document.getElementById('tw-oclock-field').style.display =
       document.getElementById('tw-time-format').value === '24' ? 'none' : 'block';
+    // Only meaningful in Template mode - Recordings mode has no "zero"
+    // recording, so this setting has no effect there.
+    document.getElementById('tw-minutezero-field').style.display = isTemplate ? 'block' : 'none';
     // Nothing to schedule if neither Time nor Weather is on - a smart
     // greeting alone was never a supported standalone announcement.
     document.getElementById('tw-schedule-card').style.display = (enabled && hasContent) ? 'block' : 'none';
@@ -819,6 +823,7 @@
         announce_time: document.getElementById('tw-announce-time').checked,
         time_format: document.getElementById('tw-time-format').value,
         use_oclock: document.getElementById('tw-use-oclock').value === 'true',
+        minute_zero_word: document.getElementById('tw-minute-zero-word').value,
         smart_greeting: document.getElementById('tw-smart-greeting').checked,
         cron: readTwCronFromPicker(),
         weather_enable: document.getElementById('tw-weather-enable').checked,

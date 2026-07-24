@@ -1339,21 +1339,32 @@ def tw_smart_greeting_text(hour):
     else:
         return "Good evening"
 
-def tw_spoken_time(now_dt, time_format, use_oclock=False):
+def tw_spoken_time(now_dt, time_format, use_oclock=False, minute_zero_word="oh"):
+    """`minute_zero_word` ("oh" or "zero") controls how a single-digit
+    minute is spoken (e.g. "four oh six" vs "four zero six") - spelling it
+    out explicitly rather than relying on Piper to read zero-padded colon
+    notation like "4:06" correctly (confirmed live: it reads that as "four
+    zero six" digit-by-digit, not the intended wording either way)."""
     hour, minute = now_dt.hour, now_dt.minute
+    zero_word = "zero" if str(minute_zero_word) == "zero" else "oh"
+
     if str(time_format) == "24":
-        return f"{hour:02d} {minute:02d}"
+        # Matches the original Time-Weather-Announce's saytime.pl exactly at
+        # the top of the hour ("sixteen hundred hours") - unlike 12-hour,
+        # 24-hour has no AM/PM to make a bare hour sound like a complete
+        # phrase, so this one isn't a toggle.
+        if minute == 0:
+            return f"{hour} hundred hours"
+        if minute < 10:
+            return f"{hour} {zero_word} {minute}"
+        return f"{hour} {minute}"
+
     hour12 = hour - 12 if hour > 12 else (12 if hour == 0 else hour)
     ampm = "AM" if hour < 12 else "PM"
     if minute == 0:
         return f"{hour12} o'clock {ampm}" if use_oclock else f"{hour12} {ampm}"
-    # Zero-padded colon notation (e.g. "4:04") gets read by Piper as "four
-    # zero four" instead of the natural "four oh four" - spelling out "oh"
-    # for single-digit minutes (and just the plain number otherwise, e.g.
-    # "4 32" -> "four thirty-two") avoids relying on Piper's number/time
-    # parsing to get the traditional English time-telling convention right.
     if minute < 10:
-        return f"{hour12} oh {minute} {ampm}"
+        return f"{hour12} {zero_word} {minute} {ampm}"
     return f"{hour12} {minute} {ampm}"
 
 def substitute_template_tags(text, tw_cfg, weather, now_dt):
@@ -1372,7 +1383,8 @@ def substitute_template_tags(text, tw_cfg, weather, now_dt):
 
     values = {
         "smart_greeting": tw_smart_greeting_text(now_dt.hour),
-        "time": tw_spoken_time(now_dt, tw_cfg.get("TimeFormat", "12"), tw_cfg.get("UseOclock", False)),
+        "time": tw_spoken_time(now_dt, tw_cfg.get("TimeFormat", "12"), tw_cfg.get("UseOclock", False),
+                               tw_cfg.get("MinuteZeroWord", "oh")),
         "callsign": (tw_cfg.get("Templates", {}) or {}).get("Callsign", "").strip(),
     }
 
@@ -2363,6 +2375,8 @@ def cmd_update_timeweather(config, args):
         tw["SmartGreeting"] = (args.smart_greeting == "true")
     if args.use_oclock is not None:
         tw["UseOclock"] = (args.use_oclock == "true")
+    if args.minute_zero_word is not None:
+        tw["MinuteZeroWord"] = args.minute_zero_word
     if args.mode is not None:
         tw["Mode"] = args.mode
     if args.cron is not None:
@@ -2634,6 +2648,7 @@ def build_arg_parser():
     p_tw.add_argument("--time-format", dest="time_format", choices=["12", "24"])
     p_tw.add_argument("--smart-greeting", dest="smart_greeting", choices=["true", "false"])
     p_tw.add_argument("--use-oclock", dest="use_oclock", choices=["true", "false"])
+    p_tw.add_argument("--minute-zero-word", dest="minute_zero_word", choices=["oh", "zero"])
     p_tw.add_argument("--mode", choices=["recordings", "template"])
     p_tw.add_argument("--cron")
     p_tw.add_argument("--weather-enable", dest="weather_enable", choices=["true", "false"])

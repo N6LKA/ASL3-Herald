@@ -618,7 +618,15 @@
           <option value="false">"Three PM"</option>
           <option value="true">"Three O'Clock PM"</option>
         </select>
-        <span class="muted" style="margin-left:8px;">Only changes exact-hour times (e.g. 3:00) - no effect any other minute.</span>
+        <p class="muted" style="margin-top:4px; margin-bottom:0;">Only changes exact-hour times (e.g. 3:00) - no effect any other minute. 12-hour format only; 24-hour always says "sixteen hundred hours" at the top of the hour.</p>
+      </div>
+      <div id="tw-minutezero-field">
+        <label>Minute pronunciation</label>
+        <select id="tw-minute-zero-word" style="width:180px;">
+          <option value="oh">"Four Oh Six"</option>
+          <option value="zero">"Four Zero Six"</option>
+        </select>
+        <p class="muted" style="margin-top:4px; margin-bottom:0;">How a single-digit minute (e.g. :06) is spoken. Applies to both 12- and 24-hour format. Custom Templates mode only - Recordings mode always says "Oh" (no "Zero" recording exists).</p>
       </div>
     </div>
   </div>

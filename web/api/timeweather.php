@@ -23,6 +23,11 @@ if (!in_array($timeFormat, ['12', '24'], true)) {
 $smartGreeting = ($input['smart_greeting'] ?? false) ? 'true' : 'false';
 $useOclock = ($input['use_oclock'] ?? false) ? 'true' : 'false';
 
+$minuteZeroWord = (string) ($input['minute_zero_word'] ?? 'oh');
+if (!in_array($minuteZeroWord, ['oh', 'zero'], true)) {
+    herald_json_response(['success' => false, 'message' => 'Invalid minute zero word'], 400);
+}
+
 $mode = (string) ($input['mode'] ?? 'recordings');
 if (!in_array($mode, ['recordings', 'template'], true)) {
     herald_json_response(['success' => false, 'message' => 'Invalid mode'], 400);
@@ -90,6 +95,7 @@ herald_respond_from_cli(herald_run_sudo([
     '--time-format', $timeFormat,
     '--smart-greeting', $smartGreeting,
     '--use-oclock', $useOclock,
+    '--minute-zero-word', $minuteZeroWord,
     '--cron', $cron,
     '--weather-enable', $weatherEnable,
     '--provider', $provider,

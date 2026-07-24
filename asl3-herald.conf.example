@@ -130,9 +130,17 @@ TimeWeather:
 
   # At the exact top of the hour (e.g. 3:00) in 12-hour format, say "Three
   # O'Clock PM" instead of just "Three PM". No effect any other minute, and
-  # no effect in 24-hour format. Also applies to the {time} tag in Template
-  # mode, below.
+  # no effect in 24-hour format (which always says "hundred hours" at :00,
+  # e.g. "sixteen hundred hours" - not a toggle, matches the original
+  # Time-Weather-Announce script's convention). Also applies to the {time}
+  # tag in Template mode, below.
   UseOclock: false
+
+  # "oh" or "zero" - how a single-digit minute is spoken, e.g. "four oh six"
+  # vs "four zero six" (12-hour) or "sixteen oh six" vs "sixteen zero six"
+  # (24-hour). Only affects the {time} tag in Template mode - Recordings
+  # mode always uses "oh" (no "zero" recording exists in the sound pack).
+  MinuteZeroWord: "oh"
 
   # Play "Good morning/afternoon/evening" before the time, based on the hour.
   # Independent of TimeFormat - works with either 12- or 24-hour time.

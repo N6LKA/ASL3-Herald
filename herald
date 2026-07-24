@@ -89,7 +89,8 @@ Settings:
 Time & Weather Announcements (time and/or current conditions, schedule- or DTMF-triggered):
   update-timeweather [--enable true|false] [--mode recordings|template]
                      [--announce-time true|false]
-                     [--time-format 12|24] [--smart-greeting true|false]
+                     [--time-format 12|24] [--use-oclock true|false]
+                     [--minute-zero-word oh|zero] [--smart-greeting true|false]
                      [--cron "MIN HOUR DOM MON DOW"]
                      [--weather-enable true|false]
                      [--provider auto|metar|openmeteo|tempest|skywarnplus]
