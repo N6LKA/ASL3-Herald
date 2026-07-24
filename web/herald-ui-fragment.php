@@ -612,7 +612,7 @@
           <option value="24">24-hour</option>
         </select>
       </div>
-      <div id="tw-oclock-field">
+      <div id="tw-oclock-field" style="max-width:260px;">
         <label>Top of the hour</label>
         <select id="tw-use-oclock" style="width:180px;">
           <option value="false">"Three PM"</option>
@@ -620,7 +620,7 @@
         </select>
         <p class="muted" style="margin-top:4px; margin-bottom:0;">Only changes exact-hour times (e.g. 3:00) - no effect any other minute. 12-hour format only; 24-hour always says "sixteen hundred hours" at the top of the hour.</p>
       </div>
-      <div id="tw-minutezero-field">
+      <div id="tw-minutezero-field" style="max-width:260px;">
         <label>Minute pronunciation</label>
         <select id="tw-minute-zero-word" style="width:180px;">
           <option value="oh">"Four Oh Six"</option>
