@@ -403,7 +403,7 @@ mkdir -p "$WEB_DIR/api" "$WEB_DIR/img"
 for f in herald-common.php herald-ui-fragment.php herald-ui.js; do
     fetch_repo_file "web/$f" "$WEB_DIR/$f"
 done
-for f in list.php voices.php play.php reload.php toggle.php toggle_scheduled.php toggle_rotation.php remove.php add_rotation.php add_scheduled.php edit_rotation.php edit_scheduled.php settings.php reorder_rotation.php playback_history.php clear_history.php config_export.php config_import.php version_check.php timeweather.php timeweather_test.php add_timeweather_message.php edit_timeweather_message.php remove_timeweather_message.php; do
+for f in list.php voices.php play.php reload.php toggle.php toggle_scheduled.php toggle_rotation.php remove.php add_rotation.php add_scheduled.php edit_rotation.php edit_scheduled.php settings.php reorder_rotation.php playback_history.php clear_history.php config_export.php config_import.php version_check.php timeweather.php timeweather_test.php add_timeweather_message.php edit_timeweather_message.php remove_timeweather_message.php toggle_timeweather_message.php; do
     fetch_repo_file "web/api/$f" "$WEB_DIR/api/$f"
 done
 for f in asl3-herald-icon.svg asl3-herald-banner.svg; do

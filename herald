@@ -108,6 +108,7 @@ Time & Weather Announcements (time and/or current conditions, schedule- or DTMF-
   edit-timeweather-message <id> [--text "<text>"] [--voice <voice>]
                                            Edit a Template mode message
   remove-timeweather-message <id>          Remove a Template mode message
+  toggle-timeweather-message <id>          Enable or disable a Template mode message without removing it
   play-timeweather                         Play the announcement right now, as a real
                                            on-demand occurrence - use this for DTMF.
                                            Logs to Playback History as a normal Hourly
@@ -585,6 +586,12 @@ cmd_remove_timeweather_message() {
     cmd_reload 2>/dev/null || true
 }
 
+cmd_toggle_timeweather_message() {
+    need_root "$@"
+    python3 "$DAEMON_PY" toggle-timeweather-message "$@"
+    cmd_reload 2>/dev/null || true
+}
+
 cmd_request_test_timeweather() {
     # Used by the web UI's Test button instead of cmd_test_timeweather above.
     # A process invoked through Apache/PHP (even via sudo - mount namespaces
@@ -857,6 +864,7 @@ case "$CMD" in
     add-timeweather-message)    cmd_add_timeweather_message    "$@" ;;
     edit-timeweather-message)   cmd_edit_timeweather_message   "$@" ;;
     remove-timeweather-message) cmd_remove_timeweather_message "$@" ;;
+    toggle-timeweather-message) cmd_toggle_timeweather_message "$@" ;;
     playback-history)     cmd_playback_history   "$@" ;;
     clear-history)        cmd_clear_history      "$@" ;;
     export-config)        cmd_export_config      "$@" ;;
