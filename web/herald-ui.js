@@ -220,6 +220,7 @@
     document.getElementById('set-swp-enable').checked = !!data.tail_message.skywarnplus.enable;
     document.getElementById('set-swp-wxfile').value = data.tail_message.skywarnplus.wx_tail_file || '';
     document.getElementById('set-swp-threshold').value = data.tail_message.skywarnplus.silence_threshold;
+    updateSwpFieldsVisibility();
 
     const defaultNode = data.node || '—';
     const tbody = document.querySelector('#tail-table tbody');
@@ -381,6 +382,11 @@
       document.getElementById('tw-cron-mon').value.trim()  || '*',
       document.getElementById('tw-cron-dow').value.trim()  || '*',
     ].join(' ');
+  }
+
+  function updateSwpFieldsVisibility() {
+    document.getElementById('set-swp-fields').style.display =
+      document.getElementById('set-swp-enable').checked ? 'block' : 'none';
   }
 
   function updateTwProviderFields() {
@@ -789,6 +795,7 @@
   }
   document.getElementById('btn-save-settings').addEventListener('click', () => saveSettings('settings-msg'));
   document.getElementById('btn-save-tail-settings').addEventListener('click', () => saveSettings('tail-settings-msg'));
+  document.getElementById('set-swp-enable').addEventListener('change', updateSwpFieldsVisibility);
 
   // ── Time & Weather Announcements ─────────────────────────────────────────────────────────────
   document.getElementById('tw-cron-hourly').addEventListener('click', () => {

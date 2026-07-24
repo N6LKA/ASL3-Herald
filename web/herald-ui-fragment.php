@@ -280,11 +280,13 @@
           <span class="toggle-label">Enable SkywarnPlus WX tail integration</span>
         </div>
 
-        <label>WX Tail File Path</label>
-        <input type="text" id="set-swp-wxfile" style="width: 100%;">
+        <div id="set-swp-fields">
+          <label>WX Tail File Path</label>
+          <input type="text" id="set-swp-wxfile" style="width: 100%;">
 
-        <label>Silence Threshold (bytes)</label>
-        <input type="text" id="set-swp-threshold" style="width: 100px;">
+          <label>Silence Threshold (bytes)</label>
+          <input type="text" id="set-swp-threshold" style="width: 100px;">
+        </div>
         <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;">When enabled, active WX alerts take priority over tail message rotation. Herald alternates between the WX alert and your normal rotation — the alert plays first, then one rotation message, then the alert again. A new or updated alert file always plays immediately on the next unkey. When no alert is active, normal rotation resumes. SkywarnPlus messages do not affect the cron-scheduled announcement timing.</p>
       </div>
     </div>
@@ -295,7 +297,7 @@
   </div>
 
   <div class="card">
-    <h3>Rotation</h3>
+    <h3>Tail Message Rotation</h3>
     <p class="muted">Plays on the next transmission unkey, gated by MinInterval. A SkywarnPlus WX alert always takes priority over the rotation.</p>
     <table id="tail-table">
       <thead><tr><th>#</th><th>File</th><th>Days</th><th>Window</th><th>Node</th><th>Status</th><th>Actions</th></tr></thead>
