@@ -604,7 +604,7 @@ cmd_request_test_timeweather() {
     # notice and act on itself. Needs root only to write that tiny file into
     # asl3-herald's own config directory - not for anything namespace-related.
     need_root "$@"
-    python3 "$DAEMON_PY" request-timeweather-test
+    python3 "$DAEMON_PY" request-timeweather-test "$@"
 }
 
 cmd_reorder_rotation() {
