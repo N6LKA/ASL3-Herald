@@ -167,16 +167,20 @@ Scheduled:
 
 ## Node ID
 
-Herald can generate the audio content of your station ID with Piper TTS (Node ID tab in the web UI, or `herald set-node-id`/`test-node-id` on the CLI), but it never touches `rpt.conf` or your node's own ID timing — that stays exactly as app_rpt's built-in `idtime`/`politeid` already handle it. One-time setup: point your existing `idrecording =` line at Herald's generated file, then reload:
+A simple tool (Node ID tab in the web UI, or `herald set-node-id`/`test-node-id` on the CLI) for creating a station ID audio file with Piper TTS — pick a voice, type what you want it to say, and generate a standalone audio file. This file isn't played by Herald itself; it's meant to be used with AllStarLink's own built-in station ID feature, which keeps handling the actual timing of when your ID plays. You can regenerate it any time you want to change the voice or wording.
 
-```
-idrecording = /etc/asterisk/scripts/asl3-herald/node-id/node-id
-```
-```bash
-sudo asterisk -rx "module reload app_rpt.so"
-```
+**One-time setup, so AllStar knows to use this file:**
 
-That's it — app_rpt reads the file fresh off disk every time it plays. After this one-time setup, editing/regenerating the ID from the web UI or `herald set-node-id` takes effect immediately, no reload needed.
+1. Open your node's `rpt.conf` and add (or change) this line:
+   ```
+   idrecording = /etc/asterisk/scripts/asl3-herald/node-id/node-id
+   ```
+2. Apply the change by running this command once:
+   ```bash
+   sudo asterisk -rx "module reload app_rpt.so"
+   ```
+
+That's it — you only need to do this once. Any time you generate a new ID from the Node ID tab (or `herald set-node-id`), AllStar automatically uses the updated audio the very next time it IDs, with nothing further to do.
 
 `idtalkover` (the CW/voice ID played over an active signal) is untouched by this feature — it keeps using whatever's already configured in `rpt.conf`.
 

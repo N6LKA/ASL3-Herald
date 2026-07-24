@@ -687,18 +687,19 @@
 <div class="tab-panel" id="tab-nodeid">
   <div class="card">
     <h3>Node ID</h3>
-    <p class="muted">Generates a single audio recording with Piper TTS to replace the content of app_rpt's own station ID. Herald only ever controls what's <em>in</em> this file - your node's built-in ID timer (<code>idtime</code>/<code>politeid</code> in rpt.conf) keeps deciding when it actually plays, completely unchanged.</p>
+    <p class="muted">A simple tool for creating a station ID audio file using Piper text-to-speech - pick a voice, type what you want it to say, and generate a standalone audio file. This file isn't played by Herald itself; it's meant to be used with AllStarLink's own built-in station ID feature, which handles the actual timing of when your ID plays (Herald doesn't control that at all - see the setup instructions below). You can come back and generate a new version of this file whenever you'd like to change the voice or wording.</p>
 
     <div id="nodeid-piper-warning" class="banner-warn" style="display:none;">
       Piper TTS doesn't appear to be installed. Node ID requires Piper (used elsewhere in Herald for Rotation/Scheduled/Time & Weather TTS) - re-run <code>install.sh</code> to install it.
     </div>
 
     <div class="banner-info">
-      One-time setup: add this line to <code>rpt.conf</code> yourself (Herald never edits rpt.conf) -
+      <strong>One-time setup, so AllStar knows to use this file:</strong>
+      <br>1. Open your node's <code>rpt.conf</code> and add (or change) this line:
       <br><code>idrecording = /etc/asterisk/scripts/asl3-herald/node-id/node-id</code>
-      <br>Then reload once so app_rpt picks it up -
+      <br>2. Apply the change by running this command once:
       <br><code>sudo asterisk -rx "module reload app_rpt.so"</code>
-      <br>That's a one-time step. After that, app_rpt reads the file fresh off disk every time it plays - <strong>Save &amp; Generate ID below takes effect immediately, no reload needed</strong>.
+      <br>That's it - you only need to do this once. Any time you generate a new ID below, AllStar will automatically use the updated audio the very next time it IDs, with nothing further to do.
     </div>
 
     <div id="nodeid-status" class="muted" style="margin-top:10px;"></div>
