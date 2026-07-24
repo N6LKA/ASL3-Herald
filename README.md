@@ -36,7 +36,7 @@
   - Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or — if SkywarnPlus is already installed — its already-fetched data, avoiding a second independent poller
   - **Two modes**: **Recordings** (default) builds the announcement from a pre-recorded sound pack — fast, fixed wording. **Custom Templates** lets you write your own message(s) with tags (`{smart_greeting}` `{time}` `{conditions}` `{temperature}` `{feels_like}` `{humidity}` `{callsign}`), rendered fresh with Piper TTS each time; with more than one message configured, a different one is picked at random each occurrence (never the same one twice in a row). Rendering happens a few seconds ahead of the scheduled moment (configurable) so playback is still instant when it's due.
 
-- **Node ID** — a Node ID tab lets you compose your station ID with Piper TTS (pick a voice, write the wording) and generate a WAV file, with a Test Playback button to audition it before saving. Herald only ever controls the *audio content* of one file — your node's own built-in `idtime`/`politeid` ID timer in rpt.conf keeps deciding when it actually plays, completely unchanged. Point `idrecording =` at Herald's generated file once (see Configuration below) and reload.
+- **Node ID Generator** — a simple tool for creating a station ID audio file with Piper TTS (pick a voice, type the wording), with a Test Playback button to audition it before saving. The generated file isn't used by Herald itself — it's meant to be used with AllStarLink's own built-in station ID feature, which keeps handling the actual timing of when your ID plays. Point `idrecording =` at Herald's generated file once (see Node ID Generator below) and reload.
 
 Both Tail Messages and Scheduled Announcements can be edited in place (name, text, voice, schedule, play mode) via `herald edit-rotation` / `herald edit-schedule` or the web UI, instead of removing and re-adding.
 
@@ -165,9 +165,9 @@ Scheduled:
 
 ---
 
-## Node ID
+## Node ID Generator
 
-A simple tool (Node ID tab in the web UI, or `herald set-node-id`/`test-node-id` on the CLI) for creating a station ID audio file with Piper TTS — pick a voice, type what you want it to say, and generate a standalone audio file. This file isn't played by Herald itself; it's meant to be used with AllStarLink's own built-in station ID feature, which keeps handling the actual timing of when your ID plays. You can regenerate it any time you want to change the voice or wording.
+A simple tool (Node ID Generator tab in the web UI, or `herald set-node-id`/`test-node-id` on the CLI) for creating a station ID audio file with Piper TTS — pick a voice, type what you want it to say, and generate a standalone audio file. This file isn't played by Herald itself; it's meant to be used with AllStarLink's own built-in station ID feature, which keeps handling the actual timing of when your ID plays. You can regenerate it any time you want to change the voice or wording.
 
 **One-time setup, so AllStar knows to use this file:**
 
@@ -180,7 +180,7 @@ A simple tool (Node ID tab in the web UI, or `herald set-node-id`/`test-node-id`
    sudo asterisk -rx "module reload app_rpt.so"
    ```
 
-That's it — you only need to do this once. Any time you generate a new ID from the Node ID tab (or `herald set-node-id`), AllStar automatically uses the updated audio the very next time it IDs, with nothing further to do.
+That's it — you only need to do this once. Any time you generate a new ID from the Node ID Generator tab (or `herald set-node-id`), AllStar automatically uses the updated audio the very next time it IDs, with nothing further to do.
 
 `idtalkover` (the CW/voice ID played over an active signal) is untouched by this feature — it keeps using whatever's already configured in `rpt.conf`.
 

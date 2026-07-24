@@ -198,8 +198,8 @@
   <button class="tab-btn" data-tab="tail">Tail Messages</button>
   <button class="tab-btn" data-tab="scheduled">Scheduled Announcements</button>
   <button class="tab-btn" data-tab="timeweather">Time & Weather Announcements</button>
-  <button class="tab-btn" data-tab="nodeid">Node ID</button>
   <button class="tab-btn" data-tab="history">Playback History</button>
+  <button class="tab-btn" data-tab="nodeid">Node ID Generator</button>
   <button class="tab-btn" data-tab="settings">Global Settings</button>
 </div>
 
@@ -683,10 +683,24 @@
   </div>
 </div>
 
+<!-- ══════════════════ PLAYBACK HISTORY ══════════════════ -->
+<div class="tab-panel" id="tab-history">
+  <div class="card">
+    <h3>Playback History</h3>
+    <p class="muted">Most recent plays first — rotation, SkywarnPlus WX, scheduled announcements, and manual test plays. Kept for the most recent 200 events.</p>
+    <button class="btn-danger" id="btn-clear-history">Clear History</button>
+    <div class="msg" id="history-msg"></div>
+    <table id="history-table">
+      <thead><tr><th>Time</th><th>Type</th><th>Name</th><th>File</th><th>Node</th><th>Play Mode</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
 <!-- ══════════════════ NODE ID ══════════════════ -->
 <div class="tab-panel" id="tab-nodeid">
   <div class="card">
-    <h3>Node ID</h3>
+    <h3>Node ID Generator</h3>
     <p class="muted">A simple tool for creating a station ID audio file using Piper text-to-speech - pick a voice, type what you want it to say, and generate a standalone audio file. This file isn't played by Herald itself; it's meant to be used with AllStarLink's own built-in station ID feature, which handles the actual timing of when your ID plays (Herald doesn't control that at all - see the setup instructions below). You can come back and generate a new version of this file whenever you'd like to change the voice or wording.</p>
 
     <div id="nodeid-piper-warning" class="banner-warn" style="display:none;">
@@ -722,20 +736,6 @@
     <button class="btn-primary" id="btn-save-nodeid">Save &amp; Generate ID</button>
     <div class="msg" id="nodeid-msg"></div>
     <p class="muted" style="margin-top:8px;">Test Playback renders on the fly and plays it immediately, without saving anything - use it to audition wording and voices. Save &amp; Generate ID overwrites the real file app_rpt reads.</p>
-  </div>
-</div>
-
-<!-- ══════════════════ PLAYBACK HISTORY ══════════════════ -->
-<div class="tab-panel" id="tab-history">
-  <div class="card">
-    <h3>Playback History</h3>
-    <p class="muted">Most recent plays first — rotation, SkywarnPlus WX, scheduled announcements, and manual test plays. Kept for the most recent 200 events.</p>
-    <button class="btn-danger" id="btn-clear-history">Clear History</button>
-    <div class="msg" id="history-msg"></div>
-    <table id="history-table">
-      <thead><tr><th>Time</th><th>Type</th><th>Name</th><th>File</th><th>Node</th><th>Play Mode</th></tr></thead>
-      <tbody></tbody>
-    </table>
   </div>
 </div>
 
