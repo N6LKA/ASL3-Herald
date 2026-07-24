@@ -9,6 +9,9 @@ DISABLE_FLAG="$INSTALL_DIR/asl3-herald-disabled"
 DAEMON_PY="/usr/local/bin/asl3-herald/asl3-herald.py"
 PIPER_BIN="/opt/piper/bin/piper/piper"
 PIPER_VOICE_DIR="/opt/piper/voices"
+NODE_ID_DIR="$INSTALL_DIR/node-id"
+NODE_ID_FILE="$NODE_ID_DIR/node-id.wav"
+NODE_ID_FILE_NOEXT="$NODE_ID_DIR/node-id"
 
 usage() {
     cat <<EOF
@@ -140,6 +143,24 @@ Time & Weather Announcements (time and/or current conditions, schedule- or DTMF-
   file) from it. Asking the already-running daemon to do the test-play
   itself avoids that, since the daemon is a plain systemd service, never
   spawned by Apache.
+
+Node ID (replaces the audio content of app_rpt's own idrecording=):
+  set-node-id "<text>" [--voice <voice>]   Generate the ID recording with Piper and save it -
+                                           overwrites $NODE_ID_FILE
+  test-node-id "<text>" [--voice <voice>]  Render and play a preview immediately, without
+                                           saving anything - use this to audition wording/voices
+
+  Herald only ever controls the *audio content* of this one file - app_rpt's
+  own idtime/politeid timer decides when it plays, completely unchanged. Add
+  this line to rpt.conf yourself (Herald never touches rpt.conf):
+
+      idrecording = $NODE_ID_FILE_NOEXT
+
+  Then reload so app_rpt picks up the new file (try in order, use whichever
+  actually works on your system):
+      sudo asterisk -rx "rpt reload"
+      sudo asterisk -rx "module reload app_rpt.so"
+      sudo systemctl restart asterisk
 EOF
 }
 
@@ -592,6 +613,19 @@ cmd_toggle_timeweather_message() {
     cmd_reload 2>/dev/null || true
 }
 
+cmd_set_node_id() {
+    # No cmd_reload here - Node ID isn't read by the daemon's main loop at
+    # all (no scheduling, no daemon involvement); app_rpt's own idtime timer
+    # picks up the new file content on its own next time it fires.
+    need_root "$@"
+    python3 "$DAEMON_PY" set-node-id "$@"
+}
+
+cmd_test_node_id() {
+    need_root "$@"
+    python3 "$DAEMON_PY" test-node-id "$@"
+}
+
 cmd_request_test_timeweather() {
     # Used by the web UI's Test button instead of cmd_test_timeweather above.
     # A process invoked through Apache/PHP (even via sudo - mount namespaces
@@ -865,6 +899,8 @@ case "$CMD" in
     edit-timeweather-message)   cmd_edit_timeweather_message   "$@" ;;
     remove-timeweather-message) cmd_remove_timeweather_message "$@" ;;
     toggle-timeweather-message) cmd_toggle_timeweather_message "$@" ;;
+    set-node-id)          cmd_set_node_id        "$@" ;;
+    test-node-id)         cmd_test_node_id       "$@" ;;
     playback-history)     cmd_playback_history   "$@" ;;
     clear-history)        cmd_clear_history      "$@" ;;
     export-config)        cmd_export_config      "$@" ;;

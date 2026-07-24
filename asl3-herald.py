@@ -41,6 +41,17 @@ STATE_FILE   = os.path.join(INSTALL_DIR, "asl3-herald.state")
 DISABLE_FLAG = os.path.join(INSTALL_DIR, "asl3-herald-disabled")
 ANNOUNCE_DIR = os.path.join(INSTALL_DIR, "announcements")
 
+# Node ID: a single Piper-generated file, deliberately kept in its own
+# directory rather than ANNOUNCE_DIR - Rotation/Scheduled's own file
+# management (remove/reorder/health-check) walks ANNOUNCE_DIR by convention,
+# and this file must never be at risk of being touched by any of that.
+# app_rpt's own idtime/politeid timer is what actually plays it (via
+# `idrecording =` in rpt.conf, set up manually by the user) - Herald only
+# ever controls its *content*, never when it plays.
+NODE_ID_DIR      = os.path.join(INSTALL_DIR, "node-id")
+NODE_ID_FILE     = os.path.join(NODE_ID_DIR, "node-id.wav")
+NODE_ID_TEST_FILE = "/run/asl3-herald/node-id-test.wav"
+
 # Pre-recorded sound snippets (digits, greetings, condition words) shared with
 # Time-Weather-Announce and other ASL3 programs — installed by install.sh.
 TW_SOUND_BASE   = "/usr/local/share/asterisk/sounds/custom"
@@ -1970,6 +1981,7 @@ def cmd_list_json(config):
         },
         "scheduled": scheduled_with_health(cfg["scheduled"]),
         "timeweather": timeweather_with_health(cfg["timeweather"]),
+        "node_id": node_id_with_health(config),
     }
     print(json.dumps(out, indent=2))
 
@@ -2234,6 +2246,51 @@ def cmd_import_config(args):
         return
     save_config(new_config)
     print(json.dumps({"success": True, "message": "Config imported and saved"}))
+
+# ── Node ID ───────────────────────────────────────────────────────────────────
+# A single Piper-generated recording that app_rpt's own idrecording= plays on
+# its own built-in timer (idtime/politeid) - Herald only ever controls the
+# audio content, never when it plays or how. No scheduling, no daemon
+# involvement at all; both commands are one-off admin actions, same trust
+# level as Rotation/Scheduled's `add`/`play`.
+
+def node_id_with_health(config):
+    nid = dict(config.get("NodeID", {}) or {})
+    nid.setdefault("Text", "")
+    nid.setdefault("Voice", DEFAULT_PIPER_VOICE)
+    nid.setdefault("GeneratedAt", None)
+    nid["_health"] = {
+        "file_exists": os.path.exists(NODE_ID_FILE),
+        "piper_installed": os.path.isfile(PIPER_BIN) and os.access(PIPER_BIN, os.X_OK),
+    }
+    return nid
+
+def cmd_set_node_id(config, args):
+    os.makedirs(NODE_ID_DIR, exist_ok=True)
+    if not render_piper_wav_blocking(args.text, args.voice, NODE_ID_FILE):
+        print(json.dumps({"success": False, "message": "Piper TTS render failed - check Piper is installed"}))
+        return
+    nid = config.setdefault("NodeID", {})
+    nid["Text"] = args.text
+    nid["Voice"] = args.voice or DEFAULT_PIPER_VOICE
+    nid["GeneratedAt"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    save_config(config)
+    print(json.dumps({"success": True, "message": "Node ID generated and saved"}))
+
+def cmd_test_node_id(config, args):
+    """Renders to a throwaway temp file and plays it immediately, without
+    touching the real Node ID file or saved config - lets you audition
+    wording/voice before committing via set-node-id."""
+    node = str(config.get("Node", "")).strip()
+    if not node:
+        print(json.dumps({"success": False, "message": "Node not set in config"}))
+        return
+    os.makedirs(os.path.dirname(NODE_ID_TEST_FILE), exist_ok=True)
+    if not render_piper_wav_blocking(args.text, args.voice, NODE_ID_TEST_FILE):
+        print(json.dumps({"success": False, "message": "Piper TTS render failed - check Piper is installed"}))
+        return
+    play_file(node, NODE_ID_TEST_FILE)
+    print(json.dumps({"success": True, "message": "Playing test Node ID"}))
 
 def cmd_update_settings(config, args):
     if args.node is not None:
@@ -2566,6 +2623,14 @@ def build_arg_parser():
     p_tw_toggle_msg = sub.add_parser("toggle-timeweather-message", help="Toggle a Time & Weather Template mode message enabled/disabled")
     p_tw_toggle_msg.add_argument("id")
 
+    p_node_id_set = sub.add_parser("set-node-id", help="Generate and save the Node ID recording (Piper TTS)")
+    p_node_id_set.add_argument("text")
+    p_node_id_set.add_argument("--voice")
+
+    p_node_id_test = sub.add_parser("test-node-id", help="Render and play a Node ID preview without saving")
+    p_node_id_test.add_argument("text")
+    p_node_id_test.add_argument("--voice")
+
     return parser
 
 def cli_main():
@@ -2624,6 +2689,10 @@ def cli_main():
         cmd_remove_timeweather_message(config, args)
     elif args.command == "toggle-timeweather-message":
         cmd_toggle_timeweather_message(config, args)
+    elif args.command == "set-node-id":
+        cmd_set_node_id(config, args)
+    elif args.command == "test-node-id":
+        cmd_test_node_id(config, args)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 

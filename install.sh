@@ -63,6 +63,7 @@ fetch_repo_file() {
 INSTALL_DIR="/usr/local/bin/asl3-herald"
 CONFIG_DIR="/etc/asterisk/scripts/asl3-herald"
 ANNOUNCE_DIR="$CONFIG_DIR/announcements"
+NODE_ID_DIR="$CONFIG_DIR/node-id"
 SERVICE_FILE="/etc/systemd/system/asl3-herald.service"
 HERALD_BIN="/usr/local/bin/herald"
 
@@ -289,7 +290,7 @@ chmod +x "$HERALD_BIN"
 
 # ── Config directory ───────────────────────────────────────────────────────────
 
-mkdir -p "$CONFIG_DIR" "$ANNOUNCE_DIR"
+mkdir -p "$CONFIG_DIR" "$ANNOUNCE_DIR" "$NODE_ID_DIR"
 
 # Time & Weather Announcements' temp audio directory - deliberately /run, not /tmp:
 # a web-UI-triggered `sudo herald test-timeweather` (invoked via Apache/PHP)
@@ -403,7 +404,7 @@ mkdir -p "$WEB_DIR/api" "$WEB_DIR/img"
 for f in herald-common.php herald-ui-fragment.php herald-ui.js; do
     fetch_repo_file "web/$f" "$WEB_DIR/$f"
 done
-for f in list.php voices.php play.php reload.php toggle.php toggle_scheduled.php toggle_rotation.php remove.php add_rotation.php add_scheduled.php edit_rotation.php edit_scheduled.php settings.php reorder_rotation.php playback_history.php clear_history.php config_export.php config_import.php version_check.php timeweather.php timeweather_test.php add_timeweather_message.php edit_timeweather_message.php remove_timeweather_message.php toggle_timeweather_message.php; do
+for f in list.php voices.php play.php reload.php toggle.php toggle_scheduled.php toggle_rotation.php remove.php add_rotation.php add_scheduled.php edit_rotation.php edit_scheduled.php settings.php reorder_rotation.php playback_history.php clear_history.php config_export.php config_import.php version_check.php timeweather.php timeweather_test.php add_timeweather_message.php edit_timeweather_message.php remove_timeweather_message.php toggle_timeweather_message.php node_id.php node_id_test.php; do
     fetch_repo_file "web/api/$f" "$WEB_DIR/api/$f"
 done
 for f in asl3-herald-icon.svg asl3-herald-banner.svg; do

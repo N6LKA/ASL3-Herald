@@ -36,6 +36,8 @@
   - Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or — if SkywarnPlus is already installed — its already-fetched data, avoiding a second independent poller
   - **Two modes**: **Recordings** (default) builds the announcement from a pre-recorded sound pack — fast, fixed wording. **Custom Templates** lets you write your own message(s) with tags (`{smart_greeting}` `{time}` `{conditions}` `{temperature}` `{feels_like}` `{humidity}` `{callsign}`), rendered fresh with Piper TTS each time; with more than one message configured, a different one is picked at random each occurrence (never the same one twice in a row). Rendering happens a few seconds ahead of the scheduled moment (configurable) so playback is still instant when it's due.
 
+- **Node ID** — a Node ID tab lets you compose your station ID with Piper TTS (pick a voice, write the wording) and generate a WAV file, with a Test Playback button to audition it before saving. Herald only ever controls the *audio content* of one file — your node's own built-in `idtime`/`politeid` ID timer in rpt.conf keeps deciding when it actually plays, completely unchanged. Point `idrecording =` at Herald's generated file once (see Configuration below) and reload.
+
 Both Tail Messages and Scheduled Announcements can be edited in place (name, text, voice, schedule, play mode) via `herald edit-rotation` / `herald edit-schedule` or the web UI, instead of removing and re-adding.
 
 **Node targeting for `multinodes=` setups:** any rotation or scheduled entry can optionally carry a `Node` override, targeting a specific node number for playback instead of the daemon's own configured `Node` — useful when one AMI connection serves several node numbers (Allmon3's `multinodes=`) and you want a given announcement to go out on a particular one.
@@ -160,6 +162,26 @@ Scheduled:
     Cron: "0 8 8-14 * 6"         # 2nd Saturday (DOM 8-14, DOW 6) at 8:00 AM
     File: /etc/asterisk/scripts/asl3-herald/announcements/breakfast-net.wav
 ```
+
+---
+
+## Node ID
+
+Herald can generate the audio content of your station ID with Piper TTS (Node ID tab in the web UI, or `herald set-node-id`/`test-node-id` on the CLI), but it never touches `rpt.conf` or your node's own ID timing — that stays exactly as app_rpt's built-in `idtime`/`politeid` already handle it. Point your existing `idrecording =` line at Herald's generated file, once:
+
+```
+idrecording = /etc/asterisk/scripts/asl3-herald/node-id/node-id
+```
+
+Then, both after this one-time setup and after every time you generate a new ID, reload so app_rpt picks up the file — try these in order, whichever actually works on your system:
+
+```bash
+sudo asterisk -rx "rpt reload"
+sudo asterisk -rx "module reload app_rpt.so"
+sudo systemctl restart asterisk   # last resort - drops active links/connections
+```
+
+`idtalkover` (the CW/voice ID played over an active signal) is untouched by this feature — it keeps using whatever's already configured in `rpt.conf`.
 
 ---
 

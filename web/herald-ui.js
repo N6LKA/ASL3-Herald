@@ -170,7 +170,7 @@
   async function loadVoices() {
     const data = await api('voices.php');
     const voices = (data && data.voices) || [];
-    ['tail-voice', 'sched-voice', 'tw-msg-voice'].forEach(id => {
+    ['tail-voice', 'sched-voice', 'tw-msg-voice', 'nodeid-voice'].forEach(id => {
       const sel = document.getElementById(id);
       sel.innerHTML = '';
       if (voices.length === 0) {
@@ -340,6 +340,21 @@
         '</td>';
       twmbody.appendChild(tr);
     });
+
+    const nodeId = data.node_id || {};
+    const nodeIdHealth = nodeId._health || {};
+    document.getElementById('nodeid-text').value = nodeId.Text || '';
+    if (nodeId.Voice) document.getElementById('nodeid-voice').value = nodeId.Voice;
+    document.getElementById('nodeid-piper-warning').style.display =
+      nodeIdHealth.piper_installed === false ? 'block' : 'none';
+    const nodeIdStatus = document.getElementById('nodeid-status');
+    if (!nodeIdHealth.file_exists) {
+      nodeIdStatus.textContent = 'No Node ID has been generated yet.';
+    } else {
+      nodeIdStatus.textContent = 'Currently deployed: "' + (nodeId.Text || '') + '" (' +
+        (VOICE_LABELS[nodeId.Voice] || nodeId.Voice) + ')' +
+        (nodeId.GeneratedAt ? ' - generated ' + nodeId.GeneratedAt : '');
+    }
 
     wireRowButtons();
     loadHistory();
@@ -808,6 +823,29 @@
     const data = await api('timeweather_test.php', { method: 'POST' });
     showMsg(msgEl, data.message || (data.success ? 'Playing now' : 'Failed'), data.success);
     if (data.success) loadHistory();
+  });
+
+  // ── Node ID ───────────────────────────────────────────────────────────────────────────────
+  document.getElementById('btn-test-nodeid').addEventListener('click', async () => {
+    const msgEl = document.getElementById('nodeid-msg');
+    const text = document.getElementById('nodeid-text').value.trim();
+    const voice = document.getElementById('nodeid-voice').value;
+    if (!text) { showMsg(msgEl, 'ID text is required', false); return; }
+    const data = await api('node_id_test.php', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ text, voice }) });
+    showMsg(msgEl, data.message || (data.success ? 'Playing test ID now' : 'Failed'), data.success);
+  });
+
+  document.getElementById('btn-save-nodeid').addEventListener('click', async () => {
+    const msgEl = document.getElementById('nodeid-msg');
+    const text = document.getElementById('nodeid-text').value.trim();
+    const voice = document.getElementById('nodeid-voice').value;
+    if (!text) { showMsg(msgEl, 'ID text is required', false); return; }
+    if (!confirm('This overwrites the real Node ID file app_rpt reads. Continue?')) return;
+    const data = await api('node_id.php', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ text, voice }) });
+    showMsg(msgEl, data.message || (data.success ? 'Node ID generated and saved - reload app_rpt to pick it up' : 'Failed'), data.success);
+    if (data.success) loadAll();
   });
 
   // ── Add / edit tail message ────────────────────────────────────────────────────────────────

@@ -198,6 +198,7 @@
   <button class="tab-btn" data-tab="tail">Tail Messages</button>
   <button class="tab-btn" data-tab="scheduled">Scheduled Announcements</button>
   <button class="tab-btn" data-tab="timeweather">Time & Weather Announcements</button>
+  <button class="tab-btn" data-tab="nodeid">Node ID</button>
   <button class="tab-btn" data-tab="history">Playback History</button>
   <button class="tab-btn" data-tab="settings">Global Settings</button>
 </div>
@@ -679,6 +680,47 @@
     <button class="btn-primary" id="btn-save-timeweather">Save &amp; Reload</button>
     <button class="btn-play" id="btn-test-timeweather">Test (local playback)</button>
     <div class="msg" id="timeweather-msg"></div>
+  </div>
+</div>
+
+<!-- ══════════════════ NODE ID ══════════════════ -->
+<div class="tab-panel" id="tab-nodeid">
+  <div class="card">
+    <h3>Node ID</h3>
+    <p class="muted">Generates a single audio recording with Piper TTS to replace the content of app_rpt's own station ID. Herald only ever controls what's <em>in</em> this file - your node's built-in ID timer (<code>idtime</code>/<code>politeid</code> in rpt.conf) keeps deciding when it actually plays, completely unchanged.</p>
+
+    <div id="nodeid-piper-warning" class="banner-warn" style="display:none;">
+      Piper TTS doesn't appear to be installed. Node ID requires Piper (used elsewhere in Herald for Rotation/Scheduled/Time & Weather TTS) - re-run <code>install.sh</code> to install it.
+    </div>
+
+    <div class="banner-info">
+      One-time setup: add this line to <code>rpt.conf</code> yourself (Herald never edits rpt.conf) -
+      <br><code>idrecording = /etc/asterisk/scripts/asl3-herald/node-id/node-id</code>
+      <br>Then reload so app_rpt picks up the file - try these in order, whichever works on your system:
+      <br><code>sudo asterisk -rx "rpt reload"</code> &nbsp; or &nbsp; <code>sudo asterisk -rx "module reload app_rpt.so"</code> &nbsp; or &nbsp; <code>sudo systemctl restart asterisk</code>
+      <br>You'll need to reload again after every time you generate a new ID below, so app_rpt picks up the change.
+    </div>
+
+    <div id="nodeid-status" class="muted" style="margin-top:10px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="tts-row">
+      <div class="tts-voice">
+        <label>Voice</label>
+        <select id="nodeid-voice" style="display:block;"></select>
+      </div>
+      <div class="tts-text">
+        <label>ID Text</label>
+        <textarea id="nodeid-text" rows="2" placeholder="e.g. This is N6LKA repeater" style="width:100%;"></textarea>
+      </div>
+    </div>
+
+    <br>
+    <button class="btn-play" id="btn-test-nodeid">Test Playback (local)</button>
+    <button class="btn-primary" id="btn-save-nodeid">Save &amp; Generate ID</button>
+    <div class="msg" id="nodeid-msg"></div>
+    <p class="muted" style="margin-top:8px;">Test Playback renders on the fly and plays it immediately, without saving anything - use it to audition wording and voices. Save &amp; Generate ID overwrites the real file app_rpt reads.</p>
   </div>
 </div>
 
