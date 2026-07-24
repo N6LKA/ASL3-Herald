@@ -331,6 +331,7 @@
         '<td class="col-wrap">' + escapeAttr(m.Text) + '</td>' +
         '<td>' + escapeAttr(VOICE_LABELS[m.Voice] || m.Voice) + '</td>' +
         '<td>' +
+        '<button class="btn-test-tw-msg" data-id="' + escapeAttr(m.Id) + '">Test</button>' +
         '<button class="btn-edit" data-type="tw-msg" data-id="' + escapeAttr(m.Id) + '" data-text="' + escapeAttr(m.Text) + '" data-voice="' + escapeAttr(m.Voice) + '">Edit</button>' +
         '<button class="btn-remove-tw-msg" data-id="' + escapeAttr(m.Id) + '">Remove</button>' +
         '</td>';
@@ -401,6 +402,11 @@
     // stay visible there regardless of the Recordings-only toggles.
     document.getElementById('tw-time-card').style.display = (enabled && (isTemplate || announceTime)) ? 'block' : 'none';
     document.getElementById('tw-weather-card').style.display = (enabled && (isTemplate || announceWeather)) ? 'block' : 'none';
+    // The three Announce.../feels-like/humidity toggles only affect the
+    // Recordings-mode audio builder - Template mode substitutes
+    // {conditions}/{feels_like}/{humidity} whenever weather data is
+    // available, regardless of these toggles, so they don't apply there.
+    document.getElementById('tw-weather-announce-toggles').style.display = isTemplate ? 'none' : 'block';
     // Nothing to schedule if neither Time nor Weather is on - a smart
     // greeting alone was never a supported standalone announcement.
     document.getElementById('tw-schedule-card').style.display = (enabled && hasContent) ? 'block' : 'none';
@@ -483,6 +489,20 @@
         await api('remove_timeweather_message.php', { method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ id: btn.dataset.id }) });
         loadAll();
+      };
+    });
+    document.querySelectorAll('.btn-test-tw-msg').forEach(btn => {
+      btn.onclick = async () => {
+        const msgEl = document.getElementById('timeweather-msg');
+        btn.disabled = true;
+        try {
+          const data = await api('timeweather_test.php', { method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ message_id: btn.dataset.id }) });
+          showMsg(msgEl, data.message || (data.success ? 'Playing now' : 'Failed'), data.success);
+          if (data.success) loadHistory();
+        } finally {
+          btn.disabled = false;
+        }
       };
     });
     document.querySelectorAll('.btn-toggle-sched').forEach(btn => {
@@ -642,11 +662,17 @@
     const voice = document.getElementById('tw-msg-voice').value;
     if (!text) { showMsg(msgEl, 'Text is required', false); return; }
 
+    // Include the currently-selected mode so it isn't lost on the loadAll()
+    // reload below if the user picked "Custom Templates" but hasn't yet
+    // clicked "Save Changes" - otherwise the reload reads Mode back from
+    // the server (still "recordings") and the radio silently reverts.
+    const mode = document.querySelector('input[name="tw-mode"]:checked').value;
+
     const data = editingTwMsgId
       ? await api('edit_timeweather_message.php', { method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ id: editingTwMsgId, text, voice }) })
+          body: JSON.stringify({ id: editingTwMsgId, text, voice, mode }) })
       : await api('add_timeweather_message.php', { method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ text, voice }) });
+          body: JSON.stringify({ text, voice, mode }) });
 
     showMsg(msgEl, data.message || (data.success ? 'Saved' : 'Failed'), data.success);
     if (data.success) {

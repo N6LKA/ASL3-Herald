@@ -11,7 +11,21 @@ require __DIR__ . '/../herald-common.php';
 // affected - see cmd_request_test_timeweather in the herald script.
 define('TW_TEST_RESULT_FILE', '/etc/asterisk/scripts/asl3-herald/timeweather-test-result.json');
 
-$requestResult = herald_run_sudo(['request-timeweather-test']);
+// Optional message_id: the per-row Test button in the Custom Templates
+// table passes this to force that specific message instead of the daemon's
+// usual random pick - see the btn-test-tw-msg handler in herald-ui.js.
+$input = json_decode(file_get_contents('php://input'), true) ?? [];
+$args = ['request-timeweather-test'];
+if (array_key_exists('message_id', $input) && $input['message_id'] !== '') {
+    $messageId = trim((string) $input['message_id']);
+    if (!preg_match('/^[a-f0-9]{6,40}$/', $messageId)) {
+        herald_json_response(['success' => false, 'message' => 'Invalid message id'], 400);
+    }
+    $args[] = '--message-id';
+    $args[] = $messageId;
+}
+
+$requestResult = herald_run_sudo($args);
 $requestData = herald_extract_json($requestResult['stdout']);
 if ($requestData === null || empty($requestData['success']) || empty($requestData['request_id'])) {
     $message = $requestData['message'] ?? trim($requestResult['stderr']) ?: 'Could not request a test play';

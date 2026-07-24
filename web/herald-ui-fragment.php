@@ -606,26 +606,28 @@
       </div>
     </div>
 
-    <div class="toggle-row" style="margin-top:14px;">
-      <label class="toggle-switch">
-        <input type="checkbox" id="tw-announce-condition">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">Announce conditions (clear, rain, cloudy, ...)</span>
-    </div>
-    <div class="toggle-row">
-      <label class="toggle-switch">
-        <input type="checkbox" id="tw-announce-feels-like">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">Announce feels-like temperature (if available from the provider)</span>
-    </div>
-    <div class="toggle-row">
-      <label class="toggle-switch">
-        <input type="checkbox" id="tw-announce-humidity">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">Announce humidity percentage (if available from the provider)</span>
+    <div id="tw-weather-announce-toggles">
+      <div class="toggle-row" style="margin-top:14px;">
+        <label class="toggle-switch">
+          <input type="checkbox" id="tw-announce-condition">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Announce conditions (clear, rain, cloudy, ...)</span>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle-switch">
+          <input type="checkbox" id="tw-announce-feels-like">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Announce feels-like temperature (if available from the provider)</span>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle-switch">
+          <input type="checkbox" id="tw-announce-humidity">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Announce humidity percentage (if available from the provider)</span>
+      </div>
     </div>
 
     <div id="tw-cache-field" style="margin-top:14px;">

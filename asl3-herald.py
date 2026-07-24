@@ -1385,12 +1385,17 @@ def normalize_timeweather_messages(messages):
         })
     return out
 
-def pick_template_message(tw_cfg, state):
-    """Picks one message at random, never repeating the immediately-previous
-    one if more than one is configured. Returns None if none are configured."""
+def pick_template_message(tw_cfg, state, message_id=None):
+    """Picks one message. If message_id is given (the web UI's per-message
+    Test button - see cmd_request_test_timeweather), returns that specific
+    message, or None if no message with that id is configured anymore.
+    Otherwise picks at random, never repeating the immediately-previous one
+    if more than one is configured. Returns None if none are configured."""
     messages = normalize_timeweather_messages((tw_cfg.get("Templates", {}) or {}).get("Messages", []))
     if not messages:
         return None
+    if message_id is not None:
+        return next((m for m in messages if m["Id"] == message_id), None)
     if len(messages) == 1:
         return messages[0]
     last_id = state.get("timeweather_template_last_id")
@@ -1500,7 +1505,7 @@ def should_play_timeweather(tw_cfg, state, node, now_dt):
 
     return True
 
-def play_timeweather(tw_cfg, state, node, now, now_dt, mode="scheduled", warnings=None, prerendered=None):
+def play_timeweather(tw_cfg, state, node, now, now_dt, mode="scheduled", warnings=None, prerendered=None, message_id=None):
     """mode controls both playback-history labeling and which scheduling
     state gets touched:
 
@@ -1528,7 +1533,12 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, mode="scheduled", warning
     timeweather_template_tick()) - skips the weather fetch and render step
     entirely, since both already happened ahead of this moment. Only ever
     passed by the "scheduled" path; DTMF/Test always render synchronously
-    right here instead (see the Mode: template branch below)."""
+    right here instead (see the Mode: template branch below).
+
+    `message_id`, if given, forces that specific Template mode message
+    instead of the usual random pick - used by the web UI's per-message Test
+    button (see cmd_request_test_timeweather / pick_template_message).
+    Ignored outside Template mode; only meaningful for mode="test"."""
     if warnings is None:
         warnings = []
     render_mode = tw_cfg.get("Mode", DEFAULT_TW_MODE)
@@ -1579,10 +1589,14 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, mode="scheduled", warning
         cleanup_old_timeweather_files(out_path, now)
 
         if render_mode == "template":
-            message = pick_template_message(tw_cfg, state)
+            message = pick_template_message(tw_cfg, state, message_id=message_id)
             if message is None:
-                warnings.append("No Template messages configured")
-                log_warn("Time & Weather: Template mode enabled but no messages configured")
+                if message_id is not None:
+                    warnings.append("Selected message no longer exists")
+                    log_warn(f"Time & Weather: test-requested message id {message_id!r} not found")
+                else:
+                    warnings.append("No Template messages configured")
+                    log_warn("Time & Weather: Template mode enabled but no messages configured")
                 return False
             resolved_text, tag_warnings = substitute_template_tags(message["Text"], tw_cfg, weather, now_dt)
             warnings.extend(tag_warnings)
@@ -1778,11 +1792,13 @@ def process_timeweather_test_request(tw_cfg, state, node):
 
     request_id = None
     requested_at = 0
+    message_id = None
     try:
         with open(TW_TEST_REQUEST_FILE) as f:
             req = json.load(f)
         request_id = req.get("request_id")
         requested_at = req.get("requested_at", 0)
+        message_id = req.get("message_id")
     except Exception as e:
         log_warn(f"Time & Weather: could not read test request: {e}")
     try:
@@ -1799,7 +1815,7 @@ def process_timeweather_test_request(tw_cfg, state, node):
 
     warnings = []
     ok = play_timeweather(tw_cfg, state, node, time.time(), datetime.now(),
-                           mode="test", warnings=warnings)
+                           mode="test", warnings=warnings, message_id=message_id)
     result = dict(timeweather_test_result_dict(ok, warnings))
     result["request_id"] = request_id
     try:
@@ -2288,6 +2304,12 @@ def cmd_update_timeweather(config, args):
 
 def cmd_add_timeweather_message(config, args):
     tw = config.setdefault("TimeWeather", {})
+    # Carries the web UI's currently-selected Mode radio along with the
+    # message so it isn't lost if the user picked "Custom Templates" but
+    # hadn't yet clicked "Save Changes" - see herald-ui.js's btn-add-tw-msg
+    # handler and add_timeweather_message.php.
+    if args.mode is not None:
+        tw["Mode"] = args.mode
     tpl = tw.setdefault("Templates", {})
     messages = tpl.setdefault("Messages", [])
     new_id = uuid.uuid4().hex[:8]
@@ -2297,6 +2319,8 @@ def cmd_add_timeweather_message(config, args):
 
 def cmd_edit_timeweather_message(config, args):
     tw = config.setdefault("TimeWeather", {})
+    if args.mode is not None:
+        tw["Mode"] = args.mode
     tpl = tw.setdefault("Templates", {})
     messages = tpl.setdefault("Messages", [])
     for m in messages:
@@ -2371,7 +2395,7 @@ def cmd_play_timeweather(config):
     ok = play_timeweather(cfg["timeweather"], state, node, time.time(), now_dt, mode="dtmf", warnings=warnings)
     print(json.dumps(timeweather_test_result_dict(ok, warnings, mode="dtmf")))
 
-def cmd_request_test_timeweather():
+def cmd_request_test_timeweather(message_id=None):
     """Called by the web UI (via the existing www-data sudoers rule) to ask
     the already-running daemon to perform the test-play itself, instead of
     doing the weather-fetch/build/play work in this one-off process. See
@@ -2381,12 +2405,19 @@ def cmd_request_test_timeweather():
     job, completely outside that namespace) - but the daemon itself is a
     plain systemd service, never spawned by Apache, so it reads /tmp
     normally. Writing this tiny request file is the only part that still
-    needs root; it doesn't touch anything Apache's namespace would hide."""
+    needs root; it doesn't touch anything Apache's namespace would hide.
+
+    `message_id`, if given, is forwarded to the daemon's poll handler so it
+    forces that specific Template mode message - used by the per-message
+    Test button in the web UI's Custom Templates table."""
     request_id = uuid.uuid4().hex
     try:
         os.makedirs(os.path.dirname(TW_TEST_REQUEST_FILE), exist_ok=True)
+        payload = {"request_id": request_id, "requested_at": time.time()}
+        if message_id:
+            payload["message_id"] = message_id
         with open(TW_TEST_REQUEST_FILE, "w") as f:
-            json.dump({"request_id": request_id, "requested_at": time.time()}, f)
+            json.dump(payload, f)
         os.chmod(TW_TEST_REQUEST_FILE, 0o644)
     except OSError as e:
         print(json.dumps({"success": False, "message": f"Could not write test request: {e}"}))
@@ -2496,16 +2527,20 @@ def build_arg_parser():
 
     sub.add_parser("test-timeweather", help="Preview the Time & Weather Announcement (doesn't affect scheduling; use play-timeweather for DTMF)")
     sub.add_parser("play-timeweather", help="Play Time & Weather Announcement as a real on-demand occurrence (for DTMF triggers)")
-    sub.add_parser("request-timeweather-test", help="Ask the running daemon to test-play Time & Weather (used by the web UI)")
+    p_tw_test_req = sub.add_parser("request-timeweather-test", help="Ask the running daemon to test-play Time & Weather (used by the web UI)")
+    p_tw_test_req.add_argument("--message-id", dest="message_id", default=None,
+                                help="Force this specific Template mode message instead of the daemon's usual random pick")
 
     p_tw_add_msg = sub.add_parser("add-timeweather-message", help="Add a Time & Weather Template mode message")
     p_tw_add_msg.add_argument("text")
     p_tw_add_msg.add_argument("--voice")
+    p_tw_add_msg.add_argument("--mode", choices=["recordings", "template"])
 
     p_tw_edit_msg = sub.add_parser("edit-timeweather-message", help="Edit a Time & Weather Template mode message")
     p_tw_edit_msg.add_argument("id")
     p_tw_edit_msg.add_argument("--text")
     p_tw_edit_msg.add_argument("--voice")
+    p_tw_edit_msg.add_argument("--mode", choices=["recordings", "template"])
 
     p_tw_rm_msg = sub.add_parser("remove-timeweather-message", help="Remove a Time & Weather Template mode message")
     p_tw_rm_msg.add_argument("id")
@@ -2559,7 +2594,7 @@ def cli_main():
     elif args.command == "play-timeweather":
         cmd_play_timeweather(config)
     elif args.command == "request-timeweather-test":
-        cmd_request_test_timeweather()
+        cmd_request_test_timeweather(args.message_id)
     elif args.command == "add-timeweather-message":
         cmd_add_timeweather_message(config, args)
     elif args.command == "edit-timeweather-message":
