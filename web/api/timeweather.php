@@ -21,6 +21,7 @@ if (!in_array($timeFormat, ['12', '24'], true)) {
 }
 
 $smartGreeting = ($input['smart_greeting'] ?? false) ? 'true' : 'false';
+$useOclock = ($input['use_oclock'] ?? false) ? 'true' : 'false';
 
 $mode = (string) ($input['mode'] ?? 'recordings');
 if (!in_array($mode, ['recordings', 'template'], true)) {
@@ -88,6 +89,7 @@ herald_respond_from_cli(herald_run_sudo([
     '--announce-time', $announceTime,
     '--time-format', $timeFormat,
     '--smart-greeting', $smartGreeting,
+    '--use-oclock', $useOclock,
     '--cron', $cron,
     '--weather-enable', $weatherEnable,
     '--provider', $provider,

@@ -118,10 +118,14 @@ Time & Weather Announcements (time and/or current conditions, schedule- or DTMF-
                                            Time & Weather entry (not "(Test)"), and
                                            still won't suppress or double-fire the next
                                            real scheduled hourly occurrence
-  test-timeweather                        Preview the announcement (real weather
+  test-timeweather [--at HH:MM]            Preview the announcement (real weather
                                            fetch, logged as "(Test)"); doesn't affect
                                            scheduling at all. For troubleshooting from
-                                           the CLI, not for DTMF - use play-timeweather
+                                           the CLI, not for DTMF - use play-timeweather.
+                                           --at previews as if it were that time today
+                                           (24-hour), instead of waiting for the real
+                                           clock - handy for testing things like
+                                           top-of-the-hour phrasing or greeting boundaries
   request-timeweather-test                Ask the running daemon to test-play instead
                                            (used internally by the web UI's Test
                                            button - see below for why it's different)
@@ -575,7 +579,7 @@ cmd_test_timeweather() {
     #
     # NOT used by the web UI's Test button - see cmd_request_test_timeweather
     # below for why.
-    python3 "$DAEMON_PY" test-timeweather
+    python3 "$DAEMON_PY" test-timeweather "$@"
 }
 
 cmd_play_timeweather() {

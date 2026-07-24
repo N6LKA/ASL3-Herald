@@ -1203,6 +1203,7 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
     announce_time = tw_cfg.get("AnnounceTime", True)
     time_format = str(tw_cfg.get("TimeFormat", "12"))
     smart_greeting = tw_cfg.get("SmartGreeting", True)
+    use_oclock = tw_cfg.get("UseOclock", False)
     content_added = False
 
     if smart_greeting:
@@ -1234,17 +1235,23 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
         hour12 = hour - 12 if hour > 12 else (12 if hour == 0 else hour)
         files.append(os.path.join(TW_SOUND_BASE, "the-time-is.gsm"))
         files.append(os.path.join(TW_SOUND_BASE, "digits", f"{hour12}.gsm"))
-        if minute != 0:
-            if minute < 10:
-                files.append(os.path.join(TW_SOUND_BASE, "digits", "oh.gsm"))
-                files.append(os.path.join(TW_SOUND_BASE, "digits", f"{minute}.gsm"))
-            elif minute < 20:
-                files.append(os.path.join(TW_SOUND_BASE, "digits", f"{minute}.gsm"))
-            else:
-                tens, ones = (minute // 10) * 10, minute % 10
-                files.append(os.path.join(TW_SOUND_BASE, "digits", f"{tens}.gsm"))
-                if ones > 0:
-                    files.append(os.path.join(TW_SOUND_BASE, "digits", f"{ones}.gsm"))
+        if minute == 0:
+            # Off by default - matches how this has always sounded until now
+            # (bare "Three PM"). Time-Weather-Announce's original saytime.pl
+            # supported both and defaulted to leaving it out; UseOclock is
+            # the same idea, just a live toggle instead of commented-out code.
+            if use_oclock:
+                files.append(os.path.join(TW_SOUND_BASE, "digits", "oclock.gsm"))
+        elif minute < 10:
+            files.append(os.path.join(TW_SOUND_BASE, "digits", "oh.gsm"))
+            files.append(os.path.join(TW_SOUND_BASE, "digits", f"{minute}.gsm"))
+        elif minute < 20:
+            files.append(os.path.join(TW_SOUND_BASE, "digits", f"{minute}.gsm"))
+        else:
+            tens, ones = (minute // 10) * 10, minute % 10
+            files.append(os.path.join(TW_SOUND_BASE, "digits", f"{tens}.gsm"))
+            if ones > 0:
+                files.append(os.path.join(TW_SOUND_BASE, "digits", f"{ones}.gsm"))
         files.append(os.path.join(TW_SOUND_BASE, "digits", "a-m.gsm" if ampm == "AM" else "p-m.gsm"))
 
     wcfg = tw_cfg.get("Weather", {}) or {}
@@ -1332,14 +1339,16 @@ def tw_smart_greeting_text(hour):
     else:
         return "Good evening"
 
-def tw_spoken_time(now_dt, time_format):
+def tw_spoken_time(now_dt, time_format, use_oclock=False):
     hour, minute = now_dt.hour, now_dt.minute
     if str(time_format) == "24":
         return f"{hour:02d} {minute:02d}"
     hour12 = hour - 12 if hour > 12 else (12 if hour == 0 else hour)
     ampm = "AM" if hour < 12 else "PM"
-    if minute == 0:
+    if minute == 0 and use_oclock:
         return f"{hour12} o'clock {ampm}"
+    if minute == 0:
+        return f"{hour12} {ampm}"
     return f"{hour12}:{minute:02d} {ampm}"
 
 def substitute_template_tags(text, tw_cfg, weather, now_dt):
@@ -1358,7 +1367,7 @@ def substitute_template_tags(text, tw_cfg, weather, now_dt):
 
     values = {
         "smart_greeting": tw_smart_greeting_text(now_dt.hour),
-        "time": tw_spoken_time(now_dt, tw_cfg.get("TimeFormat", "12")),
+        "time": tw_spoken_time(now_dt, tw_cfg.get("TimeFormat", "12"), tw_cfg.get("UseOclock", False)),
         "callsign": (tw_cfg.get("Templates", {}) or {}).get("Callsign", "").strip(),
     }
 
@@ -1794,6 +1803,23 @@ def timeweather_template_tick(tw_cfg, state, node, now, now_dt):
             _tw_template_render = record
         _tw_template_next_occ = None
 
+def resolve_test_at(at):
+    """Parses an optional "HH:MM" preview-time override for Test playback
+    (herald test-timeweather --at / the web UI's optional preview field)
+    into a full datetime using today's date. Returns (now_dt, error) -
+    error is None on success. Only ever wired to mode="test" callers below,
+    never to a real scheduled/DTMF play, so it can't be used to spoof real
+    playback timing - it exists purely so testing things like UseOclock or
+    the smart-greeting boundaries doesn't require waiting for the real
+    clock to reach that moment."""
+    if not at:
+        return datetime.now(), None
+    try:
+        hh, mm = at.split(":")
+        return datetime.now().replace(hour=int(hh), minute=int(mm), second=0, microsecond=0), None
+    except (ValueError, AttributeError):
+        return datetime.now(), f"Invalid preview time '{at}' (expected HH:MM) - used the current time instead"
+
 def process_timeweather_test_request(tw_cfg, state, node):
     """Called once per main-loop iteration. If the web UI's Test button has
     left a request file (see cmd_request_test_timeweather()), perform the
@@ -1808,12 +1834,14 @@ def process_timeweather_test_request(tw_cfg, state, node):
     request_id = None
     requested_at = 0
     message_id = None
+    at = None
     try:
         with open(TW_TEST_REQUEST_FILE) as f:
             req = json.load(f)
         request_id = req.get("request_id")
         requested_at = req.get("requested_at", 0)
         message_id = req.get("message_id")
+        at = req.get("at")
     except Exception as e:
         log_warn(f"Time & Weather: could not read test request: {e}")
     try:
@@ -1828,8 +1856,11 @@ def process_timeweather_test_request(tw_cfg, state, node):
         log_debug(f"Time & Weather: discarding stale test request {request_id}")
         return
 
+    now_dt, at_error = resolve_test_at(at)
     warnings = []
-    ok = play_timeweather(tw_cfg, state, node, time.time(), datetime.now(),
+    if at_error:
+        warnings.append(at_error)
+    ok = play_timeweather(tw_cfg, state, node, time.time(), now_dt,
                            mode="test", warnings=warnings, message_id=message_id)
     result = dict(timeweather_test_result_dict(ok, warnings))
     result["request_id"] = request_id
@@ -2325,6 +2356,8 @@ def cmd_update_timeweather(config, args):
         tw["TimeFormat"] = args.time_format
     if args.smart_greeting is not None:
         tw["SmartGreeting"] = (args.smart_greeting == "true")
+    if args.use_oclock is not None:
+        tw["UseOclock"] = (args.use_oclock == "true")
     if args.mode is not None:
         tw["Mode"] = args.mode
     if args.cron is not None:
@@ -2432,20 +2465,25 @@ def timeweather_test_result_dict(ok, warnings, mode="test"):
     message += ": " + "; ".join(warnings) if warnings else " - check sound files and weather config"
     return {"success": False, "message": message}
 
-def cmd_test_timeweather(config):
+def cmd_test_timeweather(config, args=None):
     """Manual preview, for troubleshooting from the CLI or the web UI's Test
     button - never touches scheduling state. NOT intended for DTMF; use
     cmd_play_timeweather (herald play-timeweather) for that instead, so a
     real on-demand play logs to Playback History correctly instead of as
-    "(Test)"."""
+    "(Test)".
+
+    args.at, if given (--at HH:MM), previews as if it were that time today -
+    see resolve_test_at()."""
     cfg = extract_config(config)
     node = cfg["node"]
     if not node:
         print(json.dumps({"success": False, "message": "Node not set in config"}))
         return
     state = load_state()
-    now_dt = datetime.now()
+    now_dt, at_error = resolve_test_at(getattr(args, "at", None))
     warnings = []
+    if at_error:
+        warnings.append(at_error)
     ok = play_timeweather(cfg["timeweather"], state, node, time.time(), now_dt, mode="test", warnings=warnings)
     print(json.dumps(timeweather_test_result_dict(ok, warnings, mode="test")))
 
@@ -2470,7 +2508,7 @@ def cmd_play_timeweather(config):
     ok = play_timeweather(cfg["timeweather"], state, node, time.time(), now_dt, mode="dtmf", warnings=warnings)
     print(json.dumps(timeweather_test_result_dict(ok, warnings, mode="dtmf")))
 
-def cmd_request_test_timeweather(message_id=None):
+def cmd_request_test_timeweather(message_id=None, at=None):
     """Called by the web UI (via the existing www-data sudoers rule) to ask
     the already-running daemon to perform the test-play itself, instead of
     doing the weather-fetch/build/play work in this one-off process. See
@@ -2484,13 +2522,18 @@ def cmd_request_test_timeweather(message_id=None):
 
     `message_id`, if given, is forwarded to the daemon's poll handler so it
     forces that specific Template mode message - used by the per-message
-    Test button in the web UI's Custom Templates table."""
+    Test button in the web UI's Custom Templates table.
+
+    `at` (HH:MM), if given, previews as if it were that time today - see
+    resolve_test_at()."""
     request_id = uuid.uuid4().hex
     try:
         os.makedirs(os.path.dirname(TW_TEST_REQUEST_FILE), exist_ok=True)
         payload = {"request_id": request_id, "requested_at": time.time()}
         if message_id:
             payload["message_id"] = message_id
+        if at:
+            payload["at"] = at
         with open(TW_TEST_REQUEST_FILE, "w") as f:
             json.dump(payload, f)
         os.chmod(TW_TEST_REQUEST_FILE, 0o644)
@@ -2585,6 +2628,7 @@ def build_arg_parser():
     p_tw.add_argument("--announce-time", dest="announce_time", choices=["true", "false"])
     p_tw.add_argument("--time-format", dest="time_format", choices=["12", "24"])
     p_tw.add_argument("--smart-greeting", dest="smart_greeting", choices=["true", "false"])
+    p_tw.add_argument("--use-oclock", dest="use_oclock", choices=["true", "false"])
     p_tw.add_argument("--mode", choices=["recordings", "template"])
     p_tw.add_argument("--cron")
     p_tw.add_argument("--weather-enable", dest="weather_enable", choices=["true", "false"])
@@ -2600,11 +2644,15 @@ def build_arg_parser():
     p_tw.add_argument("--callsign")
     p_tw.add_argument("--lookahead-seconds", dest="lookahead_seconds", type=int)
 
-    sub.add_parser("test-timeweather", help="Preview the Time & Weather Announcement (doesn't affect scheduling; use play-timeweather for DTMF)")
+    p_tw_test = sub.add_parser("test-timeweather", help="Preview the Time & Weather Announcement (doesn't affect scheduling; use play-timeweather for DTMF)")
+    p_tw_test.add_argument("--at", default=None,
+                            help="Preview as if it were this time today (HH:MM, 24-hour) instead of the real current time")
     sub.add_parser("play-timeweather", help="Play Time & Weather Announcement as a real on-demand occurrence (for DTMF triggers)")
     p_tw_test_req = sub.add_parser("request-timeweather-test", help="Ask the running daemon to test-play Time & Weather (used by the web UI)")
     p_tw_test_req.add_argument("--message-id", dest="message_id", default=None,
                                 help="Force this specific Template mode message instead of the daemon's usual random pick")
+    p_tw_test_req.add_argument("--at", default=None,
+                                help="Preview as if it were this time today (HH:MM, 24-hour) instead of the real current time")
 
     p_tw_add_msg = sub.add_parser("add-timeweather-message", help="Add a Time & Weather Template mode message")
     p_tw_add_msg.add_argument("text")
@@ -2676,11 +2724,11 @@ def cli_main():
     elif args.command == "update-timeweather":
         cmd_update_timeweather(config, args)
     elif args.command == "test-timeweather":
-        cmd_test_timeweather(config)
+        cmd_test_timeweather(config, args)
     elif args.command == "play-timeweather":
         cmd_play_timeweather(config)
     elif args.command == "request-timeweather-test":
-        cmd_request_test_timeweather(args.message_id)
+        cmd_request_test_timeweather(args.message_id, args.at)
     elif args.command == "add-timeweather-message":
         cmd_add_timeweather_message(config, args)
     elif args.command == "edit-timeweather-message":

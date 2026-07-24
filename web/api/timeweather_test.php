@@ -25,6 +25,18 @@ if (array_key_exists('message_id', $input) && $input['message_id'] !== '') {
     $args[] = $messageId;
 }
 
+// Optional at: previews as if it were this time today (HH:MM), so testing
+// things like top-of-the-hour phrasing or the smart-greeting boundaries
+// doesn't require waiting for the real clock - see the Preview Time field.
+if (array_key_exists('at', $input) && $input['at'] !== '') {
+    $at = trim((string) $input['at']);
+    if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $at)) {
+        herald_json_response(['success' => false, 'message' => 'Invalid preview time (expected HH:MM, 24-hour)'], 400);
+    }
+    $args[] = '--at';
+    $args[] = $at;
+}
+
 $requestResult = herald_run_sudo($args);
 $requestData = herald_extract_json($requestResult['stdout']);
 if ($requestData === null || empty($requestData['success']) || empty($requestData['request_id'])) {

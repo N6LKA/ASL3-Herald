@@ -296,6 +296,7 @@
     document.querySelector('input[name="tw-mode"][value="' + (tw.Mode === 'template' ? 'template' : 'recordings') + '"]').checked = true;
     document.getElementById('tw-announce-time').checked = tw.AnnounceTime !== false;
     document.getElementById('tw-time-format').value = tw.TimeFormat || '12';
+    document.getElementById('tw-use-oclock').value = tw.UseOclock === true ? 'true' : 'false';
     document.getElementById('tw-smart-greeting').checked = tw.SmartGreeting !== false;
     applyTwCronToPicker((tw.Schedule && tw.Schedule.Cron) || '0 * * * *');
     document.getElementById('tw-weather-enable').checked = twWeather.Enable !== false;
@@ -425,6 +426,9 @@
     // {conditions}/{feels_like}/{humidity} whenever weather data is
     // available, regardless of these toggles, so they don't apply there.
     document.getElementById('tw-weather-announce-toggles').style.display = isTemplate ? 'none' : 'block';
+    // Only meaningful in 12-hour format - 24-hour times don't use "o'clock".
+    document.getElementById('tw-oclock-field').style.display =
+      document.getElementById('tw-time-format').value === '24' ? 'none' : 'block';
     // Nothing to schedule if neither Time nor Weather is on - a smart
     // greeting alone was never a supported standalone announcement.
     document.getElementById('tw-schedule-card').style.display = (enabled && hasContent) ? 'block' : 'none';
@@ -515,7 +519,7 @@
         btn.disabled = true;
         try {
           const data = await api('timeweather_test.php', { method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ message_id: btn.dataset.id }) });
+            body: JSON.stringify({ message_id: btn.dataset.id, at: document.getElementById('tw-test-at').value.trim() }) });
           showMsg(msgEl, data.message || (data.success ? 'Playing now' : 'Failed'), data.success);
           if (data.success) loadHistory();
         } finally {
@@ -786,6 +790,7 @@
   document.getElementById('tw-provider').addEventListener('change', updateTwProviderFields);
   document.getElementById('tw-enable').addEventListener('change', updateTwSectionVisibility);
   document.getElementById('tw-announce-time').addEventListener('change', updateTwSectionVisibility);
+  document.getElementById('tw-time-format').addEventListener('change', updateTwSectionVisibility);
   document.getElementById('tw-weather-enable').addEventListener('change', updateTwSectionVisibility);
   document.querySelectorAll('input[name="tw-mode"]').forEach(r => r.addEventListener('change', updateTwSectionVisibility));
 
@@ -798,6 +803,7 @@
         mode: document.querySelector('input[name="tw-mode"]:checked').value,
         announce_time: document.getElementById('tw-announce-time').checked,
         time_format: document.getElementById('tw-time-format').value,
+        use_oclock: document.getElementById('tw-use-oclock').value === 'true',
         smart_greeting: document.getElementById('tw-smart-greeting').checked,
         cron: readTwCronFromPicker(),
         weather_enable: document.getElementById('tw-weather-enable').checked,
@@ -820,7 +826,8 @@
 
   document.getElementById('btn-test-timeweather').addEventListener('click', async () => {
     const msgEl = document.getElementById('timeweather-msg');
-    const data = await api('timeweather_test.php', { method: 'POST' });
+    const data = await api('timeweather_test.php', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ at: document.getElementById('tw-test-at').value.trim() }) });
     showMsg(msgEl, data.message || (data.success ? 'Playing now' : 'Failed'), data.success);
     if (data.success) loadHistory();
   });

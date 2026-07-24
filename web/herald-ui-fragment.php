@@ -559,11 +559,23 @@
 
   <div class="card" id="tw-time-card">
     <h3>Time</h3>
-    <label>Time Format</label>
-    <select id="tw-time-format" style="width:220px;">
-      <option value="12">12-hour (with AM/PM)</option>
-      <option value="24">24-hour</option>
-    </select>
+    <div class="field-row">
+      <div>
+        <label>Time Format</label>
+        <select id="tw-time-format" style="width:220px;">
+          <option value="12">12-hour (with AM/PM)</option>
+          <option value="24">24-hour</option>
+        </select>
+      </div>
+      <div id="tw-oclock-field">
+        <label>Top of the hour</label>
+        <select id="tw-use-oclock" style="width:180px;">
+          <option value="false">"Three PM"</option>
+          <option value="true">"Three O'Clock PM"</option>
+        </select>
+        <span class="muted" style="margin-left:8px;">Only changes exact-hour times (e.g. 3:00) - no effect any other minute.</span>
+      </div>
+    </div>
   </div>
 
   <div class="card" id="tw-weather-card">
@@ -679,6 +691,11 @@
   <div class="card">
     <button class="btn-primary" id="btn-save-timeweather">Save &amp; Reload</button>
     <button class="btn-play" id="btn-test-timeweather">Test (local playback)</button>
+    <span style="margin-left:16px;">
+      <label for="tw-test-at" style="display:inline; font-size:0.9em;">Preview time (optional)</label>
+      <input type="text" id="tw-test-at" placeholder="HH:MM" style="width:70px; margin-left:6px;">
+    </span>
+    <span class="muted" style="display:block; margin-top:4px; font-size:0.85em;">Leave blank to test with the real current time. Set a time (24-hour, e.g. 15:00) to preview how it'll sound at that moment - handy for checking things like top-of-the-hour phrasing without waiting for the real clock.</span>
     <div class="msg" id="timeweather-msg"></div>
   </div>
 </div>

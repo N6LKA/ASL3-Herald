@@ -128,6 +128,12 @@ TimeWeather:
   # Also used to format the {time} tag in Template mode, below.
   TimeFormat: "12"
 
+  # At the exact top of the hour (e.g. 3:00) in 12-hour format, say "Three
+  # O'Clock PM" instead of just "Three PM". No effect any other minute, and
+  # no effect in 24-hour format. Also applies to the {time} tag in Template
+  # mode, below.
+  UseOclock: false
+
   # Play "Good morning/afternoon/evening" before the time, based on the hour.
   # Independent of TimeFormat - works with either 12- or 24-hour time.
   SmartGreeting: true
