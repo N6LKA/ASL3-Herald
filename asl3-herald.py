@@ -1345,11 +1345,16 @@ def tw_spoken_time(now_dt, time_format, use_oclock=False):
         return f"{hour:02d} {minute:02d}"
     hour12 = hour - 12 if hour > 12 else (12 if hour == 0 else hour)
     ampm = "AM" if hour < 12 else "PM"
-    if minute == 0 and use_oclock:
-        return f"{hour12} o'clock {ampm}"
     if minute == 0:
-        return f"{hour12} {ampm}"
-    return f"{hour12}:{minute:02d} {ampm}"
+        return f"{hour12} o'clock {ampm}" if use_oclock else f"{hour12} {ampm}"
+    # Zero-padded colon notation (e.g. "4:04") gets read by Piper as "four
+    # zero four" instead of the natural "four oh four" - spelling out "oh"
+    # for single-digit minutes (and just the plain number otherwise, e.g.
+    # "4 32" -> "four thirty-two") avoids relying on Piper's number/time
+    # parsing to get the traditional English time-telling convention right.
+    if minute < 10:
+        return f"{hour12} oh {minute} {ampm}"
+    return f"{hour12} {minute} {ampm}"
 
 def substitute_template_tags(text, tw_cfg, weather, now_dt):
     """Replaces {tag} placeholders with live data for Template mode. A tag
