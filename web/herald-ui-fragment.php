@@ -824,8 +824,6 @@
       <span class="toggle-label">Enable debug logging</span>
     </div>
 
-    <p class="muted" style="margin-top:14px;">Min Interval, RF/Network activation, and SkywarnPlus settings moved to the <strong>Tail Messages</strong> tab, since they're specific to tail messages.</p>
-
     <br>
     <button class="btn-primary" id="btn-save-settings">Save &amp; Reload</button>
     <div class="msg" id="settings-msg"></div>
