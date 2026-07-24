@@ -698,7 +698,7 @@
       <br><code>idrecording = /etc/asterisk/scripts/asl3-herald/node-id/node-id</code>
       <br>Then reload once so app_rpt picks it up -
       <br><code>sudo asterisk -rx "module reload app_rpt.so"</code>
-      <br>That's a one-time step. After that, app_rpt reads the file fresh off disk every time it plays - <strong>Save &amp; Generate ID below takes effect immediately, no reload needed</strong> (confirmed live, including with a DTMF play-ID trigger).
+      <br>That's a one-time step. After that, app_rpt reads the file fresh off disk every time it plays - <strong>Save &amp; Generate ID below takes effect immediately, no reload needed</strong>.
     </div>
 
     <div id="nodeid-status" class="muted" style="margin-top:10px;"></div>

@@ -160,7 +160,7 @@ Node ID (replaces the audio content of app_rpt's own idrecording=):
 
   That's a one-time step. After that, app_rpt reads the file fresh off disk
   every time it plays - set-node-id takes effect immediately, no reload
-  needed (confirmed live, including with a DTMF play-ID trigger).
+  needed.
 EOF
 }
 

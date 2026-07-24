@@ -176,7 +176,7 @@ idrecording = /etc/asterisk/scripts/asl3-herald/node-id/node-id
 sudo asterisk -rx "module reload app_rpt.so"
 ```
 
-That's it — confirmed live (including with a DTMF play-ID trigger) that app_rpt reads the file fresh off disk every time it plays. After this one-time setup, editing/regenerating the ID from the web UI or `herald set-node-id` takes effect immediately, no reload needed.
+That's it — app_rpt reads the file fresh off disk every time it plays. After this one-time setup, editing/regenerating the ID from the web UI or `herald set-node-id` takes effect immediately, no reload needed.
 
 `idtalkover` (the CW/voice ID played over an active signal) is untouched by this feature — it keeps using whatever's already configured in `rpt.conf`.
 
