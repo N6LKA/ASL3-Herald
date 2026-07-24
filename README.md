@@ -281,6 +281,21 @@ sudo apt install festival sox
 sudo apt install espeak-ng sox
 ```
 
+**Adding more voices manually** — the 19 above are just what `install.sh` downloads by default; Piper has many more, including other languages (Spanish, French, German, and others), browsable at [huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices/tree/main). Every voice is two files, a `.onnx` model and a matching `.onnx.json` config — download both into `/opt/piper/voices/` and it's usable immediately, no restart or reload needed:
+
+```bash
+# Example: add German voice "de_DE-thorsten-medium"
+sudo curl -fsSL "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx" -o /opt/piper/voices/de_DE-thorsten-medium.onnx
+sudo curl -fsSL "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx.json" -o /opt/piper/voices/de_DE-thorsten-medium.onnx.json
+sudo chmod 644 /opt/piper/voices/de_DE-thorsten-medium.onnx*
+```
+
+Find the right path for any voice by browsing the link above — the URL pattern is always `<language>/<language-region>/<name>/<quality>/<language-region>-<name>-<quality>.onnx` (and the same path with `.json` on the end). The new voice shows up right away in `herald voices` and every voice dropdown in the web UI, labeled by its raw filename (e.g. `de_DE-thorsten-medium`) rather than a friendly display name — Herald only has friendly names for the 19 it ships by default.
+
+If a `curl` command above fails with a 403 error, HuggingFace is blocking direct downloads from your server's IP (a known issue with some hosts) — download the same two URLs in a regular web browser instead and copy the files to `/opt/piper/voices/` (e.g. via `scp`).
+
+For a non-English voice, remember Herald just passes whatever text you type straight to Piper — write your announcement text in that language too.
+
 ---
 
 ## Web UI
