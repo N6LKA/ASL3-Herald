@@ -764,8 +764,14 @@
   });
 
   // ── Settings ──────────────────────────────────────────────────────────────────────────────
-  document.getElementById('btn-save-settings').addEventListener('click', async () => {
-    const msgEl = document.getElementById('settings-msg');
+  // Shared by both Save & Reload buttons - Node/Debug live on the Global
+  // Settings tab, Min Interval/RF-Network/SkywarnPlus live on the Tail
+  // Messages tab (moved there since they're tail-message-specific), but
+  // it's all one settings.php call either way - whichever button you click
+  // saves the full current state of every field, regardless of which tab
+  // it's currently showing.
+  async function saveSettings(msgElId) {
+    const msgEl = document.getElementById(msgElId);
     const data = await api('settings.php', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
@@ -780,7 +786,9 @@
     });
     showMsg(msgEl, data.message || (data.success ? 'Settings saved and reloaded' : 'Failed'), data.success);
     if (data.success) loadAll();
-  });
+  }
+  document.getElementById('btn-save-settings').addEventListener('click', () => saveSettings('settings-msg'));
+  document.getElementById('btn-save-tail-settings').addEventListener('click', () => saveSettings('tail-settings-msg'));
 
   // ── Time & Weather Announcements ─────────────────────────────────────────────────────────────
   document.getElementById('tw-cron-hourly').addEventListener('click', () => {
