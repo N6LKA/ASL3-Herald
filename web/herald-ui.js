@@ -323,13 +323,16 @@
     twmbody.innerHTML = '';
     const twMessages = twTemplates.Messages || [];
     if (twMessages.length === 0) {
-      twmbody.innerHTML = '<tr><td colspan="3" class="muted">(no messages yet - add one below)</td></tr>';
+      twmbody.innerHTML = '<tr><td colspan="4" class="muted">(no messages yet - add one below)</td></tr>';
     }
     twMessages.forEach(m => {
+      const enabled = m.Enabled !== false;
       const tr = document.createElement('tr');
+      if (!enabled) tr.classList.add('sched-disabled');
       tr.innerHTML =
         '<td class="col-wrap">' + escapeAttr(m.Text) + '</td>' +
         '<td>' + escapeAttr(VOICE_LABELS[m.Voice] || m.Voice) + '</td>' +
+        '<td><button class="' + (enabled ? 'btn-enable' : 'btn-disable') + ' btn-toggle-tw-msg" data-id="' + escapeAttr(m.Id) + '">' + (enabled ? 'Enabled' : 'Disabled') + '</button></td>' +
         '<td>' +
         '<button class="btn-test-tw-msg" data-id="' + escapeAttr(m.Id) + '">Test</button>' +
         '<button class="btn-edit" data-type="tw-msg" data-id="' + escapeAttr(m.Id) + '" data-text="' + escapeAttr(m.Text) + '" data-voice="' + escapeAttr(m.Voice) + '">Edit</button>' +
@@ -503,6 +506,17 @@
         } finally {
           btn.disabled = false;
         }
+      };
+    });
+    document.querySelectorAll('.btn-toggle-tw-msg').forEach(btn => {
+      btn.onclick = async () => {
+        const data = await api('toggle_timeweather_message.php', { method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ id: btn.dataset.id }) });
+        if (data.success === false) {
+          alert(data.message || 'Toggle failed');
+          return;
+        }
+        loadAll();
       };
     });
     document.querySelectorAll('.btn-toggle-sched').forEach(btn => {

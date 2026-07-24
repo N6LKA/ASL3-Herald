@@ -123,6 +123,8 @@
   #herald-ui .btn-enable  { background: #27ae60; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-disable { background: #888;    color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-edit    { background: #e67e22; color: #fff; border: none; border-radius: 4px; }
+  #herald-ui .btn-test-tw-msg   { background: #2980b9; color: #fff; border: none; border-radius: 4px; }
+  #herald-ui .btn-remove-tw-msg { background: #e74c3c; color: #fff; border: none; border-radius: 4px; }
   #herald-ui tr.sched-disabled td { opacity: 0.5; }
   #herald-ui code { color: #333; background: #eee; padding: 1px 5px; border-radius: 3px; font-size: 0.95em; }
   #herald-ui #sched-table th { white-space: normal; }
@@ -511,7 +513,7 @@
     <p class="muted" style="margin-top:4px;">Inserted wherever a message uses <code>{callsign}</code> - you write the rest (e.g. "... the {callsign} repeater ..."). If Piper runs the letters together as one word, separate them with spaces here (e.g. "N 6 L K A" instead of "N6LKA") to have it spoken letter-by-letter.</p>
 
     <table id="tw-messages-table" style="margin-top:16px;">
-      <thead><tr><th>Text</th><th>Voice</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Text</th><th>Voice</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody></tbody>
     </table>
 

@@ -1382,20 +1382,24 @@ def normalize_timeweather_messages(messages):
             "Id": m.get("Id") or uuid.uuid4().hex[:8],
             "Text": m.get("Text", ""),
             "Voice": m.get("Voice") or DEFAULT_PIPER_VOICE,
+            "Enabled": m.get("Enabled", True),
         })
     return out
 
 def pick_template_message(tw_cfg, state, message_id=None):
     """Picks one message. If message_id is given (the web UI's per-message
     Test button - see cmd_request_test_timeweather), returns that specific
-    message, or None if no message with that id is configured anymore.
-    Otherwise picks at random, never repeating the immediately-previous one
-    if more than one is configured. Returns None if none are configured."""
+    message regardless of its Enabled flag - a manual test/preview should
+    work even for a currently-disabled message - or None if no message with
+    that id is configured anymore. Otherwise picks at random from the
+    Enabled messages only, never repeating the immediately-previous one if
+    more than one is configured. Returns None if none are configured/enabled."""
     messages = normalize_timeweather_messages((tw_cfg.get("Templates", {}) or {}).get("Messages", []))
-    if not messages:
-        return None
     if message_id is not None:
         return next((m for m in messages if m["Id"] == message_id), None)
+    messages = [m for m in messages if m["Enabled"]]
+    if not messages:
+        return None
     if len(messages) == 1:
         return messages[0]
     last_id = state.get("timeweather_template_last_id")
@@ -1595,8 +1599,8 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, mode="scheduled", warning
                     warnings.append("Selected message no longer exists")
                     log_warn(f"Time & Weather: test-requested message id {message_id!r} not found")
                 else:
-                    warnings.append("No Template messages configured")
-                    log_warn("Time & Weather: Template mode enabled but no messages configured")
+                    warnings.append("No enabled Template messages configured")
+                    log_warn("Time & Weather: Template mode enabled but no enabled messages configured")
                 return False
             resolved_text, tag_warnings = substitute_template_tags(message["Text"], tw_cfg, weather, now_dt)
             warnings.extend(tag_warnings)
@@ -1743,10 +1747,10 @@ def timeweather_template_tick(tw_cfg, state, node, now, now_dt):
 
         message = pick_template_message(tw_cfg, state)
         if message is None:
-            log_warn("Time & Weather: Template mode enabled but no messages configured")
+            log_warn("Time & Weather: Template mode enabled but no enabled messages configured")
             _tw_template_render = {
                 "polled_done": True, "ok": False, "target_minute_key": minute_key,
-                "out_wav_path": out_path, "warnings": ["No Template messages configured"],
+                "out_wav_path": out_path, "warnings": ["No enabled Template messages configured"],
             }
             _tw_template_next_occ = None
             return
@@ -2313,7 +2317,7 @@ def cmd_add_timeweather_message(config, args):
     tpl = tw.setdefault("Templates", {})
     messages = tpl.setdefault("Messages", [])
     new_id = uuid.uuid4().hex[:8]
-    messages.append({"Id": new_id, "Text": args.text, "Voice": args.voice or DEFAULT_PIPER_VOICE})
+    messages.append({"Id": new_id, "Text": args.text, "Voice": args.voice or DEFAULT_PIPER_VOICE, "Enabled": True})
     save_config(config)
     print(json.dumps({"success": True, "message": "Message added", "id": new_id}))
 
@@ -2345,6 +2349,20 @@ def cmd_remove_timeweather_message(config, args):
     tpl["Messages"] = new_messages
     save_config(config)
     print(json.dumps({"success": True, "message": "Message removed"}))
+
+def cmd_toggle_timeweather_message(config, args):
+    tw = config.setdefault("TimeWeather", {})
+    tpl = tw.setdefault("Templates", {})
+    messages = tpl.setdefault("Messages", [])
+    for m in messages:
+        if m.get("Id") == args.id:
+            current = m.get("Enabled", True)
+            m["Enabled"] = not current
+            save_config(config)
+            state = "enabled" if not current else "disabled"
+            print(json.dumps({"success": True, "message": f"Message {state}", "enabled": not current}))
+            return
+    print(json.dumps({"success": False, "message": f"No message found with id: {args.id}"}))
 
 def timeweather_test_result_dict(ok, warnings, mode="test"):
     if ok:
@@ -2545,6 +2563,9 @@ def build_arg_parser():
     p_tw_rm_msg = sub.add_parser("remove-timeweather-message", help="Remove a Time & Weather Template mode message")
     p_tw_rm_msg.add_argument("id")
 
+    p_tw_toggle_msg = sub.add_parser("toggle-timeweather-message", help="Toggle a Time & Weather Template mode message enabled/disabled")
+    p_tw_toggle_msg.add_argument("id")
+
     return parser
 
 def cli_main():
@@ -2601,6 +2622,8 @@ def cli_main():
         cmd_edit_timeweather_message(config, args)
     elif args.command == "remove-timeweather-message":
         cmd_remove_timeweather_message(config, args)
+    elif args.command == "toggle-timeweather-message":
+        cmd_toggle_timeweather_message(config, args)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
