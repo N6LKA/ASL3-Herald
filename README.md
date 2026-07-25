@@ -398,12 +398,16 @@ State (rotation index, WX alternation, scheduled "waiting for unkey" status, and
 
 ## SkywarnPlus Integration
 
-No changes to SkywarnPlus are required. `asl3-herald` reads the existing `wx-tail.wav` file that SkywarnPlus already generates:
+Herald integrates with SkywarnPlus two different ways, with two different compatibility requirements:
+
+**Tail Messages' WX alert integration** (`TailMessage.SkywarnPlus`) — no changes to SkywarnPlus are required; Herald just reads the existing `wx-tail.wav` file SkywarnPlus already generates:
 
 - **No active alerts:** `wx-tail.wav` is a small silent file (~1644 bytes)
 - **Active alerts:** `wx-tail.wav` contains the weather alert audio (typically 50KB+)
 
-Set `SilenceThreshold: 5000` (the default) to reliably distinguish between the two.
+Set `SilenceThreshold: 5000` (the default) to reliably distinguish between the two. This part works with any SkywarnPlus install, including the original unmaintained upstream.
+
+**Time & Weather's `skywarnplus` weather provider** (`TimeWeather.Weather.Provider: skywarnplus`) — **requires [N6LKA's SkywarnPlus fork](https://github.com/N6LKA/SkywarnPlus) specifically.** It reads `/tmp/SkywarnPlus/swp-data.json`, written by `Allmon3_Compat.py` — a module that exists only in that fork, not in the original upstream project. If you want Herald's weather announcements sourced from SkywarnPlus (rather than polling METAR/Open-Meteo/Tempest directly), you need the fork installed. The fork also adds Tempest as a weather source inside SkywarnPlus itself, which only matters for this provider - the original upstream has no Tempest support at all.
 
 **Note:** the original SkywarnPlus author, Mason (Mason10198), no longer maintains the project — [the original repo](https://github.com/Mason10198/SkywarnPlus) is archived and read-only. Larry (N6LKA) maintains an active fork that keeps SkywarnPlus working and up to date: **[github.com/N6LKA/SkywarnPlus](https://github.com/N6LKA/SkywarnPlus)**.
 
