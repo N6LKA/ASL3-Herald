@@ -253,7 +253,7 @@
 <div class="tab-panel" id="tab-tail">
   <div class="card">
     <div style="display:flex; gap:32px; flex-wrap:wrap;">
-      <div style="flex:1 1 280px;">
+      <div style="flex:1 1 260px;">
         <h3 style="margin-top:0;">General Settings</h3>
         <label>Min Interval Between Tail Messages (seconds)</label>
         <input type="text" id="set-min-interval" style="width: 100px;">
@@ -270,7 +270,7 @@
         <p class="muted" style="margin-top: 6px; margin-bottom: 0;">Off: tail messages play after a local RF unkey only.<br>On: tail messages also play after a connected AllStar node unkeys.</p>
       </div>
 
-      <div style="flex:1 1 240px;">
+      <div style="flex:1 1 380px; min-width:320px;">
         <h3 style="margin-top:0;">SkywarnPlus</h3>
         <div class="toggle-row" style="margin-top: 8px;">
           <label class="toggle-switch">
@@ -280,14 +280,14 @@
           <span class="toggle-label">Enable SkywarnPlus WX tail integration</span>
         </div>
 
-        <div id="set-swp-fields" class="field-row">
-          <div style="flex:1 1 auto;">
+        <div id="set-swp-fields" style="display:flex; flex-wrap:nowrap; gap:16px; align-items:flex-start; margin-top:4px;">
+          <div style="flex:1 1 auto; min-width:0;">
             <label>WX Tail File Path</label>
-            <input type="text" id="set-swp-wxfile" style="width: 220px;">
+            <input type="text" id="set-swp-wxfile" style="width: 100%; max-width:180px; box-sizing:border-box;">
           </div>
-          <div>
+          <div style="flex:0 0 auto;">
             <label>Silence Threshold (bytes)</label>
-            <input type="text" id="set-swp-threshold" style="width: 100px;">
+            <input type="text" id="set-swp-threshold" style="width: 90px; box-sizing:border-box;">
           </div>
         </div>
         <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;">When enabled, active WX alerts take priority over tail message rotation. Herald alternates between the WX alert and your normal rotation — the alert plays first, then one rotation message, then the alert again. A new or updated alert file always plays immediately on the next unkey. When no alert is active, normal rotation resumes. SkywarnPlus messages do not affect the cron-scheduled announcement timing.</p>

@@ -386,8 +386,11 @@
   }
 
   function updateSwpFieldsVisibility() {
+    // 'flex', not 'block' - #set-swp-fields is a flex row (WX Tail File
+    // Path + Silence Threshold side by side); setting 'block' here was
+    // silently clobbering that layout back to stacked on every page load.
     document.getElementById('set-swp-fields').style.display =
-      document.getElementById('set-swp-enable').checked ? 'block' : 'none';
+      document.getElementById('set-swp-enable').checked ? 'flex' : 'none';
   }
 
   function updateTwProviderFields() {
