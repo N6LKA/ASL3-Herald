@@ -110,13 +110,37 @@ Scheduled: []
 TimeWeather:
   Enable: false
 
+  # "recordings" - built from the pre-recorded sound pack below (fast,
+  #                fixed wording, no TTS engine required).
+  # "template"   - one or more of your own text messages (see Templates
+  #                below), rendered fresh each time with Piper TTS. Lets you
+  #                write your own wording and insert live data with tags.
+  Mode: recordings
+
+  # ── Recordings mode settings (ignored when Mode: template) ────────────────
+
   # Include the time announcement. Independent of Weather.Enable below - any
   # combination is valid (time only, weather only, or both).
   AnnounceTime: true
 
   # "12" = 12-hour time + AM/PM
   # "24" = 24-hour time
+  # Also used to format the {time} tag in Template mode, below.
   TimeFormat: "12"
+
+  # At the exact top of the hour (e.g. 3:00) in 12-hour format, say "Three
+  # O'Clock PM" instead of just "Three PM". No effect any other minute, and
+  # no effect in 24-hour format (which always says "hundred hours" at :00,
+  # e.g. "sixteen hundred hours" - not a toggle, matches the original
+  # Time-Weather-Announce script's convention). Also applies to the {time}
+  # tag in Template mode, below.
+  UseOclock: false
+
+  # "oh" or "zero" - how a single-digit minute is spoken, e.g. "four oh six"
+  # vs "four zero six" (12-hour) or "sixteen oh six" vs "sixteen zero six"
+  # (24-hour). Only affects the {time} tag in Template mode - Recordings
+  # mode always uses "oh" (no "zero" recording exists in the sound pack).
+  MinuteZeroWord: "oh"
 
   # Play "Good morning/afternoon/evening" before the time, based on the hour.
   # Independent of TimeFormat - works with either 12- or 24-hour time.
@@ -159,3 +183,49 @@ TimeWeather:
     Tempest:
       Token: ""       # WeatherFlow Personal Access Token — tempest.earth/account
       StationID: ""   # leave blank to auto-detect (cached after first lookup)
+
+  # ── Template mode settings (ignored when Mode: recordings) ────────────────
+  # Requires Piper TTS (installed by install.sh). Weather.* above still
+  # applies — a message using {temperature}/{conditions}/etc. needs
+  # Weather.Enable: true and a working provider configured above.
+  Templates:
+    # Your callsign, inserted verbatim wherever a message uses {callsign} -
+    # you write the rest of the sentence (e.g. "... the {callsign} repeater
+    # ..."). If Piper mispronounces it as a run-together word, separate the
+    # letters with spaces here (e.g. "N 6 L K A" instead of "N6LKA") - it'll
+    # be spoken exactly as typed.
+    Callsign: ""
+
+    # How many seconds before a message is due to play the daemon starts
+    # rendering it with Piper, so playback is instant at the actual
+    # scheduled moment instead of waiting on TTS. Raising this gives more
+    # safety margin on a slow/loaded system, at the cost of the {time} and
+    # weather data being computed that many seconds earlier than the real
+    # play moment.
+    LookaheadSeconds: 5
+
+    # One or more messages; a different one is picked at random each
+    # occurrence (never the same one twice in a row if there's more than
+    # one). Available tags: {smart_greeting} {time} {conditions}
+    # {temperature} {feels_like} {humidity} {callsign}
+    Messages: []
+    # Example:
+    # Messages:
+    #   - Id: "a1b2c3d4"
+    #     Text: "{smart_greeting}, welcome to the {callsign} repeater. The time is {time}. Current conditions are {conditions}, {temperature} degrees."
+    #     Voice: en_US-amy-medium
+
+# Node ID — generates the audio content of a single WAV file with Piper TTS
+# (herald set-node-id / the web UI's Node ID tab). Herald never touches
+# rpt.conf or app_rpt's own idtime/politeid timing - only the content of
+# this one file. Point your own `idrecording =` line at it (see README's
+# "Node ID" section for the exact line + reload instructions) and reload
+# app_rpt after every regeneration.
+#
+# Not meant to be hand-edited - Text/Voice/GeneratedAt are written by
+# `herald set-node-id`, kept here only so the web UI can show what's
+# currently deployed.
+NodeID:
+  Text: ""
+  Voice: en_US-amy-medium
+  GeneratedAt: null

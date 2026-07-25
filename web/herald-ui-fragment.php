@@ -123,6 +123,8 @@
   #herald-ui .btn-enable  { background: #27ae60; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-disable { background: #888;    color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-edit    { background: #e67e22; color: #fff; border: none; border-radius: 4px; }
+  #herald-ui .btn-test-tw-msg   { background: #2980b9; color: #fff; border: none; border-radius: 4px; }
+  #herald-ui .btn-remove-tw-msg { background: #e74c3c; color: #fff; border: none; border-radius: 4px; }
   #herald-ui tr.sched-disabled td { opacity: 0.5; }
   #herald-ui code { color: #333; background: #eee; padding: 1px 5px; border-radius: 3px; font-size: 0.95em; }
   #herald-ui #sched-table th { white-space: normal; }
@@ -197,6 +199,7 @@
   <button class="tab-btn" data-tab="scheduled">Scheduled Announcements</button>
   <button class="tab-btn" data-tab="timeweather">Time & Weather Announcements</button>
   <button class="tab-btn" data-tab="history">Playback History</button>
+  <button class="tab-btn" data-tab="nodeid">Node ID Generator</button>
   <button class="tab-btn" data-tab="settings">Global Settings</button>
 </div>
 
@@ -249,7 +252,55 @@
 <!-- ══════════════════ TAIL MESSAGES (unkey-triggered) ══════════════════ -->
 <div class="tab-panel" id="tab-tail">
   <div class="card">
-    <h3>Rotation</h3>
+    <div style="display:flex; gap:32px; flex-wrap:wrap;">
+      <div style="flex:1 1 260px;">
+        <h3 style="margin-top:0;">General Settings</h3>
+        <label>Min Interval Between Tail Messages (seconds)</label>
+        <input type="text" id="set-min-interval" style="width: 100px;">
+        <span class="muted" style="margin-left: 8px;">e.g. 300 = 5 min, 600 = 10 min, 900 = 15 min</span>
+
+        <div class="toggle-row" style="margin-top:12px;">
+          <span class="toggle-label">RF activation only</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="set-network-keyup-trigger">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">RF and Network activation</span>
+        </div>
+        <p class="muted" style="margin-top: 6px; margin-bottom: 0;">Off: tail messages play after a local RF unkey only.<br>On: tail messages also play after a connected AllStar node unkeys.</p>
+      </div>
+
+      <div style="flex:1 1 380px; min-width:320px;">
+        <h3 style="margin-top:0;">SkywarnPlus</h3>
+        <div class="toggle-row" style="margin-top: 8px;">
+          <label class="toggle-switch">
+            <input type="checkbox" id="set-swp-enable">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">Enable SkywarnPlus WX tail integration</span>
+        </div>
+
+        <div id="set-swp-fields" style="display:flex; flex-wrap:nowrap; gap:16px; align-items:flex-start; margin-top:4px;">
+          <div style="flex:1 1 auto; min-width:0;">
+            <label>WX Tail File Path</label>
+            <input type="text" id="set-swp-wxfile" style="width: 100%; box-sizing:border-box;">
+          </div>
+          <div style="flex:0 0 auto;">
+            <label>Silence Threshold (bytes)</label>
+            <input type="text" id="set-swp-threshold" style="width: 90px; box-sizing:border-box;">
+          </div>
+        </div>
+        <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;">When enabled, active WX alerts take priority over tail message rotation. Herald alternates between the WX alert and your normal rotation — the alert plays first, then one rotation message, then the alert again. A new or updated alert file always plays immediately on the next unkey. When no alert is active, normal rotation resumes. SkywarnPlus messages do not affect the cron-scheduled announcement timing.</p>
+      </div>
+    </div>
+
+    <br>
+    <button class="btn-primary" id="btn-save-tail-settings">Save &amp; Reload</button>
+    <div class="msg" id="tail-settings-msg"></div>
+  </div>
+
+  <div class="card">
+    <h3>Tail Message Rotation</h3>
     <p class="muted">Plays on the next transmission unkey, gated by MinInterval. A SkywarnPlus WX alert always takes priority over the rotation.</p>
     <table id="tail-table">
       <thead><tr><th>#</th><th>File</th><th>Days</th><th>Window</th><th>Node</th><th>Status</th><th>Actions</th></tr></thead>
@@ -459,6 +510,12 @@
       <span class="toggle-label">Enable Time & Weather Announcements</span>
     </div>
 
+    <div id="tw-mode-row" style="margin-top:14px;">
+      <label style="margin-bottom:6px;">Mode</label>
+      <label style="margin-right:20px; font-weight:normal;"><input type="radio" name="tw-mode" id="tw-mode-recordings" value="recordings" checked> Recordings <span class="muted">(pre-recorded sound pack, fixed wording)</span></label>
+      <label style="font-weight:normal;"><input type="radio" name="tw-mode" id="tw-mode-template" value="template"> Custom Templates <span class="muted">(your own text, rendered with Piper TTS)</span></label>
+    </div>
+
     <div id="tw-options-block">
       <div class="toggle-row" style="margin-top:14px;">
         <label class="toggle-switch">
@@ -492,13 +549,89 @@
     </div>
   </div>
 
+  <div class="card" id="tw-templates-block" style="display:none;">
+    <h3>Custom Templates</h3>
+    <p class="muted">Write your own message and insert live data with tags. A different message is picked at random each time (never the same one twice in a row if you have more than one) and rendered fresh with Piper TTS before it plays.</p>
+
+    <div id="tw-piper-warning" class="banner-warn" style="display:none;">
+      Piper TTS doesn't appear to be installed. Custom Templates requires Piper (used elsewhere in Herald for Rotation/Scheduled TTS) - re-run <code>install.sh</code> to install it.
+    </div>
+
+    <label>Callsign</label>
+    <input type="text" id="tw-callsign" style="width:220px;" placeholder="e.g. N6LKA">
+    <p class="muted" style="margin-top:4px;">Inserted wherever a message uses <code>{callsign}</code> - you write the rest (e.g. "... the {callsign} repeater ..."). If Piper runs the letters together as one word, separate them with spaces here (e.g. "N 6 L K A" instead of "N6LKA") to have it spoken letter-by-letter.</p>
+
+    <table id="tw-messages-table" style="margin-top:16px;">
+      <thead><tr><th>Text</th><th>Voice</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="add-form">
+      <h3 id="tw-msg-form-heading">Add a Message</h3>
+
+      <div class="tts-row">
+        <div class="tts-voice">
+          <label>Voice</label>
+          <select id="tw-msg-voice" style="display:block;"></select>
+        </div>
+        <div class="tts-text">
+          <label>Text</label>
+          <textarea id="tw-msg-text" rows="3" placeholder="e.g. {smart_greeting}, welcome to the {callsign} repeater. The time is {time}. Current conditions are {conditions}, {temperature} degrees." style="width:100%;"></textarea>
+        </div>
+      </div>
+
+      <div style="margin-top:10px; padding:10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px; font-size:0.88em; line-height:1.7;">
+        <strong>Available tags</strong><br>
+        <code>{smart_greeting}</code> Good morning/afternoon/evening &nbsp;|&nbsp;
+        <code>{time}</code> current time &nbsp;|&nbsp;
+        <code>{callsign}</code> the Callsign above<br>
+        <code>{conditions}</code> weather conditions &nbsp;|&nbsp;
+        <code>{temperature}</code> temperature &nbsp;|&nbsp;
+        <code>{feels_like}</code> feels-like temperature &nbsp;|&nbsp;
+        <code>{humidity}</code> humidity<br>
+        <span class="muted">Weather tags need Weather enabled below with a working provider. A tag with no data available is silently left blank rather than failing the whole message.</span>
+      </div>
+
+      <br>
+      <button class="btn-primary" id="btn-add-tw-msg">Add Message</button>
+      <button id="tw-msg-edit-cancel" style="display:none;">Cancel Edit</button>
+      <div class="msg" id="tw-msg-msg"></div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <label>Lookahead (seconds) <span class="muted" style="font-weight:normal;">(advanced)</span></label>
+      <input type="text" id="tw-lookahead-seconds" style="width:70px;">
+      <p class="muted" style="margin-top:4px;">How many seconds before a message is due to play the daemon starts rendering it with Piper, so playback is instant at the scheduled moment instead of waiting on TTS. Raise this for more safety margin on a slow system, at the cost of the data being computed that many seconds earlier than the real play moment. Default: 5.</p>
+    </div>
+  </div>
+
   <div class="card" id="tw-time-card">
     <h3>Time</h3>
-    <label>Time Format</label>
-    <select id="tw-time-format" style="width:220px;">
-      <option value="12">12-hour (with AM/PM)</option>
-      <option value="24">24-hour</option>
-    </select>
+    <div class="field-row">
+      <div>
+        <label>Time Format</label>
+        <select id="tw-time-format" style="width:220px;">
+          <option value="12">12-hour (with AM/PM)</option>
+          <option value="24">24-hour</option>
+        </select>
+      </div>
+      <div id="tw-oclock-field" style="max-width:260px;">
+        <label>Top of the hour</label>
+        <select id="tw-use-oclock" style="width:180px;">
+          <option value="false">"Three PM"</option>
+          <option value="true">"Three O'Clock PM"</option>
+        </select>
+        <p class="muted" style="margin-top:4px; margin-bottom:0;">Only changes exact-hour times (e.g. 3:00) - no effect any other minute. 12-hour format only; 24-hour always says "sixteen hundred hours" at the top of the hour.</p>
+      </div>
+      <div id="tw-minutezero-field" style="max-width:260px;">
+        <label>Minute pronunciation</label>
+        <select id="tw-minute-zero-word" style="width:180px;">
+          <option value="oh">"Four Oh Six"</option>
+          <option value="zero">"Four Zero Six"</option>
+        </select>
+        <p class="muted" style="margin-top:4px; margin-bottom:0;">How a single-digit minute (e.g. :06) is spoken. Applies to both 12- and 24-hour format. Custom Templates mode only - Recordings mode always says "Oh" (no "Zero" recording exists).</p>
+      </div>
+    </div>
   </div>
 
   <div class="card" id="tw-weather-card">
@@ -510,7 +643,7 @@
     <div class="field-row">
       <div>
         <label>Weather Provider</label>
-        <select id="tw-provider" style="width:340px;">
+        <select id="tw-provider" style="width:440px;">
           <option value="auto">Auto (METAR for airport codes, Open-Meteo otherwise)</option>
           <option value="metar">NOAA METAR (ICAO airport codes only)</option>
           <option value="openmeteo">Open-Meteo (free, no key, any location)</option>
@@ -535,7 +668,7 @@
       <div class="field-row">
         <div>
           <label>Tempest Personal Access Token</label>
-          <input type="text" id="tw-tempest-token" style="width:280px;" placeholder="tempest.earth/account">
+          <input type="text" id="tw-tempest-token" style="width:380px;" placeholder="tempest.earth/account">
         </div>
         <div>
           <label>Tempest Station ID (optional)</label>
@@ -544,26 +677,28 @@
       </div>
     </div>
 
-    <div class="toggle-row" style="margin-top:14px;">
-      <label class="toggle-switch">
-        <input type="checkbox" id="tw-announce-condition">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">Announce conditions (clear, rain, cloudy, ...)</span>
-    </div>
-    <div class="toggle-row">
-      <label class="toggle-switch">
-        <input type="checkbox" id="tw-announce-feels-like">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">Announce feels-like temperature (if available from the provider)</span>
-    </div>
-    <div class="toggle-row">
-      <label class="toggle-switch">
-        <input type="checkbox" id="tw-announce-humidity">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">Announce humidity percentage (if available from the provider)</span>
+    <div id="tw-weather-announce-toggles">
+      <div class="toggle-row" style="margin-top:14px;">
+        <label class="toggle-switch">
+          <input type="checkbox" id="tw-announce-condition">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Announce conditions (clear, rain, cloudy, ...)</span>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle-switch">
+          <input type="checkbox" id="tw-announce-feels-like">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Announce feels-like temperature (if available from the provider)</span>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle-switch">
+          <input type="checkbox" id="tw-announce-humidity">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Announce humidity percentage (if available from the provider)</span>
+      </div>
     </div>
 
     <div id="tw-cache-field" style="margin-top:14px;">
@@ -612,6 +747,11 @@
   <div class="card">
     <button class="btn-primary" id="btn-save-timeweather">Save &amp; Reload</button>
     <button class="btn-play" id="btn-test-timeweather">Test (local playback)</button>
+    <span style="margin-left:16px;">
+      <label for="tw-test-at" style="display:inline; font-size:0.9em;">Preview time (optional)</label>
+      <input type="text" id="tw-test-at" placeholder="HH:MM" style="width:70px; margin-left:6px;">
+    </span>
+    <span class="muted" style="display:block; margin-top:4px; font-size:0.85em;">Leave blank to test with the real current time. Set a time (24-hour, e.g. 15:00) to preview how it'll sound at that moment - handy for checking things like top-of-the-hour phrasing without waiting for the real clock.</span>
     <div class="msg" id="timeweather-msg"></div>
   </div>
 </div>
@@ -630,6 +770,48 @@
   </div>
 </div>
 
+<!-- ══════════════════ NODE ID ══════════════════ -->
+<div class="tab-panel" id="tab-nodeid">
+  <div class="card">
+    <h3>Node ID Generator</h3>
+    <p class="muted">A simple tool for creating a station ID audio file using Piper text-to-speech - pick a voice, type what you want it to say, and generate a standalone audio file. This file isn't played by Herald itself; it's meant to be used with AllStarLink's own built-in station ID feature, which handles the actual timing of when your ID plays (Herald doesn't control that at all - see the setup instructions below). You can come back and generate a new version of this file whenever you'd like to change the voice or wording.</p>
+
+    <div id="nodeid-piper-warning" class="banner-warn" style="display:none;">
+      Piper TTS doesn't appear to be installed. Node ID requires Piper (used elsewhere in Herald for Rotation/Scheduled/Time & Weather TTS) - re-run <code>install.sh</code> to install it.
+    </div>
+
+    <div class="banner-info">
+      <strong>One-time setup, so AllStar knows to use this file:</strong>
+      <br>1. Open your node's <code>rpt.conf</code> and add (or change) this line:
+      <br><code>idrecording = /etc/asterisk/scripts/asl3-herald/node-id/node-id</code>
+      <br>2. Apply the change by running this command once:
+      <br><code>sudo asterisk -rx "module reload app_rpt.so"</code>
+      <br>That's it - you only need to do this once. Any time you generate a new ID below, AllStar will automatically use the updated audio the very next time it IDs, with nothing further to do.
+    </div>
+
+    <div id="nodeid-status" class="muted" style="margin-top:10px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="tts-row">
+      <div class="tts-voice">
+        <label>Voice</label>
+        <select id="nodeid-voice" style="display:block;"></select>
+      </div>
+      <div class="tts-text">
+        <label>ID Text</label>
+        <textarea id="nodeid-text" rows="2" placeholder="e.g. This is N6LKA repeater" style="width:100%;"></textarea>
+      </div>
+    </div>
+
+    <br>
+    <button class="btn-play" id="btn-test-nodeid">Test Playback (local)</button>
+    <button class="btn-primary" id="btn-save-nodeid">Save &amp; Generate ID</button>
+    <div class="msg" id="nodeid-msg"></div>
+    <p class="muted" style="margin-top:8px;">Test Playback renders on the fly and plays it immediately, without saving anything - use it to audition wording and voices. Save &amp; Generate ID overwrites the real file app_rpt reads.</p>
+  </div>
+</div>
+
 <!-- ══════════════════ SETTINGS ══════════════════ -->
 <div class="tab-panel" id="tab-settings">
   <div class="card">
@@ -643,52 +825,16 @@
   </div>
 
   <div class="card">
-    <div style="display:flex; gap:32px; flex-wrap:wrap;">
-      <div style="flex:1 1 280px;">
-        <h3 style="margin-top:0;">General Settings</h3>
-        <label>Node</label>
-        <input type="text" id="set-node" style="width: 200px;">
+    <h3 style="margin-top:0;">General Settings</h3>
+    <label>Node</label>
+    <input type="text" id="set-node" style="width: 200px;">
 
-        <label>Min Interval Between Tail Messages (seconds)</label>
-        <input type="text" id="set-min-interval" style="width: 100px;">
-        <span class="muted" style="margin-left: 8px;">e.g. 300 = 5 min, 600 = 10 min, 900 = 15 min</span>
-
-        <div class="toggle-row">
-          <span class="toggle-label">RF activation only</span>
-          <label class="toggle-switch">
-            <input type="checkbox" id="set-network-keyup-trigger">
-            <span class="toggle-slider"></span>
-          </label>
-          <span class="toggle-label">RF and Network activation</span>
-        </div>
-        <p class="muted" style="margin-top: 6px; margin-bottom: 0;">Off: tail messages play after a local RF unkey only.<br>On: tail messages also play after a connected AllStar node unkeys.</p>
-
-        <div class="toggle-row" style="margin-top: 16px;">
-          <label class="toggle-switch">
-            <input type="checkbox" id="set-debug">
-            <span class="toggle-slider"></span>
-          </label>
-          <span class="toggle-label">Enable debug logging</span>
-        </div>
-      </div>
-
-      <div style="flex:1 1 240px;">
-        <h3 style="margin-top:0;">SkywarnPlus</h3>
-        <div class="toggle-row" style="margin-top: 8px;">
-          <label class="toggle-switch">
-            <input type="checkbox" id="set-swp-enable">
-            <span class="toggle-slider"></span>
-          </label>
-          <span class="toggle-label">Enable SkywarnPlus WX tail integration</span>
-        </div>
-
-        <label>WX Tail File Path</label>
-        <input type="text" id="set-swp-wxfile" style="width: 100%;">
-
-        <label>Silence Threshold (bytes)</label>
-        <input type="text" id="set-swp-threshold" style="width: 100px;">
-        <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;">When enabled, active WX alerts take priority over tail message rotation. Herald alternates between the WX alert and your normal rotation — the alert plays first, then one rotation message, then the alert again. A new or updated alert file always plays immediately on the next unkey. When no alert is active, normal rotation resumes. SkywarnPlus messages do not affect the cron-scheduled announcement timing.</p>
-      </div>
+    <div class="toggle-row" style="margin-top: 16px;">
+      <label class="toggle-switch">
+        <input type="checkbox" id="set-debug">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Enable debug logging</span>
     </div>
 
     <br>

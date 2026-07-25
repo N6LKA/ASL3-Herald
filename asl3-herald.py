@@ -15,6 +15,7 @@ import time
 import glob
 import json
 import uuid
+import random
 import signal
 import socket
 import argparse
@@ -23,7 +24,7 @@ import traceback
 import configparser
 import urllib.request
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 try:
@@ -39,6 +40,17 @@ CONF_FILE    = os.path.join(INSTALL_DIR, "asl3-herald.conf")
 STATE_FILE   = os.path.join(INSTALL_DIR, "asl3-herald.state")
 DISABLE_FLAG = os.path.join(INSTALL_DIR, "asl3-herald-disabled")
 ANNOUNCE_DIR = os.path.join(INSTALL_DIR, "announcements")
+
+# Node ID: a single Piper-generated file, deliberately kept in its own
+# directory rather than ANNOUNCE_DIR - Rotation/Scheduled's own file
+# management (remove/reorder/health-check) walks ANNOUNCE_DIR by convention,
+# and this file must never be at risk of being touched by any of that.
+# app_rpt's own idtime/politeid timer is what actually plays it (via
+# `idrecording =` in rpt.conf, set up manually by the user) - Herald only
+# ever controls its *content*, never when it plays.
+NODE_ID_DIR      = os.path.join(INSTALL_DIR, "node-id")
+NODE_ID_FILE     = os.path.join(NODE_ID_DIR, "node-id.wav")
+NODE_ID_TEST_FILE = "/run/asl3-herald/node-id-test.wav"
 
 # Pre-recorded sound snippets (digits, greetings, condition words) shared with
 # Time-Weather-Announce and other ASL3 programs — installed by install.sh.
@@ -63,6 +75,22 @@ TW_TEMP_OUTDIR  = "/run/asl3-herald/timeweather-tmp"
 SWP_WEATHER_FILE = "/tmp/SkywarnPlus/swp-data.json"
 DEFAULT_TW_CRON = "0 * * * *"
 DEFAULT_TW_WEATHER_CACHE_MIN = 10
+DEFAULT_TW_MODE = "recordings"
+DEFAULT_TW_LOOKAHEAD_SECONDS = 5
+
+# Template mode (Piper-rendered custom messages) — same Piper install used by
+# Rotation/Scheduled TTS (see generate_tts_file() in the `herald` bash CLI).
+# Called directly here rather than through the bash CLI/sudo, since the
+# daemon's own lookahead pre-render (see timeweather_template_tick()) has to
+# run from inside the long-running Python process, not a one-off subprocess.
+PIPER_BIN = "/opt/piper/bin/piper/piper"
+PIPER_VOICE_DIR = "/opt/piper/voices"
+DEFAULT_PIPER_VOICE = "en_US-amy-medium"
+TW_TEMPLATE_TAGS = ("smart_greeting", "time", "conditions", "temperature", "feels_like", "humidity", "callsign")
+# How long past a message's target play time to keep waiting on a still-
+# in-progress Piper render before giving up on that occurrence entirely -
+# mirrors the same "never wedge forever" philosophy as MAX_BUSY_SECONDS.
+TW_TEMPLATE_RENDER_GRACE_SECONDS = 20.0
 
 # On-demand test-play request/result files, used only by the web UI's Test
 # button. It asks the already-running daemon to do the test-play itself
@@ -111,6 +139,19 @@ POLL_INTERVAL = 0.5
 _ami_rx_keyed   = False  # RPT_RXKEYED from XStat (local RF receiving)
 _ami_conn_keyed = False  # any Conn PTT=1 from SawStat (network audio active)
 _ami_up         = False  # True when AMI is available and last poll succeeded
+
+# Time & Weather Template mode: in-flight lookahead pre-render, if any (see
+# timeweather_template_tick()). A live Popen handle can't be persisted to
+# state.json, so this is module-level and simply lost on a daemon restart -
+# harmless, since the next occurrence's lookahead window just starts a fresh
+# render.
+_tw_template_render = None
+# Cached "next occurrence" datetime, so the (brute-force) cron search in
+# next_cron_occurrence() only runs once per occurrence instead of on every
+# 0.5s poll tick while waiting for a lookahead window to open - matters most
+# for infrequent schedules (e.g. daily/monthly), where the search itself
+# scans up to 2 days of minutes.
+_tw_template_next_occ = None
 
 # ── AMI connection ────────────────────────────────────────────────────────────
 
@@ -328,6 +369,7 @@ def load_state():
         "timeweather_busy_until": 0.0,
         "timeweather_weather_cache": None,
         "timeweather_tempest_station": None,
+        "timeweather_template_last_id": None,
     }
     try:
         if os.path.exists(STATE_FILE):
@@ -465,6 +507,23 @@ def cron_matches(expr, now):
         cron_field_matches(cron_mon,  now.month)  and
         cron_field_matches(cron_dow,  dow_val)
     )
+
+def next_cron_occurrence(expr, after_dt, max_minutes=2880):
+    """First minute strictly after `after_dt` (truncated to the minute) that
+    `expr` matches - a brute-force minute-by-minute search, capped at
+    max_minutes (default 2 days) so a pathological/unmatchable expression
+    can't loop forever. Returns None if nothing matches within the cap.
+
+    Used only by Template mode's lookahead pre-render (timeweather_template_
+    tick()) to know how far ahead the next occurrence is; Recordings mode
+    doesn't need this - it only ever checks "does *this* minute match"
+    reactively via cron_matches()."""
+    candidate = after_dt.replace(second=0, microsecond=0) + timedelta(minutes=1)
+    for _ in range(max_minutes):
+        if cron_matches(expr, candidate):
+            return candidate
+        candidate += timedelta(minutes=1)
+    return None
 
 _DAY_TO_DOW = {
     "sunday": 0, "monday": 1, "tuesday": 2, "wednesday": 3,
@@ -1089,8 +1148,10 @@ def cleanup_old_timeweather_files(current_out_path, now):
     MAX_BUSY_SECONDS - a full directory sweep rather than tracking a single
     "previous file" pointer, so nothing can be orphaned forever if several
     occurrences happen close together (e.g. a human re-testing a few times
-    within the safety window)."""
-    pattern = os.path.join(TW_TEMP_OUTDIR, "asl3-herald-timeweather-*.gsm")
+    within the safety window). Matches both Recordings mode's .gsm output and
+    Template mode's .wav output - TW_TEMP_OUTDIR is dedicated solely to these
+    files either way."""
+    pattern = os.path.join(TW_TEMP_OUTDIR, "asl3-herald-timeweather-*.*")
     try:
         candidates = glob.glob(pattern)
     except OSError:
@@ -1104,6 +1165,23 @@ def cleanup_old_timeweather_files(current_out_path, now):
                 os.remove(path)
         except OSError as e:
             log_debug(f"Time & Weather: could not remove old audio file {path}: {e}")
+
+def ensure_tw_temp_outdir():
+    # 0o1777 (world-writable + sticky bit, same as /tmp itself): this
+    # directory is written by whichever process plays Time & Weather, which
+    # can be root (the daemon's own scheduled occurrences, or a web-UI-
+    # triggered test) OR the unprivileged `asterisk` user (a DTMF-triggered
+    # play-timeweather call - see cmd_play_timeweather in the herald script,
+    # deliberately not root-gated). Only the process that first creates the
+    # directory after each boot can chmod it (you can't chmod something you
+    # don't own) - every other invocation hits PermissionError here and
+    # that's fine to ignore, since the directory is already correctly
+    # permissioned from whoever created it first.
+    os.makedirs(TW_TEMP_OUTDIR, exist_ok=True)
+    try:
+        os.chmod(TW_TEMP_OUTDIR, 0o1777)
+    except OSError as e:
+        log_debug(f"Time & Weather: could not chmod {TW_TEMP_OUTDIR} (already set by another user, fine): {e}")
 
 def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
     """Builds the announcement WAV/GSM file. Returns True on success.
@@ -1125,6 +1203,7 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
     announce_time = tw_cfg.get("AnnounceTime", True)
     time_format = str(tw_cfg.get("TimeFormat", "12"))
     smart_greeting = tw_cfg.get("SmartGreeting", True)
+    use_oclock = tw_cfg.get("UseOclock", False)
     content_added = False
 
     if smart_greeting:
@@ -1156,17 +1235,23 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
         hour12 = hour - 12 if hour > 12 else (12 if hour == 0 else hour)
         files.append(os.path.join(TW_SOUND_BASE, "the-time-is.gsm"))
         files.append(os.path.join(TW_SOUND_BASE, "digits", f"{hour12}.gsm"))
-        if minute != 0:
-            if minute < 10:
-                files.append(os.path.join(TW_SOUND_BASE, "digits", "oh.gsm"))
-                files.append(os.path.join(TW_SOUND_BASE, "digits", f"{minute}.gsm"))
-            elif minute < 20:
-                files.append(os.path.join(TW_SOUND_BASE, "digits", f"{minute}.gsm"))
-            else:
-                tens, ones = (minute // 10) * 10, minute % 10
-                files.append(os.path.join(TW_SOUND_BASE, "digits", f"{tens}.gsm"))
-                if ones > 0:
-                    files.append(os.path.join(TW_SOUND_BASE, "digits", f"{ones}.gsm"))
+        if minute == 0:
+            # Off by default - matches how this has always sounded until now
+            # (bare "Three PM"). Time-Weather-Announce's original saytime.pl
+            # supported both and defaulted to leaving it out; UseOclock is
+            # the same idea, just a live toggle instead of commented-out code.
+            if use_oclock:
+                files.append(os.path.join(TW_SOUND_BASE, "digits", "oclock.gsm"))
+        elif minute < 10:
+            files.append(os.path.join(TW_SOUND_BASE, "digits", "oh.gsm"))
+            files.append(os.path.join(TW_SOUND_BASE, "digits", f"{minute}.gsm"))
+        elif minute < 20:
+            files.append(os.path.join(TW_SOUND_BASE, "digits", f"{minute}.gsm"))
+        else:
+            tens, ones = (minute // 10) * 10, minute % 10
+            files.append(os.path.join(TW_SOUND_BASE, "digits", f"{tens}.gsm"))
+            if ones > 0:
+                files.append(os.path.join(TW_SOUND_BASE, "digits", f"{ones}.gsm"))
         files.append(os.path.join(TW_SOUND_BASE, "digits", "a-m.gsm" if ampm == "AM" else "p-m.gsm"))
 
     wcfg = tw_cfg.get("Weather", {}) or {}
@@ -1226,22 +1311,7 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
         return False
 
     try:
-        out_dir = os.path.dirname(out_path)
-        os.makedirs(out_dir, exist_ok=True)
-        # 0o1777 (world-writable + sticky bit, same as /tmp itself): this
-        # directory is written by whichever process plays Time & Weather,
-        # which can be root (the daemon's own scheduled occurrences, or a
-        # web-UI-triggered test) OR the unprivileged `asterisk` user (a DTMF-
-        # triggered play-timeweather call - see cmd_play_timeweather in the
-        # herald script, deliberately not root-gated). Only the process that
-        # first creates the directory after each boot can chmod it (you can't
-        # chmod something you don't own) - every other invocation hits
-        # PermissionError here and that's fine to ignore, since the directory
-        # is already correctly permissioned from whoever created it first.
-        try:
-            os.chmod(out_dir, 0o1777)
-        except OSError as e:
-            log_debug(f"Time & Weather: could not chmod {out_dir} (already set by another user, fine): {e}")
+        ensure_tw_temp_outdir()
         with open(out_path, "wb") as out:
             for f in files:
                 with open(f, "rb") as src:
@@ -1258,6 +1328,196 @@ def build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=None):
     except Exception as e:
         log_error(f"Time & Weather: failed writing {out_path}: {e}")
         return False
+
+# ── Time & Weather: Template mode (Piper-rendered custom messages) ────────────
+
+def tw_smart_greeting_text(hour):
+    if hour < 12:
+        return "Good morning"
+    elif hour < 18:
+        return "Good afternoon"
+    else:
+        return "Good evening"
+
+def tw_spoken_time(now_dt, time_format, use_oclock=False, minute_zero_word="oh"):
+    """`minute_zero_word` ("oh" or "zero") controls how a single-digit
+    minute is spoken (e.g. "four oh six" vs "four zero six") - spelling it
+    out explicitly rather than relying on Piper to read zero-padded colon
+    notation like "4:06" correctly (confirmed live: it reads that as "four
+    zero six" digit-by-digit, not the intended wording either way)."""
+    hour, minute = now_dt.hour, now_dt.minute
+    zero_word = "zero" if str(minute_zero_word) == "zero" else "oh"
+
+    if str(time_format) == "24":
+        # Matches the original Time-Weather-Announce's saytime.pl exactly at
+        # the top of the hour ("sixteen hundred hours") - unlike 12-hour,
+        # 24-hour has no AM/PM to make a bare hour sound like a complete
+        # phrase, so this one isn't a toggle.
+        if minute == 0:
+            return f"{hour} hundred hours"
+        if minute < 10:
+            return f"{hour} {zero_word} {minute}"
+        return f"{hour} {minute}"
+
+    hour12 = hour - 12 if hour > 12 else (12 if hour == 0 else hour)
+    ampm = "AM" if hour < 12 else "PM"
+    if minute == 0:
+        return f"{hour12} o'clock {ampm}" if use_oclock else f"{hour12} {ampm}"
+    if minute < 10:
+        return f"{hour12} {zero_word} {minute} {ampm}"
+    return f"{hour12} {minute} {ampm}"
+
+def substitute_template_tags(text, tw_cfg, weather, now_dt):
+    """Replaces {tag} placeholders with live data for Template mode. A tag
+    with no data available (weather unavailable/disabled, or Callsign left
+    blank) substitutes to empty string rather than failing the whole
+    message - same "announce what we can" philosophy Recordings mode
+    already uses. Returns (resolved_text, warnings)."""
+    warnings = []
+    wcfg = tw_cfg.get("Weather", {}) or {}
+    unit_c = str(wcfg.get("TemperatureUnit", "F")).upper() == "C"
+    unit_word = "degrees Celsius" if unit_c else "degrees"
+
+    def _convert(f_val):
+        return round((f_val - 32) * 5 / 9) if unit_c else round(f_val)
+
+    values = {
+        "smart_greeting": tw_smart_greeting_text(now_dt.hour),
+        "time": tw_spoken_time(now_dt, tw_cfg.get("TimeFormat", "12"), tw_cfg.get("UseOclock", False),
+                               tw_cfg.get("MinuteZeroWord", "oh")),
+        "callsign": (tw_cfg.get("Templates", {}) or {}).get("Callsign", "").strip(),
+    }
+
+    if weather:
+        if weather.get("condition"):
+            values["conditions"] = weather["condition"]
+        if weather.get("temp_f") is not None:
+            values["temperature"] = f"{_convert(weather['temp_f'])} {unit_word}"
+        if weather.get("feels_like_f") is not None:
+            values["feels_like"] = f"{_convert(weather['feels_like_f'])} {unit_word}"
+        if weather.get("humidity") is not None:
+            values["humidity"] = f"{weather['humidity']} percent"
+
+    def _sub(m):
+        tag = m.group(1)
+        if tag not in TW_TEMPLATE_TAGS:
+            return m.group(0)
+        if tag in values:
+            return values[tag]
+        warnings.append(f"No data available for {{{tag}}} - left blank")
+        return ""
+
+    resolved = re.sub(r"\{(\w+)\}", _sub, text)
+    return re.sub(r"\s+", " ", resolved).strip(), warnings
+
+def normalize_timeweather_messages(messages):
+    out = []
+    for m in messages or []:
+        if not isinstance(m, dict):
+            continue
+        out.append({
+            "Id": m.get("Id") or uuid.uuid4().hex[:8],
+            "Text": m.get("Text", ""),
+            "Voice": m.get("Voice") or DEFAULT_PIPER_VOICE,
+            "Enabled": m.get("Enabled", True),
+        })
+    return out
+
+def pick_template_message(tw_cfg, state, message_id=None):
+    """Picks one message. If message_id is given (the web UI's per-message
+    Test button - see cmd_request_test_timeweather), returns that specific
+    message regardless of its Enabled flag - a manual test/preview should
+    work even for a currently-disabled message - or None if no message with
+    that id is configured anymore. Otherwise picks at random from the
+    Enabled messages only, never repeating the immediately-previous one if
+    more than one is configured. Returns None if none are configured/enabled."""
+    messages = normalize_timeweather_messages((tw_cfg.get("Templates", {}) or {}).get("Messages", []))
+    if message_id is not None:
+        return next((m for m in messages if m["Id"] == message_id), None)
+    messages = [m for m in messages if m["Enabled"]]
+    if not messages:
+        return None
+    if len(messages) == 1:
+        return messages[0]
+    last_id = state.get("timeweather_template_last_id")
+    candidates = [m for m in messages if m["Id"] != last_id] or messages
+    return random.choice(candidates)
+
+def start_piper_render_async(text, voice, out_wav_path):
+    """Launches Piper as a background process and returns immediately - the
+    caller polls the returned record's proc.poll() and calls
+    finish_piper_render_async() once it exits. This is what lets the
+    lookahead pre-render happen without stalling the daemon's main loop
+    (which also does AMI polling for unkey detection - see
+    timeweather_template_tick()). Returns None if Piper isn't installed."""
+    if not os.path.isfile(PIPER_BIN) or not os.access(PIPER_BIN, os.X_OK):
+        log_error(f"Time & Weather: Piper binary not found at {PIPER_BIN} - Template mode requires Piper (see install.sh)")
+        return None
+    model = os.path.join(PIPER_VOICE_DIR, f"{voice or DEFAULT_PIPER_VOICE}.onnx")
+    if not os.path.exists(model):
+        log_warn(f"Time & Weather: voice '{voice}' not found, using default ({DEFAULT_PIPER_VOICE})")
+        model = os.path.join(PIPER_VOICE_DIR, f"{DEFAULT_PIPER_VOICE}.onnx")
+
+    ensure_tw_temp_outdir()
+    tmp_wav = out_wav_path + ".raw.wav"
+    env = dict(os.environ)
+    env["LD_LIBRARY_PATH"] = "/opt/piper/bin:" + env.get("LD_LIBRARY_PATH", "")
+    try:
+        proc = subprocess.Popen(
+            [PIPER_BIN, "--model", model, "--output_file", tmp_wav],
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env,
+        )
+        proc.stdin.write(text.encode())
+        proc.stdin.close()
+    except OSError as e:
+        log_error(f"Time & Weather: failed to launch Piper: {e}")
+        return None
+    return {"proc": proc, "tmp_wav": tmp_wav, "out_wav_path": out_wav_path, "started": time.time()}
+
+def finish_piper_render_async(record):
+    """Call once record['proc'].poll() is not None - runs the (fast, sub-
+    second) sox conversion to 8kHz mono 16-bit, same format used everywhere
+    else in Herald. Returns True/False; always cleans up Piper's raw output."""
+    proc = record["proc"]
+    ok = False
+    try:
+        if proc.returncode == 0 and os.path.exists(record["tmp_wav"]) and os.path.getsize(record["tmp_wav"]) > 0:
+            r = subprocess.run(
+                ["sox", record["tmp_wav"], "-r", "8000", "-c", "1", "-b", "16", "-t", "wav", record["out_wav_path"]],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15,
+            )
+            ok = (r.returncode == 0 and os.path.exists(record["out_wav_path"])
+                  and os.path.getsize(record["out_wav_path"]) > 0)
+    except Exception as e:
+        log_error(f"Time & Weather: template render finish failed: {e}")
+    finally:
+        try:
+            os.remove(record["tmp_wav"])
+        except OSError:
+            pass
+    if ok:
+        try:
+            os.chmod(record["out_wav_path"], 0o644)
+        except OSError as e:
+            log_debug(f"Time & Weather: could not chmod {record['out_wav_path']}: {e}")
+    return ok
+
+def render_piper_wav_blocking(text, voice, out_wav_path, timeout=30):
+    """Synchronous render for the DTMF/Test paths (herald play-timeweather /
+    test-timeweather / the web UI's Test button) - these are already one-off
+    invocations outside the daemon's shared poll loop, so blocking here is
+    fine (see timeweather_template_tick() for why the *scheduled* path
+    avoids this)."""
+    record = start_piper_render_async(text, voice, out_wav_path)
+    if record is None:
+        return False
+    try:
+        record["proc"].wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        record["proc"].kill()
+        log_error("Time & Weather: Piper render timed out")
+        return False
+    return finish_piper_render_async(record)
 
 def should_play_timeweather(tw_cfg, state, node, now_dt):
     if not tw_cfg.get("Enable", False):
@@ -1286,7 +1546,7 @@ def should_play_timeweather(tw_cfg, state, node, now_dt):
 
     return True
 
-def play_timeweather(tw_cfg, state, node, now, now_dt, mode="scheduled", warnings=None):
+def play_timeweather(tw_cfg, state, node, now, now_dt, mode="scheduled", warnings=None, prerendered=None, message_id=None):
     """mode controls both playback-history labeling and which scheduling
     state gets touched:
 
@@ -1307,50 +1567,86 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, mode="scheduled", warning
                     can't interfere with real playback timing at all.
 
     `warnings`, if passed, collects human-readable problem descriptions for
-    on-demand callers to surface (see build_timeweather_audio)."""
+    on-demand callers to surface (see build_timeweather_audio).
+
+    `prerendered`, if given, is a dict {"out_path", "warnings"} for a file
+    Template mode's lookahead pre-render already finished building (see
+    timeweather_template_tick()) - skips the weather fetch and render step
+    entirely, since both already happened ahead of this moment. Only ever
+    passed by the "scheduled" path; DTMF/Test always render synchronously
+    right here instead (see the Mode: template branch below).
+
+    `message_id`, if given, forces that specific Template mode message
+    instead of the usual random pick - used by the web UI's per-message Test
+    button (see cmd_request_test_timeweather / pick_template_message).
+    Ignored outside Template mode; only meaningful for mode="test"."""
     if warnings is None:
         warnings = []
-    wcfg = tw_cfg.get("Weather", {}) or {}
-    weather = None
-    if wcfg.get("Enable", True):
-        tempest_cfg = wcfg.get("Tempest", {}) or {}
-        weather = fetch_weather_cached(
-            state, wcfg.get("Provider", "auto"), wcfg.get("Location", ""),
-            tempest_cfg.get("Token", ""), tempest_cfg.get("StationID", ""),
-            wcfg.get("CacheMaxAgeMin", DEFAULT_TW_WEATHER_CACHE_MIN),
-        )
-        if not weather:
-            log_warn("Time & Weather: no weather data available, announcing time only")
-            warnings.append("No weather data available - announced time only")
+    render_mode = tw_cfg.get("Mode", DEFAULT_TW_MODE)
 
-    # A unique filename per occurrence (rather than one fixed name reused
-    # every time) - confirmed live that reusing a fixed filename could play
-    # stale content (an announcement several minutes old played with the
-    # wrong time), most likely some layer between here and the audio
-    # actually reaching the repeater caching by filename. Every other Herald
-    # feature (Rotation/Scheduled) already avoids this by using a distinct,
-    # stable filename per entry; Time & Weather's content changes every
-    # single occurrence, so it needs a fresh name every time instead.
-    out_path = os.path.join(TW_TEMP_OUTDIR, f"asl3-herald-timeweather-{int(now * 1000)}.gsm")
+    if prerendered is not None:
+        out_path = prerendered["out_path"]
+        warnings.extend(prerendered.get("warnings", []))
+        cleanup_old_timeweather_files(out_path, now)
+    else:
+        wcfg = tw_cfg.get("Weather", {}) or {}
+        weather = None
+        if wcfg.get("Enable", True):
+            tempest_cfg = wcfg.get("Tempest", {}) or {}
+            weather = fetch_weather_cached(
+                state, wcfg.get("Provider", "auto"), wcfg.get("Location", ""),
+                tempest_cfg.get("Token", ""), tempest_cfg.get("StationID", ""),
+                wcfg.get("CacheMaxAgeMin", DEFAULT_TW_WEATHER_CACHE_MIN),
+            )
+            if not weather:
+                log_warn("Time & Weather: no weather data available, announcing time only")
+                warnings.append("No weather data available - announced time only")
 
-    # Best-effort cleanup of every OLD occurrence's file (a full directory
-    # sweep, not just "the one previous path"). A single-pointer tracker
-    # (remembering only the last file written) can orphan earlier files
-    # forever: if a human re-tests within the safety window below, the
-    # pointer just moves to the newest file and whatever it was pointing at
-    # is forgotten, with nothing left to ever clean it up. Sweeping the whole
-    # directory guarantees nothing accumulates indefinitely regardless of how
-    # many rapid clicks happen in a burst. Only removes files older than
-    # MAX_BUSY_SECONDS - the system's own existing notion of the longest a
-    # single occurrence could plausibly still be playing - for the same
-    # reason a single-pointer delete-on-next-call was unsafe (see previous
-    # commits): issuing "rpt localplay" and Asterisk actually opening the
-    # file are not simultaneous, so deleting too eagerly can pull the file
-    # out from under Asterisk before it ever opens it.
-    cleanup_old_timeweather_files(out_path, now)
+        # A unique filename per occurrence (rather than one fixed name reused
+        # every time) - confirmed live that reusing a fixed filename could play
+        # stale content (an announcement several minutes old played with the
+        # wrong time), most likely some layer between here and the audio
+        # actually reaching the repeater caching by filename. Every other Herald
+        # feature (Rotation/Scheduled) already avoids this by using a distinct,
+        # stable filename per entry; Time & Weather's content changes every
+        # single occurrence, so it needs a fresh name every time instead.
+        ext = "wav" if render_mode == "template" else "gsm"
+        out_path = os.path.join(TW_TEMP_OUTDIR, f"asl3-herald-timeweather-{int(now * 1000)}.{ext}")
 
-    if not build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=warnings):
-        return False
+        # Best-effort cleanup of every OLD occurrence's file (a full directory
+        # sweep, not just "the one previous path"). A single-pointer tracker
+        # (remembering only the last file written) can orphan earlier files
+        # forever: if a human re-tests within the safety window below, the
+        # pointer just moves to the newest file and whatever it was pointing at
+        # is forgotten, with nothing left to ever clean it up. Sweeping the whole
+        # directory guarantees nothing accumulates indefinitely regardless of how
+        # many rapid clicks happen in a burst. Only removes files older than
+        # MAX_BUSY_SECONDS - the system's own existing notion of the longest a
+        # single occurrence could plausibly still be playing - for the same
+        # reason a single-pointer delete-on-next-call was unsafe (see previous
+        # commits): issuing "rpt localplay" and Asterisk actually opening the
+        # file are not simultaneous, so deleting too eagerly can pull the file
+        # out from under Asterisk before it ever opens it.
+        cleanup_old_timeweather_files(out_path, now)
+
+        if render_mode == "template":
+            message = pick_template_message(tw_cfg, state, message_id=message_id)
+            if message is None:
+                if message_id is not None:
+                    warnings.append("Selected message no longer exists")
+                    log_warn(f"Time & Weather: test-requested message id {message_id!r} not found")
+                else:
+                    warnings.append("No enabled Template messages configured")
+                    log_warn("Time & Weather: Template mode enabled but no enabled messages configured")
+                return False
+            resolved_text, tag_warnings = substitute_template_tags(message["Text"], tw_cfg, weather, now_dt)
+            warnings.extend(tag_warnings)
+            if not render_piper_wav_blocking(resolved_text, message["Voice"], out_path):
+                warnings.append("Piper TTS render failed - check Piper is installed")
+                return False
+            state["timeweather_template_last_id"] = message["Id"]
+        elif not build_timeweather_audio(tw_cfg, weather, now_dt, out_path, warnings=warnings):
+            return False
 
     entry_type = {"scheduled": "timeweather", "dtmf": "dtmf-timeweather", "test": "test-timeweather"}[mode]
     label = {
@@ -1375,10 +1671,17 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, mode="scheduled", warning
     fresh_state = load_state()
     fresh_state["timeweather_weather_cache"] = state.get("timeweather_weather_cache")
     fresh_state["timeweather_tempest_station"] = state.get("timeweather_tempest_station")
+    fresh_state["timeweather_template_last_id"] = state.get("timeweather_template_last_id")
     log_playback(fresh_state, entry_type, label, out_path, node)
 
     if mode in ("scheduled", "dtmf"):
-        duration = tw_gsm_duration(out_path) or audio_duration(out_path) or DEFAULT_ANNOUNCEMENT_DURATION
+        # tw_gsm_duration() only makes sense for Recordings mode's raw
+        # headerless .gsm output - Template mode's Piper/sox output is a
+        # normal .wav file, which soxi (audio_duration) reads fine.
+        if render_mode == "template":
+            duration = audio_duration(out_path) or DEFAULT_ANNOUNCEMENT_DURATION
+        else:
+            duration = tw_gsm_duration(out_path) or audio_duration(out_path) or DEFAULT_ANNOUNCEMENT_DURATION
         fresh_state["timeweather_busy_until"] = now + min(duration, MAX_BUSY_SECONDS) + BUSY_GRACE_SECONDS
     if mode == "scheduled":
         minute_key = now_dt.strftime("%Y-%m-%d %H:%M")
@@ -1390,6 +1693,149 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, mode="scheduled", warning
     state.clear()
     state.update(fresh_state)
     return True
+
+def timeweather_template_tick(tw_cfg, state, node, now, now_dt):
+    """Template mode's per-poll driver, called every main-loop iteration
+    instead of should_play_timeweather()/play_timeweather() when
+    TimeWeather.Mode is "template". Two independent jobs, both non-blocking
+    to the caller:
+
+      1. Start/poll a lookahead pre-render of the next occurrence, so
+         Piper's TTS rendering (which can take real seconds) never happens
+         at the exact scheduled moment - see start_piper_render_async()'s
+         docstring for why that matters (this same loop also does AMI
+         polling for unkey detection, shared with every other feature).
+      2. Once a render is ready AND its target minute has arrived, play it -
+         reusing the same "wait for unkey" (timeweather_pending) and dedup
+         (timeweather_played) state fields Recordings mode's
+         should_play_timeweather() uses, inlined here since Template mode
+         already knows its exact target time from the pre-render instead of
+         reactively checking cron_matches() each tick."""
+    global _tw_template_render, _tw_template_next_occ
+
+    if not tw_cfg.get("Enable", False):
+        _tw_template_render = None
+        _tw_template_next_occ = None
+        return
+
+    tpl_cfg = tw_cfg.get("Templates", {}) or {}
+    lookahead = tpl_cfg.get("LookaheadSeconds", DEFAULT_TW_LOOKAHEAD_SECONDS)
+    cron_expr = (tw_cfg.get("Schedule", {}) or {}).get("Cron", DEFAULT_TW_CRON)
+
+    # ── Advance an in-flight render ─────────────────────────────────────────
+    if _tw_template_render is not None and not _tw_template_render.get("polled_done"):
+        if _tw_template_render["proc"].poll() is not None:
+            ok = finish_piper_render_async(_tw_template_render)
+            _tw_template_render["polled_done"] = True
+            _tw_template_render["ok"] = ok
+            if not ok:
+                log_warn("Time & Weather: template render failed - this occurrence will be skipped")
+        elif now - _tw_template_render["started"] > lookahead + TW_TEMPLATE_RENDER_GRACE_SECONDS:
+            log_error("Time & Weather: template render taking too long - giving up on this occurrence")
+            try:
+                _tw_template_render["proc"].kill()
+            except OSError:
+                pass
+            _tw_template_render["polled_done"] = True
+            _tw_template_render["ok"] = False
+
+    # ── Play, once ready and due ─────────────────────────────────────────────
+    if _tw_template_render is not None and _tw_template_render.get("polled_done"):
+        target_minute_key = _tw_template_render["target_minute_key"]
+        due = now_dt.strftime("%Y-%m-%d %H:%M") >= target_minute_key
+        if due:
+            if not _tw_template_render["ok"]:
+                state["timeweather_played"] = target_minute_key
+                state["timeweather_pending"] = False
+                _tw_template_render = None
+            elif node_is_keyed(node):
+                if not state.get("timeweather_pending"):
+                    state["timeweather_pending"] = True
+                    log_info("Time & Weather due but node is keyed - waiting for unkey")
+            else:
+                state["timeweather_pending"] = False
+                play_timeweather(tw_cfg, state, node, now, now_dt, mode="scheduled", prerendered={
+                    "out_path": _tw_template_render["out_wav_path"],
+                    "warnings": _tw_template_render.get("warnings", []),
+                })
+                _tw_template_render = None
+
+    # ── Start a new render, once inside the lookahead window ────────────────
+    if _tw_template_render is None:
+        if _tw_template_next_occ is None:
+            _tw_template_next_occ = next_cron_occurrence(cron_expr, now_dt - timedelta(minutes=1))
+        if _tw_template_next_occ is None:
+            return  # unmatchable cron expression - nothing to schedule
+
+        minute_key = _tw_template_next_occ.strftime("%Y-%m-%d %H:%M")
+        if state.get("timeweather_played") == minute_key:
+            # Already handled (played, or given up on) - clock must have
+            # moved on without a fresh occurrence being computed yet.
+            _tw_template_next_occ = None
+            return
+
+        seconds_until = (_tw_template_next_occ - now_dt).total_seconds()
+        if seconds_until > lookahead:
+            return
+
+        target_occ = _tw_template_next_occ
+        out_path = os.path.join(TW_TEMP_OUTDIR, f"asl3-herald-timeweather-{int(target_occ.timestamp() * 1000)}.wav")
+        cleanup_old_timeweather_files(out_path, now)
+
+        message = pick_template_message(tw_cfg, state)
+        if message is None:
+            log_warn("Time & Weather: Template mode enabled but no enabled messages configured")
+            _tw_template_render = {
+                "polled_done": True, "ok": False, "target_minute_key": minute_key,
+                "out_wav_path": out_path, "warnings": ["No enabled Template messages configured"],
+            }
+            _tw_template_next_occ = None
+            return
+
+        wcfg = tw_cfg.get("Weather", {}) or {}
+        weather = None
+        warnings = []
+        if wcfg.get("Enable", True):
+            tempest_cfg = wcfg.get("Tempest", {}) or {}
+            weather = fetch_weather_cached(
+                state, wcfg.get("Provider", "auto"), wcfg.get("Location", ""),
+                tempest_cfg.get("Token", ""), tempest_cfg.get("StationID", ""),
+                wcfg.get("CacheMaxAgeMin", DEFAULT_TW_WEATHER_CACHE_MIN),
+            )
+            if not weather:
+                warnings.append("No weather data available - announced time only")
+        resolved_text, tag_warnings = substitute_template_tags(message["Text"], tw_cfg, weather, target_occ)
+        warnings.extend(tag_warnings)
+
+        record = start_piper_render_async(resolved_text, message["Voice"], out_path)
+        if record is None:
+            _tw_template_render = {
+                "polled_done": True, "ok": False, "target_minute_key": minute_key,
+                "out_wav_path": out_path, "warnings": warnings,
+            }
+        else:
+            record.update({"polled_done": False, "target_minute_key": minute_key,
+                            "out_wav_path": out_path, "warnings": warnings})
+            state["timeweather_template_last_id"] = message["Id"]
+            _tw_template_render = record
+        _tw_template_next_occ = None
+
+def resolve_test_at(at):
+    """Parses an optional "HH:MM" preview-time override for Test playback
+    (herald test-timeweather --at / the web UI's optional preview field)
+    into a full datetime using today's date. Returns (now_dt, error) -
+    error is None on success. Only ever wired to mode="test" callers below,
+    never to a real scheduled/DTMF play, so it can't be used to spoof real
+    playback timing - it exists purely so testing things like UseOclock or
+    the smart-greeting boundaries doesn't require waiting for the real
+    clock to reach that moment."""
+    if not at:
+        return datetime.now(), None
+    try:
+        hh, mm = at.split(":")
+        return datetime.now().replace(hour=int(hh), minute=int(mm), second=0, microsecond=0), None
+    except (ValueError, AttributeError):
+        return datetime.now(), f"Invalid preview time '{at}' (expected HH:MM) - used the current time instead"
 
 def process_timeweather_test_request(tw_cfg, state, node):
     """Called once per main-loop iteration. If the web UI's Test button has
@@ -1404,11 +1850,15 @@ def process_timeweather_test_request(tw_cfg, state, node):
 
     request_id = None
     requested_at = 0
+    message_id = None
+    at = None
     try:
         with open(TW_TEST_REQUEST_FILE) as f:
             req = json.load(f)
         request_id = req.get("request_id")
         requested_at = req.get("requested_at", 0)
+        message_id = req.get("message_id")
+        at = req.get("at")
     except Exception as e:
         log_warn(f"Time & Weather: could not read test request: {e}")
     try:
@@ -1423,9 +1873,12 @@ def process_timeweather_test_request(tw_cfg, state, node):
         log_debug(f"Time & Weather: discarding stale test request {request_id}")
         return
 
+    now_dt, at_error = resolve_test_at(at)
     warnings = []
-    ok = play_timeweather(tw_cfg, state, node, time.time(), datetime.now(),
-                           mode="test", warnings=warnings)
+    if at_error:
+        warnings.append(at_error)
+    ok = play_timeweather(tw_cfg, state, node, time.time(), now_dt,
+                           mode="test", warnings=warnings, message_id=message_id)
     result = dict(timeweather_test_result_dict(ok, warnings))
     result["request_id"] = request_id
     try:
@@ -1527,6 +1980,11 @@ def timeweather_with_health(tw):
     wcfg["Tempest"] = tempest_cfg
     out["Weather"] = wcfg
     out.setdefault("Schedule", {}).setdefault("Cron", DEFAULT_TW_CRON)
+    tpl = dict(out.get("Templates", {}) or {})
+    tpl["Messages"] = normalize_timeweather_messages(tpl.get("Messages", []))
+    tpl.setdefault("Callsign", "")
+    tpl.setdefault("LookaheadSeconds", DEFAULT_TW_LOOKAHEAD_SECONDS)
+    out["Templates"] = tpl
 
     swp_installed, swp_weather_available = skywarnplus_weather_status()
 
@@ -1544,6 +2002,7 @@ def timeweather_with_health(tw):
         "sound_files_installed": os.path.exists(os.path.join(TW_SOUND_BASE, "the-time-is.gsm")),
         "skywarnplus_installed": swp_installed,
         "skywarnplus_weather_available": swp_weather_available,
+        "piper_installed": os.path.isfile(PIPER_BIN) and os.access(PIPER_BIN, os.X_OK),
     }
     return out
 
@@ -1570,6 +2029,7 @@ def cmd_list_json(config):
         },
         "scheduled": scheduled_with_health(cfg["scheduled"]),
         "timeweather": timeweather_with_health(cfg["timeweather"]),
+        "node_id": node_id_with_health(config),
     }
     print(json.dumps(out, indent=2))
 
@@ -1835,6 +2295,51 @@ def cmd_import_config(args):
     save_config(new_config)
     print(json.dumps({"success": True, "message": "Config imported and saved"}))
 
+# ── Node ID ───────────────────────────────────────────────────────────────────
+# A single Piper-generated recording that app_rpt's own idrecording= plays on
+# its own built-in timer (idtime/politeid) - Herald only ever controls the
+# audio content, never when it plays or how. No scheduling, no daemon
+# involvement at all; both commands are one-off admin actions, same trust
+# level as Rotation/Scheduled's `add`/`play`.
+
+def node_id_with_health(config):
+    nid = dict(config.get("NodeID", {}) or {})
+    nid.setdefault("Text", "")
+    nid.setdefault("Voice", DEFAULT_PIPER_VOICE)
+    nid.setdefault("GeneratedAt", None)
+    nid["_health"] = {
+        "file_exists": os.path.exists(NODE_ID_FILE),
+        "piper_installed": os.path.isfile(PIPER_BIN) and os.access(PIPER_BIN, os.X_OK),
+    }
+    return nid
+
+def cmd_set_node_id(config, args):
+    os.makedirs(NODE_ID_DIR, exist_ok=True)
+    if not render_piper_wav_blocking(args.text, args.voice, NODE_ID_FILE):
+        print(json.dumps({"success": False, "message": "Piper TTS render failed - check Piper is installed"}))
+        return
+    nid = config.setdefault("NodeID", {})
+    nid["Text"] = args.text
+    nid["Voice"] = args.voice or DEFAULT_PIPER_VOICE
+    nid["GeneratedAt"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    save_config(config)
+    print(json.dumps({"success": True, "message": "Node ID generated and saved"}))
+
+def cmd_test_node_id(config, args):
+    """Renders to a throwaway temp file and plays it immediately, without
+    touching the real Node ID file or saved config - lets you audition
+    wording/voice before committing via set-node-id."""
+    node = str(config.get("Node", "")).strip()
+    if not node:
+        print(json.dumps({"success": False, "message": "Node not set in config"}))
+        return
+    os.makedirs(os.path.dirname(NODE_ID_TEST_FILE), exist_ok=True)
+    if not render_piper_wav_blocking(args.text, args.voice, NODE_ID_TEST_FILE):
+        print(json.dumps({"success": False, "message": "Piper TTS render failed - check Piper is installed"}))
+        return
+    play_file(node, NODE_ID_TEST_FILE)
+    print(json.dumps({"success": True, "message": "Playing test Node ID"}))
+
 def cmd_update_settings(config, args):
     if args.node is not None:
         config["Node"] = args.node
@@ -1868,8 +2373,20 @@ def cmd_update_timeweather(config, args):
         tw["TimeFormat"] = args.time_format
     if args.smart_greeting is not None:
         tw["SmartGreeting"] = (args.smart_greeting == "true")
+    if args.use_oclock is not None:
+        tw["UseOclock"] = (args.use_oclock == "true")
+    if args.minute_zero_word is not None:
+        tw["MinuteZeroWord"] = args.minute_zero_word
+    if args.mode is not None:
+        tw["Mode"] = args.mode
     if args.cron is not None:
         tw.setdefault("Schedule", {})["Cron"] = args.cron
+
+    tpl = tw.setdefault("Templates", {})
+    if args.callsign is not None:
+        tpl["Callsign"] = args.callsign
+    if args.lookahead_seconds is not None:
+        tpl["LookaheadSeconds"] = args.lookahead_seconds
 
     w = tw.setdefault("Weather", {})
     if args.weather_enable is not None:
@@ -1898,6 +2415,64 @@ def cmd_update_timeweather(config, args):
     save_config(config)
     print(json.dumps({"success": True, "message": "Time & Weather settings updated"}))
 
+def cmd_add_timeweather_message(config, args):
+    tw = config.setdefault("TimeWeather", {})
+    # Carries the web UI's currently-selected Mode radio along with the
+    # message so it isn't lost if the user picked "Custom Templates" but
+    # hadn't yet clicked "Save Changes" - see herald-ui.js's btn-add-tw-msg
+    # handler and add_timeweather_message.php.
+    if args.mode is not None:
+        tw["Mode"] = args.mode
+    tpl = tw.setdefault("Templates", {})
+    messages = tpl.setdefault("Messages", [])
+    new_id = uuid.uuid4().hex[:8]
+    messages.append({"Id": new_id, "Text": args.text, "Voice": args.voice or DEFAULT_PIPER_VOICE, "Enabled": True})
+    save_config(config)
+    print(json.dumps({"success": True, "message": "Message added", "id": new_id}))
+
+def cmd_edit_timeweather_message(config, args):
+    tw = config.setdefault("TimeWeather", {})
+    if args.mode is not None:
+        tw["Mode"] = args.mode
+    tpl = tw.setdefault("Templates", {})
+    messages = tpl.setdefault("Messages", [])
+    for m in messages:
+        if m.get("Id") == args.id:
+            if args.text is not None:
+                m["Text"] = args.text
+            if args.voice is not None:
+                m["Voice"] = args.voice or DEFAULT_PIPER_VOICE
+            save_config(config)
+            print(json.dumps({"success": True, "message": "Message updated"}))
+            return
+    print(json.dumps({"success": False, "message": f"No message found with id: {args.id}"}))
+
+def cmd_remove_timeweather_message(config, args):
+    tw = config.setdefault("TimeWeather", {})
+    tpl = tw.setdefault("Templates", {})
+    messages = tpl.setdefault("Messages", [])
+    new_messages = [m for m in messages if m.get("Id") != args.id]
+    if len(new_messages) == len(messages):
+        print(json.dumps({"success": False, "message": f"No message found with id: {args.id}"}))
+        return
+    tpl["Messages"] = new_messages
+    save_config(config)
+    print(json.dumps({"success": True, "message": "Message removed"}))
+
+def cmd_toggle_timeweather_message(config, args):
+    tw = config.setdefault("TimeWeather", {})
+    tpl = tw.setdefault("Templates", {})
+    messages = tpl.setdefault("Messages", [])
+    for m in messages:
+        if m.get("Id") == args.id:
+            current = m.get("Enabled", True)
+            m["Enabled"] = not current
+            save_config(config)
+            state = "enabled" if not current else "disabled"
+            print(json.dumps({"success": True, "message": f"Message {state}", "enabled": not current}))
+            return
+    print(json.dumps({"success": False, "message": f"No message found with id: {args.id}"}))
+
 def timeweather_test_result_dict(ok, warnings, mode="test"):
     if ok:
         message = ("Playing Time & Weather Announcements" if mode == "dtmf"
@@ -1909,20 +2484,25 @@ def timeweather_test_result_dict(ok, warnings, mode="test"):
     message += ": " + "; ".join(warnings) if warnings else " - check sound files and weather config"
     return {"success": False, "message": message}
 
-def cmd_test_timeweather(config):
+def cmd_test_timeweather(config, args=None):
     """Manual preview, for troubleshooting from the CLI or the web UI's Test
     button - never touches scheduling state. NOT intended for DTMF; use
     cmd_play_timeweather (herald play-timeweather) for that instead, so a
     real on-demand play logs to Playback History correctly instead of as
-    "(Test)"."""
+    "(Test)".
+
+    args.at, if given (--at HH:MM), previews as if it were that time today -
+    see resolve_test_at()."""
     cfg = extract_config(config)
     node = cfg["node"]
     if not node:
         print(json.dumps({"success": False, "message": "Node not set in config"}))
         return
     state = load_state()
-    now_dt = datetime.now()
+    now_dt, at_error = resolve_test_at(getattr(args, "at", None))
     warnings = []
+    if at_error:
+        warnings.append(at_error)
     ok = play_timeweather(cfg["timeweather"], state, node, time.time(), now_dt, mode="test", warnings=warnings)
     print(json.dumps(timeweather_test_result_dict(ok, warnings, mode="test")))
 
@@ -1947,7 +2527,7 @@ def cmd_play_timeweather(config):
     ok = play_timeweather(cfg["timeweather"], state, node, time.time(), now_dt, mode="dtmf", warnings=warnings)
     print(json.dumps(timeweather_test_result_dict(ok, warnings, mode="dtmf")))
 
-def cmd_request_test_timeweather():
+def cmd_request_test_timeweather(message_id=None, at=None):
     """Called by the web UI (via the existing www-data sudoers rule) to ask
     the already-running daemon to perform the test-play itself, instead of
     doing the weather-fetch/build/play work in this one-off process. See
@@ -1957,12 +2537,24 @@ def cmd_request_test_timeweather():
     job, completely outside that namespace) - but the daemon itself is a
     plain systemd service, never spawned by Apache, so it reads /tmp
     normally. Writing this tiny request file is the only part that still
-    needs root; it doesn't touch anything Apache's namespace would hide."""
+    needs root; it doesn't touch anything Apache's namespace would hide.
+
+    `message_id`, if given, is forwarded to the daemon's poll handler so it
+    forces that specific Template mode message - used by the per-message
+    Test button in the web UI's Custom Templates table.
+
+    `at` (HH:MM), if given, previews as if it were that time today - see
+    resolve_test_at()."""
     request_id = uuid.uuid4().hex
     try:
         os.makedirs(os.path.dirname(TW_TEST_REQUEST_FILE), exist_ok=True)
+        payload = {"request_id": request_id, "requested_at": time.time()}
+        if message_id:
+            payload["message_id"] = message_id
+        if at:
+            payload["at"] = at
         with open(TW_TEST_REQUEST_FILE, "w") as f:
-            json.dump({"request_id": request_id, "requested_at": time.time()}, f)
+            json.dump(payload, f)
         os.chmod(TW_TEST_REQUEST_FILE, 0o644)
     except OSError as e:
         print(json.dumps({"success": False, "message": f"Could not write test request: {e}"}))
@@ -2055,6 +2647,9 @@ def build_arg_parser():
     p_tw.add_argument("--announce-time", dest="announce_time", choices=["true", "false"])
     p_tw.add_argument("--time-format", dest="time_format", choices=["12", "24"])
     p_tw.add_argument("--smart-greeting", dest="smart_greeting", choices=["true", "false"])
+    p_tw.add_argument("--use-oclock", dest="use_oclock", choices=["true", "false"])
+    p_tw.add_argument("--minute-zero-word", dest="minute_zero_word", choices=["oh", "zero"])
+    p_tw.add_argument("--mode", choices=["recordings", "template"])
     p_tw.add_argument("--cron")
     p_tw.add_argument("--weather-enable", dest="weather_enable", choices=["true", "false"])
     p_tw.add_argument("--provider", choices=["auto", "metar", "openmeteo", "tempest", "skywarnplus"])
@@ -2066,10 +2661,43 @@ def build_arg_parser():
     p_tw.add_argument("--cache-max-age", dest="cache_max_age", type=int)
     p_tw.add_argument("--tempest-token", dest="tempest_token")
     p_tw.add_argument("--tempest-station", dest="tempest_station")
+    p_tw.add_argument("--callsign")
+    p_tw.add_argument("--lookahead-seconds", dest="lookahead_seconds", type=int)
 
-    sub.add_parser("test-timeweather", help="Preview the Time & Weather Announcement (doesn't affect scheduling; use play-timeweather for DTMF)")
+    p_tw_test = sub.add_parser("test-timeweather", help="Preview the Time & Weather Announcement (doesn't affect scheduling; use play-timeweather for DTMF)")
+    p_tw_test.add_argument("--at", default=None,
+                            help="Preview as if it were this time today (HH:MM, 24-hour) instead of the real current time")
     sub.add_parser("play-timeweather", help="Play Time & Weather Announcement as a real on-demand occurrence (for DTMF triggers)")
-    sub.add_parser("request-timeweather-test", help="Ask the running daemon to test-play Time & Weather (used by the web UI)")
+    p_tw_test_req = sub.add_parser("request-timeweather-test", help="Ask the running daemon to test-play Time & Weather (used by the web UI)")
+    p_tw_test_req.add_argument("--message-id", dest="message_id", default=None,
+                                help="Force this specific Template mode message instead of the daemon's usual random pick")
+    p_tw_test_req.add_argument("--at", default=None,
+                                help="Preview as if it were this time today (HH:MM, 24-hour) instead of the real current time")
+
+    p_tw_add_msg = sub.add_parser("add-timeweather-message", help="Add a Time & Weather Template mode message")
+    p_tw_add_msg.add_argument("text")
+    p_tw_add_msg.add_argument("--voice")
+    p_tw_add_msg.add_argument("--mode", choices=["recordings", "template"])
+
+    p_tw_edit_msg = sub.add_parser("edit-timeweather-message", help="Edit a Time & Weather Template mode message")
+    p_tw_edit_msg.add_argument("id")
+    p_tw_edit_msg.add_argument("--text")
+    p_tw_edit_msg.add_argument("--voice")
+    p_tw_edit_msg.add_argument("--mode", choices=["recordings", "template"])
+
+    p_tw_rm_msg = sub.add_parser("remove-timeweather-message", help="Remove a Time & Weather Template mode message")
+    p_tw_rm_msg.add_argument("id")
+
+    p_tw_toggle_msg = sub.add_parser("toggle-timeweather-message", help="Toggle a Time & Weather Template mode message enabled/disabled")
+    p_tw_toggle_msg.add_argument("id")
+
+    p_node_id_set = sub.add_parser("set-node-id", help="Generate and save the Node ID recording (Piper TTS)")
+    p_node_id_set.add_argument("text")
+    p_node_id_set.add_argument("--voice")
+
+    p_node_id_test = sub.add_parser("test-node-id", help="Render and play a Node ID preview without saving")
+    p_node_id_test.add_argument("text")
+    p_node_id_test.add_argument("--voice")
 
     return parser
 
@@ -2116,11 +2744,23 @@ def cli_main():
     elif args.command == "update-timeweather":
         cmd_update_timeweather(config, args)
     elif args.command == "test-timeweather":
-        cmd_test_timeweather(config)
+        cmd_test_timeweather(config, args)
     elif args.command == "play-timeweather":
         cmd_play_timeweather(config)
     elif args.command == "request-timeweather-test":
-        cmd_request_test_timeweather()
+        cmd_request_test_timeweather(args.message_id, args.at)
+    elif args.command == "add-timeweather-message":
+        cmd_add_timeweather_message(config, args)
+    elif args.command == "edit-timeweather-message":
+        cmd_edit_timeweather_message(config, args)
+    elif args.command == "remove-timeweather-message":
+        cmd_remove_timeweather_message(config, args)
+    elif args.command == "toggle-timeweather-message":
+        cmd_toggle_timeweather_message(config, args)
+    elif args.command == "set-node-id":
+        cmd_set_node_id(config, args)
+    elif args.command == "test-node-id":
+        cmd_test_node_id(config, args)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -2360,7 +3000,13 @@ def main():
             # Checked before Scheduled Announcements so it always plays first
             # if both are due at the same moment; should_play_scheduled()
             # defers any Scheduled entry until timeweather_busy_until clears.
-            if should_play_timeweather(timeweather, state, node, now_dt):
+            if timeweather.get("Mode", DEFAULT_TW_MODE) == "template":
+                # Own driver - see timeweather_template_tick()'s docstring for
+                # why Template mode can't just reuse should_play_timeweather/
+                # play_timeweather directly (it needs to pre-render ahead of
+                # the trigger, not build-and-play synchronously at it).
+                timeweather_template_tick(timeweather, state, node, now, now_dt)
+            elif should_play_timeweather(timeweather, state, node, now_dt):
                 play_timeweather(timeweather, state, node, now, now_dt)
 
             # ── Scheduled announcements (time-driven) ─────────────────────

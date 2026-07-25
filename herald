@@ -9,6 +9,9 @@ DISABLE_FLAG="$INSTALL_DIR/asl3-herald-disabled"
 DAEMON_PY="/usr/local/bin/asl3-herald/asl3-herald.py"
 PIPER_BIN="/opt/piper/bin/piper/piper"
 PIPER_VOICE_DIR="/opt/piper/voices"
+NODE_ID_DIR="$INSTALL_DIR/node-id"
+NODE_ID_FILE="$NODE_ID_DIR/node-id.wav"
+NODE_ID_FILE_NOEXT="$NODE_ID_DIR/node-id"
 
 usage() {
     cat <<EOF
@@ -84,8 +87,10 @@ Settings:
                                            Update general daemon settings
 
 Time & Weather Announcements (time and/or current conditions, schedule- or DTMF-triggered):
-  update-timeweather [--enable true|false] [--announce-time true|false]
-                     [--time-format 12|24] [--smart-greeting true|false]
+  update-timeweather [--enable true|false] [--mode recordings|template]
+                     [--announce-time true|false]
+                     [--time-format 12|24] [--use-oclock true|false]
+                     [--minute-zero-word oh|zero] [--smart-greeting true|false]
                      [--cron "MIN HOUR DOM MON DOW"]
                      [--weather-enable true|false]
                      [--provider auto|metar|openmeteo|tempest|skywarnplus]
@@ -93,17 +98,35 @@ Time & Weather Announcements (time and/or current conditions, schedule- or DTMF-
                      [--announce-condition true|false] [--announce-feels-like true|false]
                      [--announce-humidity true|false] [--cache-max-age <minutes>]
                      [--tempest-token <token>] [--tempest-station <id>]
+                     [--callsign <text>] [--lookahead-seconds <n>]
                                            Update Time & Weather Announcements settings
+                                           (--mode/--callsign/--lookahead-seconds apply
+                                           to Template mode; everything else except
+                                           --enable/--cron/--weather-* applies to
+                                           Recordings mode)
+  add-timeweather-message "<text>" [--voice <voice>]
+                                           Add a Template mode message. Tags:
+                                           {smart_greeting} {time} {conditions}
+                                           {temperature} {feels_like} {humidity}
+                                           {callsign}
+  edit-timeweather-message <id> [--text "<text>"] [--voice <voice>]
+                                           Edit a Template mode message
+  remove-timeweather-message <id>          Remove a Template mode message
+  toggle-timeweather-message <id>          Enable or disable a Template mode message without removing it
   play-timeweather                         Play the announcement right now, as a real
                                            on-demand occurrence - use this for DTMF.
                                            Logs to Playback History as a normal Hourly
                                            Time & Weather entry (not "(Test)"), and
                                            still won't suppress or double-fire the next
                                            real scheduled hourly occurrence
-  test-timeweather                        Preview the announcement (real weather
+  test-timeweather [--at HH:MM]            Preview the announcement (real weather
                                            fetch, logged as "(Test)"); doesn't affect
                                            scheduling at all. For troubleshooting from
-                                           the CLI, not for DTMF - use play-timeweather
+                                           the CLI, not for DTMF - use play-timeweather.
+                                           --at previews as if it were that time today
+                                           (24-hour), instead of waiting for the real
+                                           clock - handy for testing things like
+                                           top-of-the-hour phrasing or greeting boundaries
   request-timeweather-test                Ask the running daemon to test-play instead
                                            (used internally by the web UI's Test
                                            button - see below for why it's different)
@@ -125,6 +148,24 @@ Time & Weather Announcements (time and/or current conditions, schedule- or DTMF-
   file) from it. Asking the already-running daemon to do the test-play
   itself avoids that, since the daemon is a plain systemd service, never
   spawned by Apache.
+
+Node ID (replaces the audio content of app_rpt's own idrecording=):
+  set-node-id "<text>" [--voice <voice>]   Generate the ID recording with Piper and save it -
+                                           overwrites $NODE_ID_FILE
+  test-node-id "<text>" [--voice <voice>]  Render and play a preview immediately, without
+                                           saving anything - use this to audition wording/voices
+
+  Herald only ever controls the *audio content* of this one file - app_rpt's
+  own idtime/politeid timer decides when it plays, completely unchanged. Add
+  this line to rpt.conf yourself (Herald never touches rpt.conf), then
+  reload once:
+
+      idrecording = $NODE_ID_FILE_NOEXT
+      sudo asterisk -rx "module reload app_rpt.so"
+
+  That's a one-time step. After that, app_rpt reads the file fresh off disk
+  every time it plays - set-node-id takes effect immediately, no reload
+  needed.
 EOF
 }
 
@@ -539,7 +580,7 @@ cmd_test_timeweather() {
     #
     # NOT used by the web UI's Test button - see cmd_request_test_timeweather
     # below for why.
-    python3 "$DAEMON_PY" test-timeweather
+    python3 "$DAEMON_PY" test-timeweather "$@"
 }
 
 cmd_play_timeweather() {
@@ -551,6 +592,43 @@ cmd_play_timeweather() {
     # never marks the scheduled slot as already-played, so it can't
     # suppress the next real scheduled occurrence.
     python3 "$DAEMON_PY" play-timeweather
+}
+
+cmd_add_timeweather_message() {
+    need_root "$@"
+    python3 "$DAEMON_PY" add-timeweather-message "$@"
+    cmd_reload 2>/dev/null || true
+}
+
+cmd_edit_timeweather_message() {
+    need_root "$@"
+    python3 "$DAEMON_PY" edit-timeweather-message "$@"
+    cmd_reload 2>/dev/null || true
+}
+
+cmd_remove_timeweather_message() {
+    need_root "$@"
+    python3 "$DAEMON_PY" remove-timeweather-message "$@"
+    cmd_reload 2>/dev/null || true
+}
+
+cmd_toggle_timeweather_message() {
+    need_root "$@"
+    python3 "$DAEMON_PY" toggle-timeweather-message "$@"
+    cmd_reload 2>/dev/null || true
+}
+
+cmd_set_node_id() {
+    # No cmd_reload here - Node ID isn't read by the daemon's main loop at
+    # all (no scheduling, no daemon involvement); app_rpt's own idtime timer
+    # picks up the new file content on its own next time it fires.
+    need_root "$@"
+    python3 "$DAEMON_PY" set-node-id "$@"
+}
+
+cmd_test_node_id() {
+    need_root "$@"
+    python3 "$DAEMON_PY" test-node-id "$@"
 }
 
 cmd_request_test_timeweather() {
@@ -565,7 +643,7 @@ cmd_request_test_timeweather() {
     # notice and act on itself. Needs root only to write that tiny file into
     # asl3-herald's own config directory - not for anything namespace-related.
     need_root "$@"
-    python3 "$DAEMON_PY" request-timeweather-test
+    python3 "$DAEMON_PY" request-timeweather-test "$@"
 }
 
 cmd_reorder_rotation() {
@@ -822,6 +900,12 @@ case "$CMD" in
     test-timeweather)     cmd_test_timeweather   "$@" ;;
     play-timeweather)     cmd_play_timeweather   "$@" ;;
     request-timeweather-test) cmd_request_test_timeweather "$@" ;;
+    add-timeweather-message)    cmd_add_timeweather_message    "$@" ;;
+    edit-timeweather-message)   cmd_edit_timeweather_message   "$@" ;;
+    remove-timeweather-message) cmd_remove_timeweather_message "$@" ;;
+    toggle-timeweather-message) cmd_toggle_timeweather_message "$@" ;;
+    set-node-id)          cmd_set_node_id        "$@" ;;
+    test-node-id)         cmd_test_node_id       "$@" ;;
     playback-history)     cmd_playback_history   "$@" ;;
     clear-history)        cmd_clear_history      "$@" ;;
     export-config)        cmd_export_config      "$@" ;;

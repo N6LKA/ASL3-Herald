@@ -1,7 +1,7 @@
 ![ASL3-Herald](web/img/asl3-herald-banner.svg)
 
 ![Release Version](https://img.shields.io/github/v/release/N6LKA/ASL3-Herald?label=Version&color=f15d24)
-![Release Date](https://img.shields.io/badge/released-2026--07--20-green)
+![Release Date](https://img.shields.io/badge/released-2026--07--25-green)
 ![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
 
 **Enhanced tail message daemon for ASL3/app_rpt with advanced announcement features.**
@@ -34,6 +34,12 @@
   - Runs on the same cron-style schedule as Scheduled Announcements (top of every hour by default, but any pattern works) and **takes priority over Scheduled Announcements** if both are due at the same moment
   - Also triggerable **on demand over DTMF** (map a function in `rpt.conf` to `herald play-timeweather`), independent of the schedule
   - Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or — if SkywarnPlus is already installed — its already-fetched data, avoiding a second independent poller
+  - **Two modes**: **Recordings** (default) builds the announcement from a pre-recorded sound pack — fast, fixed wording. **Custom Templates** lets you write your own message(s) with tags (`{smart_greeting}` `{time}` `{conditions}` `{temperature}` `{feels_like}` `{humidity}` `{callsign}`), rendered fresh with Piper TTS each time; with more than one message configured, a different one is picked at random each occurrence (never the same one twice in a row). Rendering happens a few seconds ahead of the scheduled moment (configurable) so playback is still instant when it's due.
+  - **Top-of-the-hour phrasing** — in 12-hour format, choose whether an exact-hour time (e.g. 3:00) says "Three PM" (default) or "Three O'Clock PM"; no effect any other minute. 24-hour format always says "hundred hours" at the top of the hour (e.g. "Sixteen Hundred Hours"), matching the original Time-Weather-Announce script's convention.
+  - **Minute pronunciation** (Custom Templates mode) — choose "Oh" or "Zero" for single-digit minutes, e.g. "Four Oh Six" vs "Four Zero Six" (12-hour) or "Sixteen Oh Six" vs "Sixteen Zero Six" (24-hour).
+  - **Test with any time, not just right now** — the Test button (and `herald test-timeweather --at HH:MM`) can preview as if it were any time of day, so checking things like the o'clock phrasing above or the smart-greeting boundaries doesn't mean waiting for the real clock to get there.
+
+- **Node ID Generator** — a simple tool for creating a station ID audio file with Piper TTS (pick a voice, type the wording), with a Test Playback button to audition it before saving. The generated file isn't used by Herald itself — it's meant to be used with AllStarLink's own built-in station ID feature, which keeps handling the actual timing of when your ID plays. Point `idrecording =` at Herald's generated file once (see Node ID Generator below) and reload.
 
 Both Tail Messages and Scheduled Announcements can be edited in place (name, text, voice, schedule, play mode) via `herald edit-rotation` / `herald edit-schedule` or the web UI, instead of removing and re-adding.
 
@@ -162,6 +168,27 @@ Scheduled:
 
 ---
 
+## Node ID Generator
+
+A simple tool (Node ID Generator tab in the web UI, or `herald set-node-id`/`test-node-id` on the CLI) for creating a station ID audio file with Piper TTS — pick a voice, type what you want it to say, and generate a standalone audio file. This file isn't played by Herald itself; it's meant to be used with AllStarLink's own built-in station ID feature, which keeps handling the actual timing of when your ID plays. You can regenerate it any time you want to change the voice or wording.
+
+**One-time setup, so AllStar knows to use this file:**
+
+1. Open your node's `rpt.conf` and add (or change) this line:
+   ```
+   idrecording = /etc/asterisk/scripts/asl3-herald/node-id/node-id
+   ```
+2. Apply the change by running this command once:
+   ```bash
+   sudo asterisk -rx "module reload app_rpt.so"
+   ```
+
+That's it — you only need to do this once. Any time you generate a new ID from the Node ID Generator tab (or `herald set-node-id`), AllStar automatically uses the updated audio the very next time it IDs, with nothing further to do.
+
+`idtalkover` (the CW/voice ID played over an active signal) is untouched by this feature — it keeps using whatever's already configured in `rpt.conf`.
+
+---
+
 ## herald Command
 
 **General:**
@@ -257,6 +284,21 @@ sudo apt install festival sox
 sudo apt install espeak-ng sox
 ```
 
+**Adding more voices manually** — the 19 above are just what `install.sh` downloads by default; Piper has many more, including other languages (Spanish, French, German, and others), browsable at [huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices/tree/main). Every voice is two files, a `.onnx` model and a matching `.onnx.json` config — download both into `/opt/piper/voices/` and it's usable immediately, no restart or reload needed:
+
+```bash
+# Example: add German voice "de_DE-thorsten-medium"
+sudo curl -fsSL "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx" -o /opt/piper/voices/de_DE-thorsten-medium.onnx
+sudo curl -fsSL "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx.json" -o /opt/piper/voices/de_DE-thorsten-medium.onnx.json
+sudo chmod 644 /opt/piper/voices/de_DE-thorsten-medium.onnx*
+```
+
+Find the right path for any voice by browsing the link above — the URL pattern is always `<language>/<language-region>/<name>/<quality>/<language-region>-<name>-<quality>.onnx` (and the same path with `.json` on the end). The new voice shows up right away in `herald voices` and every voice dropdown in the web UI, labeled by its raw filename (e.g. `de_DE-thorsten-medium`) rather than a friendly display name — Herald only has friendly names for the 19 it ships by default.
+
+If a `curl` command above fails with a 403 error, HuggingFace is blocking direct downloads from your server's IP (a known issue with some hosts) — download the same two URLs in a regular web browser instead and copy the files to `/opt/piper/voices/` (e.g. via `scp`).
+
+For a non-English voice, remember Herald just passes whatever text you type straight to Piper — write your announcement text in that language too.
+
 ---
 
 ## Web UI
@@ -328,6 +370,8 @@ A newly-appeared or changed WX alert always plays immediately, taking priority o
 **Scheduled announcements** run on a separate time-based path, unaffected by the tail message interval or node activity. They are driven by a standard 5-field cron expression (`MIN HOUR DOM MON DOW`) and can fire once at a specific time, at a repeating interval (e.g. `*/20 * * * *` = every 20 minutes), or on any cron-expressible schedule. Each entry fires at most once per matching minute; a `*/20` entry fires three times an hour, not once per day. If the node is currently keyed when a scheduled announcement is due, it holds off and keeps re-checking every poll — even after the matching minute has passed — until the node unkeys, rather than missing the announcement or talking over live traffic. Once a scheduled announcement plays, its estimated audio duration (via `soxi`, or an 8-second fallback estimate) holds off any tail message for that long, so the two never overlap — this is also how a scheduled announcement takes precedence when both would fire at the same moment.
 
 **Time & Weather Announcements** use the same cron-based path as Scheduled Announcements, but are checked first, so they take priority if both are due at the same moment — the Scheduled entry simply retries on the next poll cycle rather than being skipped. The announcement audio (time and/or weather, per config) is regenerated fresh every time it plays, unlike a fixed recording. It can also be triggered on demand via a DTMF function mapped to `herald play-timeweather`, independent of the cron schedule — logged to Playback History as a normal occurrence (not a test), without suppressing the next real scheduled occurrence.
+
+In **Custom Templates mode**, the daemon computes when the schedule will next fire and starts rendering the chosen message with Piper `LookaheadSeconds` ahead of that moment (as a background process, so it never blocks unkey detection or anything else in the poll loop) — by the time the scheduled minute arrives, the file is already sitting there ready to play, same instant feel as Recordings mode. If the node is keyed when that moment arrives, it waits for unkey exactly like Recordings mode; if rendering somehow isn't finished in time, the daemon gives it a short grace period before skipping that occurrence rather than playing nothing or a broken file. DTMF and Test plays render synchronously on demand instead, since those already run outside the daemon's shared poll loop.
 
 State (rotation index, WX alternation, scheduled "waiting for unkey" status, and last played times) is saved to a JSON file so it survives service restarts.
 
