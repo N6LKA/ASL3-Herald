@@ -59,6 +59,25 @@ Plus:
 
 ---
 
+## Screenshots
+
+**How It Works** — a plain-language overview of Tail Messages, Scheduled Announcements, and Time & Weather Announcements, shown before you touch any settings.
+![How It Works](screenshots/how-it-works.png)
+
+**Tail Messages** — General Settings, SkywarnPlus integration, the rotation table, and the add-message form.
+![Tail Messages](screenshots/tail-messages.png)
+
+**Scheduled Announcements** — cron-driven announcements with a live schedule picker and reference table.
+![Scheduled Announcements](screenshots/scheduled-announcements.png)
+
+**Time & Weather Announcements** — Custom Templates mode, with tag-based messages rendered fresh by Piper TTS each time.
+![Time & Weather Announcements](screenshots/time-weather-announcements.png)
+
+**Node ID Generator** — generate a station ID recording with Piper TTS, test it locally, and see exactly what to add to `rpt.conf`.
+![Node ID Generator](screenshots/node-id-generator.png)
+
+---
+
 ## Installation
 
 **Stable (recommended):** installs from `main` — the tested, working release.
