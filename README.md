@@ -4,15 +4,15 @@
 ![Release Date](https://img.shields.io/badge/released-2026--07--25-green)
 ![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
 
-**Enhanced tail message daemon for ASL3/app_rpt with advanced announcement features.**
+**A full-featured announcement and audio suite for ASL3/app_rpt.**
 
-`asl3-herald` is a drop-in replacement and enhancement for the native `app_rpt` tail message function. It provides reliable unkey detection, rotating messages, [SkywarnPlus](https://github.com/N6LKA/SkywarnPlus) weather alert integration with priority playback, cron-style scheduled announcements, built-in time & weather announcements (an enhanced take on the classic `saytime.pl`/`weather.sh`), neural TTS voices, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
+`asl3-herald` started as a drop-in replacement for the native `app_rpt` tail message function and has grown into a complete announcement toolkit: reliable unkey-triggered tail messages, cron-style scheduled announcements, [SkywarnPlus](https://github.com/N6LKA/SkywarnPlus) weather alert integration with priority playback, built-in time & weather announcements (either a pre-recorded sound pack or your own Piper-TTS-rendered custom messages), a station ID audio generator, neural TTS voices throughout, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
 
 ---
 
 ## What It Does
 
-`asl3-herald` covers three distinct functions:
+`asl3-herald` covers these core functions:
 
 - **Tail Messages** — unkey-triggered, reactive to node activity:
   - **Reliable unkey detection** — uses the Asterisk Manager Interface (AMI) for real-time, event-driven unkey detection that fires at the actual unkey (before the courtesy tone), giving a seamless native-feel tail message; falls back to the legacy `rpt stats` kerchunk counter if AMI credentials aren't available
