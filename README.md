@@ -4,15 +4,15 @@
 ![Release Date](https://img.shields.io/badge/released-2026--07--25-green)
 ![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
 
-**Enhanced tail message daemon for ASL3/app_rpt with advanced announcement features.**
+**A full-featured announcement and audio suite for ASL3/app_rpt.**
 
-`asl3-herald` is a drop-in replacement and enhancement for the native `app_rpt` tail message function. It provides reliable unkey detection, rotating messages, [SkywarnPlus](https://github.com/N6LKA/SkywarnPlus) weather alert integration with priority playback, cron-style scheduled announcements, built-in time & weather announcements (an enhanced take on the classic `saytime.pl`/`weather.sh`), neural TTS voices, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
+`asl3-herald` started as a drop-in replacement for the native `app_rpt` tail message function and has grown into a complete announcement toolkit: reliable unkey-triggered tail messages, cron-style scheduled announcements, [SkywarnPlus](https://github.com/N6LKA/SkywarnPlus) weather alert integration with priority playback, built-in time & weather announcements (either a pre-recorded sound pack or your own Piper-TTS-rendered custom messages), a station ID audio generator, neural TTS voices throughout, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
 
 ---
 
 ## What It Does
 
-`asl3-herald` covers three distinct functions:
+`asl3-herald` covers these core functions:
 
 - **Tail Messages** — unkey-triggered, reactive to node activity:
   - **Reliable unkey detection** — uses the Asterisk Manager Interface (AMI) for real-time, event-driven unkey detection that fires at the actual unkey (before the courtesy tone), giving a seamless native-feel tail message; falls back to the legacy `rpt stats` kerchunk counter if AMI credentials aren't available
@@ -100,7 +100,7 @@ This tarball form is used instead of the raw GitHub URL because `raw.githubuserc
 
 The installer will:
 1. Install `python3-yaml`, `sox`, and `libsox-fmt-mp3` if not already present
-2. Install Piper TTS 1.2.0 (binary + 6 voices) — this step downloads a few hundred MB and may take a few minutes
+2. Install Piper TTS 1.2.0 (binary + 19 voices) — this step downloads approximately 1.2 GB and may take several minutes
 3. Copy `asl3-herald.py` to `/usr/local/bin/asl3-herald/`
 4. Install the `herald` management command to `/usr/local/bin/herald`
 5. Create `/etc/asterisk/scripts/asl3-herald/` with an example config (if no config exists)
@@ -398,12 +398,16 @@ State (rotation index, WX alternation, scheduled "waiting for unkey" status, and
 
 ## SkywarnPlus Integration
 
-No changes to SkywarnPlus are required. `asl3-herald` reads the existing `wx-tail.wav` file that SkywarnPlus already generates:
+Herald integrates with SkywarnPlus two different ways, with two different compatibility requirements:
+
+**Tail Messages' WX alert integration** (`TailMessage.SkywarnPlus`) — no changes to SkywarnPlus are required; Herald just reads the existing `wx-tail.wav` file SkywarnPlus already generates:
 
 - **No active alerts:** `wx-tail.wav` is a small silent file (~1644 bytes)
 - **Active alerts:** `wx-tail.wav` contains the weather alert audio (typically 50KB+)
 
-Set `SilenceThreshold: 5000` (the default) to reliably distinguish between the two.
+Set `SilenceThreshold: 5000` (the default) to reliably distinguish between the two. This part works with any SkywarnPlus install, including the original unmaintained upstream.
+
+**Time & Weather's `skywarnplus` weather provider** (`TimeWeather.Weather.Provider: skywarnplus`) — **requires [N6LKA's SkywarnPlus fork](https://github.com/N6LKA/SkywarnPlus) specifically.** It reads `/tmp/SkywarnPlus/swp-data.json`, written by `Allmon3_Compat.py` — a module that exists only in that fork, not in the original upstream project. If you want Herald's weather announcements sourced from SkywarnPlus (rather than polling METAR/Open-Meteo/Tempest directly), you need the fork installed. The fork also adds Tempest as a weather source inside SkywarnPlus itself, which only matters for this provider - the original upstream has no Tempest support at all.
 
 **Note:** the original SkywarnPlus author, Mason (Mason10198), no longer maintains the project — [the original repo](https://github.com/Mason10198/SkywarnPlus) is archived and read-only. Larry (N6LKA) maintains an active fork that keeps SkywarnPlus working and up to date: **[github.com/N6LKA/SkywarnPlus](https://github.com/N6LKA/SkywarnPlus)**.
 

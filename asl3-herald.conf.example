@@ -160,10 +160,12 @@ TimeWeather:
     # tempest     - Your own WeatherFlow Tempest station (requires Tempest.Token below)
     # skywarnplus - Read already-fetched weather from SkywarnPlus's
     #               /tmp/SkywarnPlus/swp-data.json instead of polling an API here.
-    #               Requires SkywarnPlus installed with WeatherEnable: true in
-    #               its own config.yaml. Recommended if SkywarnPlus is already
-    #               installed, to avoid two independent pollers hitting the
-    #               same weather source.
+    #               Requires N6LKA's SkywarnPlus fork specifically
+    #               (github.com/N6LKA/SkywarnPlus) with WeatherEnable: true in
+    #               its own config.yaml - swp-data.json doesn't exist in the
+    #               original archived upstream project. Recommended if you're
+    #               already on the fork, to avoid two independent pollers
+    #               hitting the same weather source.
     Provider: auto
 
     # ZIP/postal code or ICAO airport code (e.g. "92320" or "KONT").

@@ -637,7 +637,7 @@
   <div class="card" id="tw-weather-card">
     <h3>Weather</h3>
     <div id="tw-swp-banner" class="banner-info" style="display:none;">
-      SkywarnPlus is installed on this system. Using the <strong>SkywarnPlus</strong> weather provider below avoids running a second, independent weather poller.
+      SkywarnPlus is installed on this system. If it's <a href="https://github.com/N6LKA/SkywarnPlus" target="_blank">N6LKA's fork</a> (required for this provider - the original archived upstream doesn't support it), using the <strong>SkywarnPlus</strong> weather provider below avoids running a second, independent weather poller.
     </div>
 
     <div class="field-row">
