@@ -100,7 +100,7 @@ This tarball form is used instead of the raw GitHub URL because `raw.githubuserc
 
 The installer will:
 1. Install `python3-yaml`, `sox`, and `libsox-fmt-mp3` if not already present
-2. Install Piper TTS 1.2.0 (binary + 6 voices) — this step downloads a few hundred MB and may take a few minutes
+2. Install Piper TTS 1.2.0 (binary + 19 voices) — this step downloads approximately 1.2 GB and may take several minutes
 3. Copy `asl3-herald.py` to `/usr/local/bin/asl3-herald/`
 4. Install the `herald` management command to `/usr/local/bin/herald`
 5. Create `/etc/asterisk/scripts/asl3-herald/` with an example config (if no config exists)
