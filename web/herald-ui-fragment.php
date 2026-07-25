@@ -643,7 +643,7 @@
     <div class="field-row">
       <div>
         <label>Weather Provider</label>
-        <select id="tw-provider" style="width:340px;">
+        <select id="tw-provider" style="width:440px;">
           <option value="auto">Auto (METAR for airport codes, Open-Meteo otherwise)</option>
           <option value="metar">NOAA METAR (ICAO airport codes only)</option>
           <option value="openmeteo">Open-Meteo (free, no key, any location)</option>
@@ -668,7 +668,7 @@
       <div class="field-row">
         <div>
           <label>Tempest Personal Access Token</label>
-          <input type="text" id="tw-tempest-token" style="width:280px;" placeholder="tempest.earth/account">
+          <input type="text" id="tw-tempest-token" style="width:380px;" placeholder="tempest.earth/account">
         </div>
         <div>
           <label>Tempest Station ID (optional)</label>
