@@ -283,7 +283,7 @@
         <div id="set-swp-fields" style="display:flex; flex-wrap:nowrap; gap:16px; align-items:flex-start; margin-top:4px;">
           <div style="flex:1 1 auto; min-width:0;">
             <label>WX Tail File Path</label>
-            <input type="text" id="set-swp-wxfile" style="width: 100%; max-width:180px; box-sizing:border-box;">
+            <input type="text" id="set-swp-wxfile" style="width: 100%; box-sizing:border-box;">
           </div>
           <div style="flex:0 0 auto;">
             <label>Silence Threshold (bytes)</label>
