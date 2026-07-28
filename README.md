@@ -411,6 +411,23 @@ Set `SilenceThreshold: 5000` (the default) to reliably distinguish between the t
 
 **Note:** the original SkywarnPlus author, Mason (Mason10198), no longer maintains the project — [the original repo](https://github.com/Mason10198/SkywarnPlus) is archived and read-only. Larry (N6LKA) maintains an active fork that keeps SkywarnPlus working and up to date: **[github.com/N6LKA/SkywarnPlus](https://github.com/N6LKA/SkywarnPlus)**.
 
+### SkywarnPlus-NG integration
+
+[SkywarnPlus-NG](https://github.com/hardenedpenguin/SkywarnPlus-NG) is a separate, independent rewrite with no lineage to N6LKA's fork above, and has **no tail-message file of its own** — it only does a one-shot voice announcement when an alert first appears or changes, with no repeated reminder while it stays active. If you're running NG instead of SkywarnPlus, set:
+
+```yaml
+TailMessage:
+  SkywarnPlus:
+    Enable: true
+    NGEnable: true
+    NGApiBase: http://127.0.0.1:8100   # NG's local dashboard API - default port
+    NGPollIntervalSec: 30
+```
+
+Herald then polls NG's local `/api/alerts` on its own schedule and, when the active-alert set changes, fetches per-alert audio from `/api/alerts/{id}/audio` and writes it to `WxTailFile` itself — everything else about the Tail Messages feature (`WxTailFile`/`SilenceThreshold`, WX/rotation alternation) works exactly the same as the classic SkywarnPlus integration above; Herald's playback logic doesn't know or care which one wrote the file.
+
+For weather announcements with NG, use `TimeWeather.Weather.Provider: tempest` (or `metar`/`openmeteo`) instead of `skywarnplus` — NG has no equivalent of `swp-data.json`. If you're also running [ASL3-SkywarnPlus-NG-Bridge](https://github.com/N6LKA/ASL3-SkywarnPlus-NG-Bridge) for Allmon3/Supermon alert panels, set `TimeWeather.Weather.SnapshotEnable: true` so Herald writes the current-conditions snapshot that bridge's Allmon3 panel reads (see its README for the exact contract).
+
 ---
 
 ## Support the Project

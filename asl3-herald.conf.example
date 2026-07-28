@@ -64,6 +64,15 @@ TailMessage:
     WxTailFile: /tmp/SkywarnPlus/wx-tail.wav
     # File size threshold to distinguish an active alert file from the silent placeholder
     SilenceThreshold: 5000
+    #
+    # SkywarnPlus-NG (https://github.com/hardenedpenguin/SkywarnPlus-NG) has no
+    # tail-message file of its own - it only announces once per new/changed
+    # alert. When NGEnable is true, Herald itself polls NG's local dashboard
+    # API and writes WxTailFile above, so everything else in this section
+    # (WxTailFile/SilenceThreshold) still works exactly as before.
+    # NGEnable: false
+    # NGApiBase: http://127.0.0.1:8100
+    # NGPollIntervalSec: 30
 
 # Scheduled announcements — play at specific times, regardless of tail message interval
 # Days: "daily" or a list: ["saturday", "sunday"]  (case-insensitive)
@@ -185,6 +194,16 @@ TimeWeather:
     Tempest:
       Token: ""       # WeatherFlow Personal Access Token — tempest.earth/account
       StationID: ""   # leave blank to auto-detect (cached after first lookup)
+
+    # Writes a small current-conditions JSON snapshot for other local
+    # programs to read (e.g. ASL3-SkywarnPlus-NG-Bridge, for the Allmon3
+    # panel — see that repo's README, "Weather snapshot contract"). Reuses
+    # this section's own cached fetch above (CacheMaxAgeMin), so enabling
+    # this does not cause any extra API calls beyond what Time & Weather's
+    # own announcements already make. Checked once a minute internally.
+    SnapshotEnable: false
+    SnapshotPath: /tmp/asl3-herald/weather.json
+    SnapshotLabel: ""   # optional, shown on the Allmon3 panel e.g. "Home Station"
 
   # ── Template mode settings (ignored when Mode: recordings) ────────────────
   # Requires Piper TTS (installed by install.sh). Weather.* above still
