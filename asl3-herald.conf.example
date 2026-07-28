@@ -162,23 +162,19 @@ TimeWeather:
   Weather:
     Enable: true
 
-    # auto        - ICAO airport codes use METAR (falling back to Open-Meteo),
-    #               everything else uses Open-Meteo (falling back to METAR)
-    # metar       - Force NOAA METAR (ICAO airport codes only)
-    # openmeteo   - Force Open-Meteo (free, no API key, any ZIP/postal/ICAO code)
-    # tempest     - Your own WeatherFlow Tempest station (requires Tempest.Token below)
-    # skywarnplus - Read already-fetched weather from SkywarnPlus's
-    #               /tmp/SkywarnPlus/swp-data.json instead of polling an API here.
-    #               Requires N6LKA's SkywarnPlus fork specifically
-    #               (github.com/N6LKA/SkywarnPlus) with WeatherEnable: true in
-    #               its own config.yaml - swp-data.json doesn't exist in the
-    #               original archived upstream project. Recommended if you're
-    #               already on the fork, to avoid two independent pollers
-    #               hitting the same weather source.
+    # auto          - ICAO airport codes use METAR (falling back to Open-Meteo),
+    #                 everything else uses Open-Meteo (falling back to METAR)
+    # metar         - Force NOAA METAR (ICAO airport codes only)
+    # openmeteo     - Force Open-Meteo (free, no API key, any ZIP/postal/ICAO code)
+    # tempest       - Your own WeatherFlow Tempest station (requires Tempest.Token below)
+    # wunderground  - Any Personal Weather Station uploading to Weather Underground
+    #                 (requires Wunderground.ApiKey/StationID below) - including a
+    #                 Tempest station also configured to feed WU, not just WU-native
+    #                 hardware. No condition text available from this API.
     Provider: auto
 
     # ZIP/postal code or ICAO airport code (e.g. "92320" or "KONT").
-    # Ignored for the tempest and skywarnplus providers.
+    # Ignored for the tempest and wunderground providers.
     Location: ""
 
     TemperatureUnit: F  # F or C
@@ -194,6 +190,10 @@ TimeWeather:
     Tempest:
       Token: ""       # WeatherFlow Personal Access Token — tempest.earth/account
       StationID: ""   # leave blank to auto-detect (cached after first lookup)
+
+    Wunderground:
+      ApiKey: ""      # weatherunderground.com/member/api-keys
+      StationID: ""   # e.g. KCASTATION1
 
     # Writes a small current-conditions JSON snapshot for other local
     # programs to read (e.g. ASL3-SkywarnPlus-NG-Bridge, for the Allmon3

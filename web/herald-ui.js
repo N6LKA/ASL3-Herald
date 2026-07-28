@@ -317,13 +317,14 @@
     document.getElementById('tw-cache-max-age').value = twWeather.CacheMaxAgeMin || 10;
     document.getElementById('tw-tempest-token').value = (twWeather.Tempest && twWeather.Tempest.Token) || '';
     document.getElementById('tw-tempest-station').value = (twWeather.Tempest && twWeather.Tempest.StationID) || '';
+    document.getElementById('tw-wunderground-apikey').value = (twWeather.Wunderground && twWeather.Wunderground.ApiKey) || '';
+    document.getElementById('tw-wunderground-station').value = (twWeather.Wunderground && twWeather.Wunderground.StationID) || '';
     document.getElementById('tw-snapshot-enable').checked = !!twWeather.SnapshotEnable;
     document.getElementById('tw-snapshot-path').value = twWeather.SnapshotPath || '/tmp/asl3-herald/weather.json';
     document.getElementById('tw-snapshot-label').value = twWeather.SnapshotLabel || '';
     updateSnapshotFieldsVisibility();
     document.getElementById('tw-callsign').value = twTemplates.Callsign || '';
     document.getElementById('tw-lookahead-seconds').value = twTemplates.LookaheadSeconds || 5;
-    twSwpInstalled = !!twHealth.skywarnplus_installed;
     twSwpNgInstalled = !!twHealth.skywarnplus_ng_installed;
     updateTwProviderFields();
     updateTwSectionVisibility();
@@ -375,7 +376,6 @@
   }
 
   // ── Time & Weather Announcements ──────────────────────────────────────────────────────────
-  let twSwpInstalled = false;
   let twSwpNgInstalled = false;
 
   function applyTwCronToPicker(cronExpr) {
@@ -418,19 +418,10 @@
   function updateTwProviderFields() {
     const provider = document.getElementById('tw-provider').value;
     document.getElementById('tw-tempest-fields').style.display = provider === 'tempest' ? 'block' : 'none';
+    document.getElementById('tw-wunderground-fields').style.display = provider === 'wunderground' ? 'block' : 'none';
     document.getElementById('tw-location-field').style.display =
-      (provider === 'tempest' || provider === 'skywarnplus') ? 'none' : 'block';
-    // NG takes priority when both are somehow present (e.g. mid-migration) -
-    // the two banners give different, non-overlapping guidance, so showing
-    // both would just be confusing.
+      (provider === 'tempest' || provider === 'wunderground') ? 'none' : 'block';
     document.getElementById('tw-swp-ng-banner').style.display = twSwpNgInstalled ? 'block' : 'none';
-    document.getElementById('tw-swp-banner').style.display =
-      (!twSwpNgInstalled && twSwpInstalled && provider !== 'skywarnplus') ? 'block' : 'none';
-    // The skywarnplus provider is a local file read, not a live API call -
-    // fetch_weather_cached() bypasses Herald's own throttle for it entirely
-    // (SkywarnPlus already manages its own fetch freshness), so this
-    // setting has no effect for that provider.
-    document.getElementById('tw-cache-field').style.display = provider === 'skywarnplus' ? 'none' : 'block';
   }
 
   // Time/Weather cards only make sense once their own toggle is on -
@@ -870,6 +861,8 @@
         cache_max_age: document.getElementById('tw-cache-max-age').value,
         tempest_token: document.getElementById('tw-tempest-token').value.trim(),
         tempest_station: document.getElementById('tw-tempest-station').value.trim(),
+        wunderground_api_key: document.getElementById('tw-wunderground-apikey').value.trim(),
+        wunderground_station: document.getElementById('tw-wunderground-station').value.trim(),
         weather_snapshot_enable: document.getElementById('tw-snapshot-enable').checked,
         weather_snapshot_path: document.getElementById('tw-snapshot-path').value.trim(),
         weather_snapshot_label: document.getElementById('tw-snapshot-label').value.trim(),

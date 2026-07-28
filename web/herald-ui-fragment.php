@@ -655,11 +655,8 @@
 
   <div class="card" id="tw-weather-card">
     <h3>Weather</h3>
-    <div id="tw-swp-banner" class="banner-info" style="display:none;">
-      SkywarnPlus is installed on this system. If it's <a href="https://github.com/N6LKA/SkywarnPlus" target="_blank">N6LKA's fork</a> (required for this provider - the original archived upstream doesn't support it), using the <strong>SkywarnPlus</strong> weather provider below avoids running a second, independent weather poller.
-    </div>
     <div id="tw-swp-ng-banner" class="banner-info" style="display:none;">
-      <a href="https://github.com/hardenedpenguin/SkywarnPlus-NG" target="_blank">SkywarnPlus-NG</a> is installed on this system. It has no equivalent of the <strong>SkywarnPlus</strong> provider above (no shared weather file) — pick <strong>Tempest</strong>, <strong>Open-Meteo</strong>, or <strong>METAR</strong> instead. Turn on <strong>Write a weather snapshot file for other local programs</strong> below if you're also running <a href="https://github.com/N6LKA/ASL3-SkywarnPlus-NG-Bridge" target="_blank">ASL3-SkywarnPlus-NG-Bridge</a> for Allmon3.
+      <a href="https://github.com/hardenedpenguin/SkywarnPlus-NG" target="_blank">SkywarnPlus-NG</a> is installed on this system. Turn on <strong>Write a weather snapshot file for other local programs</strong> below if you're also running <a href="https://github.com/N6LKA/ASL3-SkywarnPlus-NG-Bridge" target="_blank">ASL3-SkywarnPlus-NG-Bridge</a> for Allmon3.
     </div>
 
     <div class="field-row">
@@ -670,7 +667,7 @@
           <option value="metar">NOAA METAR (ICAO airport codes only)</option>
           <option value="openmeteo">Open-Meteo (free, no key, any location)</option>
           <option value="tempest">My WeatherFlow Tempest station</option>
-          <option value="skywarnplus">SkywarnPlus (reads its already-fetched weather)</option>
+          <option value="wunderground">My Weather Underground PWS station</option>
         </select>
       </div>
       <div id="tw-location-field">
@@ -697,6 +694,20 @@
           <input type="text" id="tw-tempest-station" style="width:140px;" placeholder="auto-detect if blank">
         </div>
       </div>
+    </div>
+
+    <div id="tw-wunderground-fields" style="display:none; margin-top:10px;">
+      <div class="field-row">
+        <div>
+          <label>Wunderground API Key</label>
+          <input type="text" id="tw-wunderground-apikey" style="width:280px;" placeholder="weatherunderground.com/member/api-keys">
+        </div>
+        <div>
+          <label>Wunderground Station ID</label>
+          <input type="text" id="tw-wunderground-station" style="width:160px;" placeholder="e.g. KCASTATION1">
+        </div>
+      </div>
+      <p class="muted" style="margin-top:6px; margin-bottom:0;">Works for any PWS uploading to Weather Underground, including a Tempest station configured to also feed WU — not just WU-native hardware. No condition text is available from this API (temperature, feels-like, humidity, and wind only).</p>
     </div>
 
     <div id="tw-weather-announce-toggles">

@@ -41,7 +41,7 @@ if (!preg_match('/^[\d\*\/,\-]+ [\d\*\/,\-]+ [\d\*\/,\-]+ [\d\*\/,\-]+ [\d\*\/,\
 $weatherEnable = ($input['weather_enable'] ?? false) ? 'true' : 'false';
 
 $provider = (string) ($input['provider'] ?? 'auto');
-if (!in_array($provider, ['auto', 'metar', 'openmeteo', 'tempest', 'skywarnplus'], true)) {
+if (!in_array($provider, ['auto', 'metar', 'openmeteo', 'tempest', 'wunderground'], true)) {
     herald_json_response(['success' => false, 'message' => 'Invalid weather provider'], 400);
 }
 
@@ -72,6 +72,16 @@ if ($tempestToken !== '' && !preg_match('/^[a-zA-Z0-9-]{1,100}$/', $tempestToken
 $tempestStation = trim($input['tempest_station'] ?? '');
 if ($tempestStation !== '' && !preg_match('/^[0-9]{1,20}$/', $tempestStation)) {
     herald_json_response(['success' => false, 'message' => 'Invalid Tempest station ID'], 400);
+}
+
+$wundergroundApiKey = trim($input['wunderground_api_key'] ?? '');
+if ($wundergroundApiKey !== '' && !preg_match('/^[a-zA-Z0-9]{1,64}$/', $wundergroundApiKey)) {
+    herald_json_response(['success' => false, 'message' => 'Invalid Wunderground API key'], 400);
+}
+
+$wundergroundStation = trim($input['wunderground_station'] ?? '');
+if ($wundergroundStation !== '' && !preg_match('/^[a-zA-Z0-9]{1,20}$/', $wundergroundStation)) {
+    herald_json_response(['success' => false, 'message' => 'Invalid Wunderground station ID'], 400);
 }
 
 $weatherSnapshotEnable = ($input['weather_snapshot_enable'] ?? false) ? 'true' : 'false';
@@ -119,6 +129,8 @@ herald_respond_from_cli(herald_run_sudo([
     '--cache-max-age', (string) $cacheMaxAge,
     '--tempest-token', $tempestToken,
     '--tempest-station', $tempestStation,
+    '--wunderground-api-key', $wundergroundApiKey,
+    '--wunderground-station', $wundergroundStation,
     '--weather-snapshot-enable', $weatherSnapshotEnable,
     '--weather-snapshot-path', $weatherSnapshotPath,
     '--weather-snapshot-label', $weatherSnapshotLabel,

@@ -33,7 +33,7 @@
   - Announces the current time (12- or 24-hour, with an optional "Good morning/afternoon/evening" smart greeting) and/or current weather conditions — time only, weather only, or both, independently configurable
   - Runs on the same cron-style schedule as Scheduled Announcements (top of every hour by default, but any pattern works) and **takes priority over Scheduled Announcements** if both are due at the same moment
   - Also triggerable **on demand over DTMF** (map a function in `rpt.conf` to `herald play-timeweather`), independent of the schedule
-  - Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or — if SkywarnPlus is already installed — its already-fetched data, avoiding a second independent poller
+  - Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or any Personal Weather Station uploading to Weather Underground (including a Tempest station also configured to feed WU) — Tempest, Open-Meteo, and METAR all include wind speed/direction/gust in addition to temperature, feels-like, humidity, and condition
   - **Two modes**: **Recordings** (default) builds the announcement from a pre-recorded sound pack — fast, fixed wording. **Custom Templates** lets you write your own message(s) with tags (`{smart_greeting}` `{time}` `{conditions}` `{temperature}` `{feels_like}` `{humidity}` `{callsign}`), rendered fresh with Piper TTS each time; with more than one message configured, a different one is picked at random each occurrence (never the same one twice in a row). Rendering happens a few seconds ahead of the scheduled moment (configurable) so playback is still instant when it's due.
   - **Top-of-the-hour phrasing** — in 12-hour format, choose whether an exact-hour time (e.g. 3:00) says "Three PM" (default) or "Three O'Clock PM"; no effect any other minute. 24-hour format always says "hundred hours" at the top of the hour (e.g. "Sixteen Hundred Hours"), matching the original Time-Weather-Announce script's convention.
   - **Minute pronunciation** (Custom Templates mode) — choose "Oh" or "Zero" for single-digit minutes, e.g. "Four Oh Six" vs "Four Zero Six" (12-hour) or "Sixteen Oh Six" vs "Sixteen Zero Six" (24-hour).
@@ -398,22 +398,18 @@ State (rotation index, WX alternation, scheduled "waiting for unkey" status, and
 
 ## SkywarnPlus Integration
 
-Herald integrates with SkywarnPlus two different ways, with two different compatibility requirements:
-
 **Tail Messages' WX alert integration** (`TailMessage.SkywarnPlus`) — no changes to SkywarnPlus are required; Herald just reads the existing `wx-tail.wav` file SkywarnPlus already generates:
 
 - **No active alerts:** `wx-tail.wav` is a small silent file (~1644 bytes)
 - **Active alerts:** `wx-tail.wav` contains the weather alert audio (typically 50KB+)
 
-Set `SilenceThreshold: 5000` (the default) to reliably distinguish between the two. This part works with any SkywarnPlus install, including the original unmaintained upstream.
+Set `SilenceThreshold: 5000` (the default) to reliably distinguish between the two. This works with any classic SkywarnPlus install (any fork, or the original archived [Mason10198/SkywarnPlus](https://github.com/Mason10198/SkywarnPlus) upstream).
 
-**Time & Weather's `skywarnplus` weather provider** (`TimeWeather.Weather.Provider: skywarnplus`) — **requires [N6LKA's SkywarnPlus fork](https://github.com/N6LKA/SkywarnPlus) specifically.** It reads `/tmp/SkywarnPlus/swp-data.json`, written by `Allmon3_Compat.py` — a module that exists only in that fork, not in the original upstream project. If you want Herald's weather announcements sourced from SkywarnPlus (rather than polling METAR/Open-Meteo/Tempest directly), you need the fork installed. The fork also adds Tempest as a weather source inside SkywarnPlus itself, which only matters for this provider - the original upstream has no Tempest support at all.
-
-**Note:** the original SkywarnPlus author, Mason (Mason10198), no longer maintains the project — [the original repo](https://github.com/Mason10198/SkywarnPlus) is archived and read-only. Larry (N6LKA) maintains an active fork that keeps SkywarnPlus working and up to date: **[github.com/N6LKA/SkywarnPlus](https://github.com/N6LKA/SkywarnPlus)**.
+There is no dedicated Time & Weather weather provider for reading a classic SkywarnPlus install's already-fetched data — use `TimeWeather.Weather.Provider: tempest`/`wunderground`/`metar`/`openmeteo` directly (see [Time & Weather](#time--weather-announcements) above) if you want weather announcements independent of your SkywarnPlus setup.
 
 ### SkywarnPlus-NG integration
 
-[SkywarnPlus-NG](https://github.com/hardenedpenguin/SkywarnPlus-NG) is a separate, independent rewrite with no lineage to N6LKA's fork above, and has **no tail-message file of its own** — it only does a one-shot voice announcement when an alert first appears or changes, with no repeated reminder while it stays active. If you're running NG instead of SkywarnPlus, set:
+[SkywarnPlus-NG](https://github.com/hardenedpenguin/SkywarnPlus-NG) is a separate, independent rewrite with **no tail-message file of its own** — it only does a one-shot voice announcement when an alert first appears or changes, with no repeated reminder while it stays active. If you're running NG instead of classic SkywarnPlus, set:
 
 ```yaml
 TailMessage:
@@ -426,7 +422,7 @@ TailMessage:
 
 Herald then polls NG's local `/api/alerts` on its own schedule and, when the active-alert set changes, fetches per-alert audio from `/api/alerts/{id}/audio` and writes it to `WxTailFile` itself — everything else about the Tail Messages feature (`WxTailFile`/`SilenceThreshold`, WX/rotation alternation) works exactly the same as the classic SkywarnPlus integration above; Herald's playback logic doesn't know or care which one wrote the file.
 
-For weather announcements with NG, use `TimeWeather.Weather.Provider: tempest` (or `metar`/`openmeteo`) instead of `skywarnplus` — NG has no equivalent of `swp-data.json`. If you're also running [ASL3-SkywarnPlus-NG-Bridge](https://github.com/N6LKA/ASL3-SkywarnPlus-NG-Bridge) for Allmon3/Supermon alert panels, set `TimeWeather.Weather.SnapshotEnable: true` so Herald writes the current-conditions snapshot that bridge's Allmon3 panel reads (see its README for the exact contract).
+For weather announcements with NG, use `TimeWeather.Weather.Provider: tempest`/`wunderground`/`metar`/`openmeteo` — NG has no shared weather file of its own. If you're also running [ASL3-SkywarnPlus-NG-Bridge](https://github.com/N6LKA/ASL3-SkywarnPlus-NG-Bridge) for Allmon3/Supermon alert panels, set `TimeWeather.Weather.SnapshotEnable: true` so Herald writes the current-conditions snapshot that bridge's Allmon3 panel reads (see its README for the exact contract).
 
 ---
 

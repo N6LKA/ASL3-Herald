@@ -83,12 +83,6 @@ if [[ -f "$CONFIG_DIR_EARLY/asl3-herald.conf" ]] && \
     HAS_CONFIG=true
 fi
 
-# SkywarnPlus, if installed, already fetches weather data on its own — the
-# Time & Weather Announcements feature's "skywarnplus" provider reads that instead
-# of polling an API a second time. Detected here so a brand-new config can
-# default to it (see the config-generation section below).
-SWP_DETECTED=false
-[[ -f /usr/local/bin/SkywarnPlus/SkywarnPlus.py ]] && SWP_DETECTED=true
 
 # A standalone Time-Weather-Announce install runs its own cron job for the
 # same hourly time+weather announcement. We never touch it automatically —
@@ -359,11 +353,6 @@ else
     # directly from /etc/allmon3/allmon3.ini (Allmon3) or /etc/asterisk/manager.conf
     # (Supermon / other frontends) at startup and on every SIGHUP reload.
     # No action needed here.
-
-    if $SWP_DETECTED; then
-        sed -i "s/^    Provider: auto/    Provider: skywarnplus/" "$CONFIG_DIR/asl3-herald.conf"
-        info "SkywarnPlus detected — Time & Weather's provider defaulted to 'skywarnplus' (avoids a second independent weather poller)."
-    fi
 
     warn "Review the rest of the config before starting: $CONFIG_DIR/asl3-herald.conf"
 fi
