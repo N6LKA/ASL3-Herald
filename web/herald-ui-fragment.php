@@ -291,6 +291,25 @@
           </div>
         </div>
         <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;">When enabled, active WX alerts take priority over tail message rotation. Herald alternates between the WX alert and your normal rotation — the alert plays first, then one rotation message, then the alert again. A new or updated alert file always plays immediately on the next unkey. When no alert is active, normal rotation resumes. SkywarnPlus messages do not affect the cron-scheduled announcement timing.</p>
+
+        <div class="toggle-row" style="margin-top: 14px;">
+          <label class="toggle-switch">
+            <input type="checkbox" id="set-swp-ng-enable">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">Source WX Tail File from SkywarnPlus-NG</span>
+        </div>
+        <div id="set-swp-ng-fields" style="display:flex; flex-wrap:nowrap; gap:16px; align-items:flex-start; margin-top:4px;">
+          <div style="flex:1 1 auto; min-width:0;">
+            <label>SkywarnPlus-NG API Base</label>
+            <input type="text" id="set-swp-ng-apibase" style="width: 100%; box-sizing:border-box;">
+          </div>
+          <div style="flex:0 0 auto;">
+            <label>Poll Interval (seconds)</label>
+            <input type="text" id="set-swp-ng-pollinterval" style="width: 90px; box-sizing:border-box;">
+          </div>
+        </div>
+        <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;"><a href="https://github.com/hardenedpenguin/SkywarnPlus-NG" target="_blank">SkywarnPlus-NG</a> has no tail-message file of its own — it only announces once per new/changed alert. When this is on, Herald itself polls NG's local dashboard API on the interval above and writes the WX Tail File itself, so the settings above still apply exactly the same way. Leave off if you're running the classic SkywarnPlus fork, which writes this file on its own.</p>
       </div>
     </div>
 
@@ -706,6 +725,25 @@
       <input type="text" id="tw-cache-max-age" style="width:80px;">
       <span class="muted" style="margin-left:8px;">Skip re-fetching weather if the last reading is still this fresh — independent of how often the announcement itself plays.</span>
     </div>
+
+    <div class="toggle-row" style="margin-top: 14px;">
+      <label class="toggle-switch">
+        <input type="checkbox" id="tw-snapshot-enable">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Write a weather snapshot file for other local programs</span>
+    </div>
+    <div id="tw-snapshot-fields" class="field-row" style="margin-top:4px;">
+      <div style="flex:1 1 auto; min-width:0;">
+        <label>Snapshot File Path</label>
+        <input type="text" id="tw-snapshot-path" style="width:100%; box-sizing:border-box;">
+      </div>
+      <div>
+        <label>Label (optional)</label>
+        <input type="text" id="tw-snapshot-label" style="width:180px;" placeholder="e.g. Home Station">
+      </div>
+    </div>
+    <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;">Writes the same weather data used above (no extra fetch) to a small JSON file — for example, for <a href="https://github.com/N6LKA/ASL3-SkywarnPlus-NG-Bridge" target="_blank">ASL3-SkywarnPlus-NG-Bridge</a>'s Allmon3 panel. Checked once a minute.</p>
   </div>
 
   <div class="card" id="tw-schedule-card">

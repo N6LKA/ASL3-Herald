@@ -221,6 +221,10 @@
     document.getElementById('set-swp-wxfile').value = data.tail_message.skywarnplus.wx_tail_file || '';
     document.getElementById('set-swp-threshold').value = data.tail_message.skywarnplus.silence_threshold;
     updateSwpFieldsVisibility();
+    document.getElementById('set-swp-ng-enable').checked = !!data.tail_message.skywarnplus.ng_enable;
+    document.getElementById('set-swp-ng-apibase').value = data.tail_message.skywarnplus.ng_apibase || '';
+    document.getElementById('set-swp-ng-pollinterval').value = data.tail_message.skywarnplus.ng_pollinterval;
+    updateSwpNgFieldsVisibility();
 
     const defaultNode = data.node || '—';
     const tbody = document.querySelector('#tail-table tbody');
@@ -311,6 +315,10 @@
     document.getElementById('tw-cache-max-age').value = twWeather.CacheMaxAgeMin || 10;
     document.getElementById('tw-tempest-token').value = (twWeather.Tempest && twWeather.Tempest.Token) || '';
     document.getElementById('tw-tempest-station').value = (twWeather.Tempest && twWeather.Tempest.StationID) || '';
+    document.getElementById('tw-snapshot-enable').checked = !!twWeather.SnapshotEnable;
+    document.getElementById('tw-snapshot-path').value = twWeather.SnapshotPath || '/tmp/asl3-herald/weather.json';
+    document.getElementById('tw-snapshot-label').value = twWeather.SnapshotLabel || '';
+    updateSnapshotFieldsVisibility();
     document.getElementById('tw-callsign').value = twTemplates.Callsign || '';
     document.getElementById('tw-lookahead-seconds').value = twTemplates.LookaheadSeconds || 5;
     twSwpInstalled = !!twHealth.skywarnplus_installed;
@@ -391,6 +399,16 @@
     // silently clobbering that layout back to stacked on every page load.
     document.getElementById('set-swp-fields').style.display =
       document.getElementById('set-swp-enable').checked ? 'flex' : 'none';
+  }
+
+  function updateSwpNgFieldsVisibility() {
+    document.getElementById('set-swp-ng-fields').style.display =
+      document.getElementById('set-swp-ng-enable').checked ? 'flex' : 'none';
+  }
+
+  function updateSnapshotFieldsVisibility() {
+    document.getElementById('tw-snapshot-fields').style.display =
+      document.getElementById('tw-snapshot-enable').checked ? 'flex' : 'none';
   }
 
   function updateTwProviderFields() {
@@ -795,6 +813,9 @@
         swp_enable: document.getElementById('set-swp-enable').checked,
         swp_wxfile: document.getElementById('set-swp-wxfile').value.trim(),
         swp_threshold: document.getElementById('set-swp-threshold').value,
+        swp_ng_enable: document.getElementById('set-swp-ng-enable').checked,
+        swp_ng_apibase: document.getElementById('set-swp-ng-apibase').value.trim(),
+        swp_ng_pollinterval: document.getElementById('set-swp-ng-pollinterval').value,
       }),
     });
     showMsg(msgEl, data.message || (data.success ? 'Settings saved and reloaded' : 'Failed'), data.success);
@@ -803,6 +824,7 @@
   document.getElementById('btn-save-settings').addEventListener('click', () => saveSettings('settings-msg'));
   document.getElementById('btn-save-tail-settings').addEventListener('click', () => saveSettings('tail-settings-msg'));
   document.getElementById('set-swp-enable').addEventListener('change', updateSwpFieldsVisibility);
+  document.getElementById('set-swp-ng-enable').addEventListener('change', updateSwpNgFieldsVisibility);
 
   // ── Time & Weather Announcements ─────────────────────────────────────────────────────────────
   document.getElementById('tw-cron-hourly').addEventListener('click', () => {
@@ -811,6 +833,7 @@
 
   document.getElementById('tw-provider').addEventListener('change', updateTwProviderFields);
   document.getElementById('tw-enable').addEventListener('change', updateTwSectionVisibility);
+  document.getElementById('tw-snapshot-enable').addEventListener('change', updateSnapshotFieldsVisibility);
   document.getElementById('tw-announce-time').addEventListener('change', updateTwSectionVisibility);
   document.getElementById('tw-time-format').addEventListener('change', updateTwSectionVisibility);
   document.getElementById('tw-weather-enable').addEventListener('change', updateTwSectionVisibility);
@@ -839,6 +862,9 @@
         cache_max_age: document.getElementById('tw-cache-max-age').value,
         tempest_token: document.getElementById('tw-tempest-token').value.trim(),
         tempest_station: document.getElementById('tw-tempest-station').value.trim(),
+        weather_snapshot_enable: document.getElementById('tw-snapshot-enable').checked,
+        weather_snapshot_path: document.getElementById('tw-snapshot-path').value.trim(),
+        weather_snapshot_label: document.getElementById('tw-snapshot-label').value.trim(),
         callsign: document.getElementById('tw-callsign').value.trim(),
         lookahead_seconds: document.getElementById('tw-lookahead-seconds').value,
       }),

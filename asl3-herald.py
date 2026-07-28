@@ -2234,6 +2234,9 @@ def cmd_list_json(config):
                 "enable":           cfg["swp_on"],
                 "wx_tail_file":     cfg["swp_file"],
                 "silence_threshold": cfg["swp_thr"],
+                "ng_enable":        cfg["swp_ng_on"],
+                "ng_apibase":       cfg["swp_ng_api"],
+                "ng_pollinterval":  cfg["swp_ng_poll"],
             },
         },
         "scheduled": scheduled_with_health(cfg["scheduled"]),
@@ -2568,6 +2571,12 @@ def cmd_update_settings(config, args):
         swp["WxTailFile"] = args.swp_wxfile
     if args.swp_threshold is not None:
         swp["SilenceThreshold"] = args.swp_threshold
+    if args.swp_ng_enable is not None:
+        swp["NGEnable"] = (args.swp_ng_enable == "true")
+    if args.swp_ng_apibase is not None:
+        swp["NGApiBase"] = args.swp_ng_apibase
+    if args.swp_ng_pollinterval is not None:
+        swp["NGPollIntervalSec"] = args.swp_ng_pollinterval
 
     save_config(config)
     print(json.dumps({"success": True, "message": "Settings updated"}))
@@ -2620,6 +2629,13 @@ def cmd_update_timeweather(config, args):
         tempest["Token"] = args.tempest_token
     if args.tempest_station is not None:
         tempest["StationID"] = args.tempest_station
+
+    if args.weather_snapshot_enable is not None:
+        w["SnapshotEnable"] = (args.weather_snapshot_enable == "true")
+    if args.weather_snapshot_path is not None:
+        w["SnapshotPath"] = args.weather_snapshot_path
+    if args.weather_snapshot_label is not None:
+        w["SnapshotLabel"] = args.weather_snapshot_label
 
     save_config(config)
     print(json.dumps({"success": True, "message": "Time & Weather settings updated"}))
@@ -2850,6 +2866,9 @@ def build_arg_parser():
     p_settings.add_argument("--swp-enable",    dest="swp_enable",    choices=["true", "false"])
     p_settings.add_argument("--swp-wxfile",    dest="swp_wxfile")
     p_settings.add_argument("--swp-threshold", dest="swp_threshold", type=int)
+    p_settings.add_argument("--swp-ng-enable", dest="swp_ng_enable", choices=["true", "false"])
+    p_settings.add_argument("--swp-ng-apibase", dest="swp_ng_apibase")
+    p_settings.add_argument("--swp-ng-pollinterval", dest="swp_ng_pollinterval", type=int)
 
     p_tw = sub.add_parser("update-timeweather", help="Update Time & Weather Announcements settings")
     p_tw.add_argument("--enable", choices=["true", "false"])
@@ -2870,6 +2889,9 @@ def build_arg_parser():
     p_tw.add_argument("--cache-max-age", dest="cache_max_age", type=int)
     p_tw.add_argument("--tempest-token", dest="tempest_token")
     p_tw.add_argument("--tempest-station", dest="tempest_station")
+    p_tw.add_argument("--weather-snapshot-enable", dest="weather_snapshot_enable", choices=["true", "false"])
+    p_tw.add_argument("--weather-snapshot-path", dest="weather_snapshot_path")
+    p_tw.add_argument("--weather-snapshot-label", dest="weather_snapshot_label")
     p_tw.add_argument("--callsign")
     p_tw.add_argument("--lookahead-seconds", dest="lookahead_seconds", type=int)
 

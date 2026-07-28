@@ -74,6 +74,18 @@ if ($tempestStation !== '' && !preg_match('/^[0-9]{1,20}$/', $tempestStation)) {
     herald_json_response(['success' => false, 'message' => 'Invalid Tempest station ID'], 400);
 }
 
+$weatherSnapshotEnable = ($input['weather_snapshot_enable'] ?? false) ? 'true' : 'false';
+
+$weatherSnapshotPath = trim($input['weather_snapshot_path'] ?? '/tmp/asl3-herald/weather.json');
+if ($weatherSnapshotPath === '' || !preg_match('#^/[a-zA-Z0-9_./-]+$#', $weatherSnapshotPath)) {
+    herald_json_response(['success' => false, 'message' => 'Invalid weather snapshot path'], 400);
+}
+
+$weatherSnapshotLabel = trim($input['weather_snapshot_label'] ?? '');
+if ($weatherSnapshotLabel !== '' && !preg_match('/^[a-zA-Z0-9 \'-]{1,60}$/', $weatherSnapshotLabel)) {
+    herald_json_response(['success' => false, 'message' => 'Invalid weather snapshot label'], 400);
+}
+
 // Callsign is spoken verbatim by Piper - deliberately permissive (letters,
 // digits, spaces) since the whole point is letting the user space letters
 // out for correct pronunciation (e.g. "N 6 L K A").
@@ -107,6 +119,9 @@ herald_respond_from_cli(herald_run_sudo([
     '--cache-max-age', (string) $cacheMaxAge,
     '--tempest-token', $tempestToken,
     '--tempest-station', $tempestStation,
+    '--weather-snapshot-enable', $weatherSnapshotEnable,
+    '--weather-snapshot-path', $weatherSnapshotPath,
+    '--weather-snapshot-label', $weatherSnapshotLabel,
     '--callsign', $callsign,
     '--lookahead-seconds', (string) $lookaheadSeconds,
 ]));
