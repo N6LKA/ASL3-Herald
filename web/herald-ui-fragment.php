@@ -608,7 +608,9 @@
         <code>{temperature}</code> temperature &nbsp;|&nbsp;
         <code>{feels_like}</code> feels-like temperature &nbsp;|&nbsp;
         <code>{humidity}</code> humidity<br>
-        <span class="muted">Weather tags need Weather enabled below with a working provider. A tag with no data available is silently left blank rather than failing the whole message.</span>
+        <code>{wind_speed}</code> wind speed &nbsp;|&nbsp;
+        <code>{wind_gust}</code> wind gust speed<br>
+        <span class="muted">Weather tags need Weather enabled below with a working provider. A tag with no data available is silently left blank rather than failing the whole message — <code>{wind_speed}</code>/<code>{wind_gust}</code> in particular aren't available from every provider (e.g. METAR gust, or a calm reading with no gust at all).</span>
       </div>
 
       <br>

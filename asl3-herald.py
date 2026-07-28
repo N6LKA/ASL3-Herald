@@ -98,7 +98,8 @@ DEFAULT_SWP_NG_POLL_INTERVAL = 30
 PIPER_BIN = "/opt/piper/bin/piper/piper"
 PIPER_VOICE_DIR = "/opt/piper/voices"
 DEFAULT_PIPER_VOICE = "en_US-amy-medium"
-TW_TEMPLATE_TAGS = ("smart_greeting", "time", "conditions", "temperature", "feels_like", "humidity", "callsign")
+TW_TEMPLATE_TAGS = ("smart_greeting", "time", "conditions", "temperature", "feels_like", "humidity",
+                     "wind_speed", "wind_gust", "callsign")
 # How long past a message's target play time to keep waiting on a still-
 # in-progress Piper render before giving up on that occurrence entirely -
 # mirrors the same "never wedge forever" philosophy as MAX_BUSY_SECONDS.
@@ -1616,6 +1617,10 @@ def substitute_template_tags(text, tw_cfg, weather, now_dt):
             values["feels_like"] = f"{_convert(weather['feels_like_f'])} {unit_word}"
         if weather.get("humidity") is not None:
             values["humidity"] = f"{weather['humidity']} percent"
+        if weather.get("wind_mph") is not None:
+            values["wind_speed"] = f"{round(weather['wind_mph'])} miles per hour"
+        if weather.get("wind_gust_mph") is not None:
+            values["wind_gust"] = f"{round(weather['wind_gust_mph'])} miles per hour"
 
     def _sub(m):
         tag = m.group(1)
