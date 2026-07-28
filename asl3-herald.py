@@ -2169,10 +2169,15 @@ def scheduled_with_health(scheduled):
     return out
 
 SWP_INSTALL_MARKER = "/usr/local/bin/SkywarnPlus/SkywarnPlus.py"
+SWP_NG_CONFIG_FILE = "/etc/skywarnplus-ng/config.yaml"
 
 def skywarnplus_weather_status():
-    """Returns (installed, weather_available) for the UI's SkywarnPlus
-    recommendation banner and provider validation."""
+    """Returns (installed, weather_available, ng_installed) for the UI's
+    SkywarnPlus recommendation banner and provider validation. installed/
+    weather_available are about the classic SkywarnPlus fork specifically
+    (its skywarnplus TimeWeather provider reads swp-data.json, which only
+    that fork writes); ng_installed is a separate check for SkywarnPlus-NG,
+    which has no such file and needs its own banner/guidance instead."""
     installed = os.path.exists(SWP_INSTALL_MARKER)
     weather_available = False
     try:
@@ -2180,7 +2185,8 @@ def skywarnplus_weather_status():
             weather_available = bool(json.load(f).get("weather"))
     except Exception:
         pass
-    return installed, weather_available
+    ng_installed = os.path.exists(SWP_NG_CONFIG_FILE)
+    return installed, weather_available, ng_installed
 
 def timeweather_with_health(tw):
     out = dict(tw)
@@ -2195,7 +2201,7 @@ def timeweather_with_health(tw):
     tpl.setdefault("LookaheadSeconds", DEFAULT_TW_LOOKAHEAD_SECONDS)
     out["Templates"] = tpl
 
-    swp_installed, swp_weather_available = skywarnplus_weather_status()
+    swp_installed, swp_weather_available, swp_ng_installed = skywarnplus_weather_status()
 
     # install.sh only pre-selects "skywarnplus" for a genuinely brand-new
     # config; an existing Herald install upgrading to pick up this feature
@@ -2203,7 +2209,9 @@ def timeweather_with_health(tw):
     # its Provider key is simply absent. Default the *displayed* value the
     # same smart way here, purely at read time - this doesn't write anything
     # to disk, it just means the UI shows the same recommended default
-    # either way until the user actually saves a choice.
+    # either way until the user actually saves a choice. SkywarnPlus-NG has
+    # no equivalent provider (no swp-data.json), so its presence doesn't
+    # change this default - "auto" already works with no configuration.
     if "Provider" not in wcfg:
         wcfg["Provider"] = "skywarnplus" if swp_installed else "auto"
 
@@ -2211,6 +2219,7 @@ def timeweather_with_health(tw):
         "sound_files_installed": os.path.exists(os.path.join(TW_SOUND_BASE, "the-time-is.gsm")),
         "skywarnplus_installed": swp_installed,
         "skywarnplus_weather_available": swp_weather_available,
+        "skywarnplus_ng_installed": swp_ng_installed,
         "piper_installed": os.path.isfile(PIPER_BIN) and os.access(PIPER_BIN, os.X_OK),
     }
     return out

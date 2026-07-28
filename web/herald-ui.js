@@ -194,6 +194,8 @@
     document.getElementById('hs-node').textContent = data.node || '—';
     document.getElementById('hs-mininterval').textContent = data.tail_message.min_interval;
     const swpEnabled = !!data.tail_message.skywarnplus.enable;
+    const swpIsNg = !!data.tail_message.skywarnplus.ng_enable;
+    document.getElementById('hs-swp-label').textContent = swpIsNg ? 'SkywarnPlus-NG:' : 'SkywarnPlus:';
     const hsSwp = document.getElementById('hs-swp');
     hsSwp.textContent = swpEnabled ? 'Enabled' : 'Disabled';
     hsSwp.style.color = swpEnabled ? '#27ae60' : '#e74c3c';
@@ -322,6 +324,7 @@
     document.getElementById('tw-callsign').value = twTemplates.Callsign || '';
     document.getElementById('tw-lookahead-seconds').value = twTemplates.LookaheadSeconds || 5;
     twSwpInstalled = !!twHealth.skywarnplus_installed;
+    twSwpNgInstalled = !!twHealth.skywarnplus_ng_installed;
     updateTwProviderFields();
     updateTwSectionVisibility();
 
@@ -373,6 +376,7 @@
 
   // ── Time & Weather Announcements ──────────────────────────────────────────────────────────
   let twSwpInstalled = false;
+  let twSwpNgInstalled = false;
 
   function applyTwCronToPicker(cronExpr) {
     const parts = String(cronExpr || '0 * * * *').split(/\s+/);
@@ -416,8 +420,12 @@
     document.getElementById('tw-tempest-fields').style.display = provider === 'tempest' ? 'block' : 'none';
     document.getElementById('tw-location-field').style.display =
       (provider === 'tempest' || provider === 'skywarnplus') ? 'none' : 'block';
+    // NG takes priority when both are somehow present (e.g. mid-migration) -
+    // the two banners give different, non-overlapping guidance, so showing
+    // both would just be confusing.
+    document.getElementById('tw-swp-ng-banner').style.display = twSwpNgInstalled ? 'block' : 'none';
     document.getElementById('tw-swp-banner').style.display =
-      (twSwpInstalled && provider !== 'skywarnplus') ? 'block' : 'none';
+      (!twSwpNgInstalled && twSwpInstalled && provider !== 'skywarnplus') ? 'block' : 'none';
     // The skywarnplus provider is a local file read, not a live API call -
     // fetch_weather_cached() bypasses Herald's own throttle for it entirely
     // (SkywarnPlus already manages its own fetch freshness), so this

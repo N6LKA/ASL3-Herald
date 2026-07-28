@@ -188,7 +188,7 @@
 <div class="status-bar" id="herald-status-bar">
   <span><strong>Node:</strong> <span id="hs-node">—</span></span>
   <span><strong>MinInterval:</strong> <span id="hs-mininterval">—</span>s</span>
-  <span><strong>SkywarnPlus:</strong> <span id="hs-swp">—</span></span>
+  <span><strong id="hs-swp-label">SkywarnPlus:</strong> <span id="hs-swp">—</span></span>
   <span><strong>Herald:</strong> <span id="hs-enabled">—</span></span>
   <span><strong>Next tail:</strong> <span id="hs-countdown">—</span></span>
 </div>
@@ -657,6 +657,9 @@
     <h3>Weather</h3>
     <div id="tw-swp-banner" class="banner-info" style="display:none;">
       SkywarnPlus is installed on this system. If it's <a href="https://github.com/N6LKA/SkywarnPlus" target="_blank">N6LKA's fork</a> (required for this provider - the original archived upstream doesn't support it), using the <strong>SkywarnPlus</strong> weather provider below avoids running a second, independent weather poller.
+    </div>
+    <div id="tw-swp-ng-banner" class="banner-info" style="display:none;">
+      <a href="https://github.com/hardenedpenguin/SkywarnPlus-NG" target="_blank">SkywarnPlus-NG</a> is installed on this system. It has no equivalent of the <strong>SkywarnPlus</strong> provider above (no shared weather file) — pick <strong>Tempest</strong>, <strong>Open-Meteo</strong>, or <strong>METAR</strong> instead. Turn on <strong>Write a weather snapshot file for other local programs</strong> below if you're also running <a href="https://github.com/N6LKA/ASL3-SkywarnPlus-NG-Bridge" target="_blank">ASL3-SkywarnPlus-NG-Bridge</a> for Allmon3.
     </div>
 
     <div class="field-row">
