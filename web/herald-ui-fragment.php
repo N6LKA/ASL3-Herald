@@ -806,7 +806,7 @@
         <label for="tw-test-at" style="display:inline; font-size:0.9em;">Preview time (optional)</label>
         <input type="text" id="tw-test-at" placeholder="HH:MM" style="width:70px; margin-left:6px;">
       </span>
-      <span class="muted" style="font-size:0.85em; max-width:360px;">Leave blank to test with the real current time. Set a time (24-hour, e.g. 15:00) to preview how it'll sound at that moment - handy for checking things like top-of-the-hour phrasing without waiting for the real clock.</span>
+      <span class="muted" style="font-size:0.85em; max-width:460px;">Leave blank to test with the real current time. Set a time (24-hour, e.g. 15:00) to preview how it'll sound at that moment - handy for checking things like top-of-the-hour phrasing without waiting for the real clock.</span>
     </div>
     <div class="msg" id="timeweather-msg"></div>
   </div>
