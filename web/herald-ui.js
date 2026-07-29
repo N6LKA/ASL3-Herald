@@ -458,11 +458,15 @@
   }
 
   function updateSwpFieldsVisibility() {
+    const enabled = document.getElementById('set-swp-enable').checked;
     // 'flex', not 'block' - #set-swp-fields is a flex row (WX Tail File
     // Path + Silence Threshold side by side); setting 'block' here was
     // silently clobbering that layout back to stacked on every page load.
-    document.getElementById('set-swp-fields').style.display =
-      document.getElementById('set-swp-enable').checked ? 'flex' : 'none';
+    document.getElementById('set-swp-fields').style.display = enabled ? 'flex' : 'none';
+    // The whole NG toggle/fields column is meaningless with WX tail
+    // integration off, so hide it too rather than leaving an orphaned
+    // "written by SkywarnPlus-NG" toggle with nothing for it to apply to.
+    document.getElementById('set-swp-ng-block').style.display = enabled ? '' : 'none';
   }
 
   function updateSwpNgFieldsVisibility() {
