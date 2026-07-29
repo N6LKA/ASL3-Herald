@@ -167,6 +167,18 @@
     'en_GB-jenny_dioco-medium':            'Jenny (British Female)',
     'en_GB-northern_english_male-medium':  'Northern English Male',
   };
+  // ── Voice catalog (Global Settings -> Voices) ─────────────────────────────
+  // Catalog-derived labels take priority so any voice installed via the
+  // Voices tab (or via SkywarnPlus-NG/asl3-tts, since they share the same
+  // catalog + voice directory) gets a friendly name, not just the original
+  // fixed 19-voice VOICE_LABELS map above.
+  let _voiceCatalog = [];
+  let _catalogLabels = {};
+
+  function voiceLabel(id) {
+    return VOICE_LABELS[id] || _catalogLabels[id] || id;
+  }
+
   async function loadVoices() {
     const data = await api('voices.php');
     const voices = (data && data.voices) || [];
@@ -179,20 +191,19 @@
       }
       voices.forEach(v => {
         const opt = document.createElement('option');
-        opt.value = v; opt.textContent = VOICE_LABELS[v] || v;
+        opt.value = v; opt.textContent = voiceLabel(v);
         sel.appendChild(opt);
       });
       if (voices.includes(DEFAULT_VOICE)) sel.value = DEFAULT_VOICE;
     });
   }
 
-  // ── Voice catalog (Global Settings -> Voices) ─────────────────────────────
-  let _voiceCatalog = [];
-
   async function loadVoiceCatalog() {
     const data = await api('catalog_voices.php');
     if (!data || data.success === false) return;
     _voiceCatalog = data.voices || [];
+    _catalogLabels = {};
+    _voiceCatalog.forEach(v => { _catalogLabels[v.id] = v.label; });
 
     const regionSel = document.getElementById('voices-region');
     const prevRegion = regionSel.value;
@@ -385,7 +396,7 @@
       if (!enabled) tr.classList.add('sched-disabled');
       tr.innerHTML =
         '<td class="col-wrap">' + escapeAttr(m.Text) + '</td>' +
-        '<td>' + escapeAttr(VOICE_LABELS[m.Voice] || m.Voice) + '</td>' +
+        '<td>' + escapeAttr(voiceLabel(m.Voice)) + '</td>' +
         '<td><button class="' + (enabled ? 'btn-enable' : 'btn-disable') + ' btn-toggle-tw-msg" data-id="' + escapeAttr(m.Id) + '">' + (enabled ? 'Enabled' : 'Disabled') + '</button></td>' +
         '<td>' +
         '<button class="btn-test-tw-msg" data-id="' + escapeAttr(m.Id) + '">Test</button>' +
@@ -406,7 +417,7 @@
       nodeIdStatus.textContent = 'No Node ID has been generated yet.';
     } else {
       nodeIdStatus.textContent = 'Currently deployed: "' + (nodeId.Text || '') + '" (' +
-        (VOICE_LABELS[nodeId.Voice] || nodeId.Voice) + ')' +
+        voiceLabel(nodeId.Voice) + ')' +
         (nodeId.GeneratedAt ? ' - generated ' + nodeId.GeneratedAt : '');
     }
 
@@ -1059,8 +1070,11 @@
     }
   });
 
-  loadVoices();
-  loadVoiceCatalog();
-  loadAll();
+  // Catalog first so voiceLabel() has friendly names ready before anything
+  // that renders a voice dropdown/label (loadVoices, loadAll) runs.
+  loadVoiceCatalog().then(() => {
+    loadVoices();
+    loadAll();
+  });
   _cdPoller = setInterval(_pollCountdown, 10000);
 })();
