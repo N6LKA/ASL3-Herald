@@ -297,7 +297,7 @@
             <input type="checkbox" id="set-swp-ng-enable">
             <span class="toggle-slider"></span>
           </label>
-          <span class="toggle-label">Source WX Tail File from SkywarnPlus-NG</span>
+          <span class="toggle-label">WX Tail File is written by SkywarnPlus-NG</span>
         </div>
         <div id="set-swp-ng-fields" style="display:flex; flex-wrap:nowrap; gap:16px; align-items:flex-start; margin-top:4px;">
           <div style="flex:1 1 auto; min-width:0;">
@@ -309,7 +309,7 @@
             <input type="text" id="set-swp-ng-pollinterval" style="width: 90px; box-sizing:border-box;">
           </div>
         </div>
-        <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;"><a href="https://github.com/hardenedpenguin/SkywarnPlus-NG" target="_blank">SkywarnPlus-NG</a> has no tail-message file of its own — it only announces once per new/changed alert. When this is on, Herald itself polls NG's local dashboard API on the interval above and writes the WX Tail File itself, so the settings above still apply exactly the same way. Leave off if you're running the classic SkywarnPlus fork, which writes this file on its own.</p>
+        <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;"><a href="https://github.com/hardenedpenguin/SkywarnPlus-NG" target="_blank">SkywarnPlus-NG</a> writes WX Tail File itself — point the path above at its own Tail Message File Path setting (default <code>/var/lib/skywarnplus-ng/data/wx-tail.wav</code>). NG rewrites that file on every poll cycle even when nothing changed, though, so turning this on makes Herald separately poll NG's API on the interval above just to detect genuine alert changes — otherwise WX would replay on every unkey instead of alternating with rotation. Leave off if you're running the classic SkywarnPlus fork, whose own file only changes when an alert genuinely does.</p>
       </div>
     </div>
 

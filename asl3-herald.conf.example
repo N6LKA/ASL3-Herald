@@ -57,22 +57,28 @@ TailMessage:
     #   Node: "501261"
 
   SkywarnPlus:
-    # Play the SkywarnPlus wx-tail.wav instead of rotation when WX alerts are active.
-    # wx-tail.wav is a large file (>5000 bytes) when alerts are present, silent when not.
+    # Play the WX tail file instead of rotation when WX alerts are active.
+    # It's a large file (>5000 bytes) when alerts are present, silent when not.
     # WX alerts always take priority over the rotation.
     Enable: true
-    WxTailFile: /tmp/SkywarnPlus/wx-tail.wav
+    # Default matches SkywarnPlus-NG's own default Tail Message File Path -
+    # if you're on the classic SkywarnPlus fork instead, set this to
+    # /tmp/SkywarnPlus/wx-tail.wav (or wherever its config.yaml points).
+    WxTailFile: /var/lib/skywarnplus-ng/data/wx-tail.wav
     # File size threshold to distinguish an active alert file from the silent placeholder
     SilenceThreshold: 5000
     #
-    # SkywarnPlus-NG (https://github.com/hardenedpenguin/SkywarnPlus-NG) has no
-    # tail-message file of its own - it only announces once per new/changed
-    # alert. When NGEnable is true, Herald itself polls NG's local dashboard
-    # API and writes WxTailFile above, so everything else in this section
-    # (WxTailFile/SilenceThreshold) still works exactly as before.
-    # NGEnable: false
-    # NGApiBase: http://127.0.0.1:8100
-    # NGPollIntervalSec: 30
+    # SkywarnPlus-NG (https://github.com/hardenedpenguin/SkywarnPlus-NG) writes
+    # WxTailFile above itself - no bridge needed for that part. BUT it rewrites
+    # that file on every poll cycle even when nothing changed (unlike the
+    # classic fork, which only rewrites on a real change), which would break
+    # the WX/rotation alternation above if Herald relied on the file's mtime
+    # like it does for the classic fork. When NGEnable is true, Herald instead
+    # polls NG's local dashboard API just to detect genuine alert-set changes,
+    # and uses that instead of the file's mtime for the alternation decision.
+    NGEnable: false
+    NGApiBase: http://127.0.0.1:8100
+    NGPollIntervalSec: 30
 
 # Scheduled announcements — play at specific times, regardless of tail message interval
 # Days: "daily" or a list: ["saturday", "sunday"]  (case-insensitive)

@@ -147,8 +147,11 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 | `TailMessage.Rotation[].Node` | _(daemon's `Node`)_ | Optional: target a specific node number for this entry (multinodes= setups) |
 | `TailMessage.Rotation[].Enabled` | `true` | Set to `false` to disable an entry without removing it; re-enable with `herald toggle-rotation <name>` or the web UI |
 | `TailMessage.SkywarnPlus.Enable` | `true` | Enable SkywarnPlus WX tail integration |
-| `TailMessage.SkywarnPlus.WxTailFile` | `/tmp/SkywarnPlus/wx-tail.wav` | Path to SkywarnPlus wx-tail.wav |
+| `TailMessage.SkywarnPlus.WxTailFile` | `/var/lib/skywarnplus-ng/data/wx-tail.wav` | Path to the WX tail WAV — matches SkywarnPlus-NG's own default; set to `/tmp/SkywarnPlus/wx-tail.wav` for the classic fork |
 | `TailMessage.SkywarnPlus.SilenceThreshold` | `5000` | File size (bytes) to distinguish active alerts from silence |
+| `TailMessage.SkywarnPlus.NGEnable` | `false` | See [SkywarnPlus-NG integration](#skywarnplus-ng-integration) — needed alongside `WxTailFile` above when running NG, not needed for the classic fork |
+| `TailMessage.SkywarnPlus.NGApiBase` | `http://127.0.0.1:8100` | NG's local dashboard API |
+| `TailMessage.SkywarnPlus.NGPollIntervalSec` | `30` | How often Herald polls NG's API for change detection |
 | `Scheduled[].Name` | _(required)_ | Unique name for the scheduled announcement |
 | `Scheduled[].Cron` | _(required)_ | 5-field cron expression: `MIN HOUR DOM MON DOW` |
 | `Scheduled[].File` | _(required)_ | Path to WAV file to play |
@@ -172,7 +175,7 @@ TailMessage:
     - /etc/asterisk/scripts/asl3-herald/announcements/tail1.wav
   SkywarnPlus:
     Enable: true
-    WxTailFile: /tmp/SkywarnPlus/wx-tail.wav
+    WxTailFile: /var/lib/skywarnplus-ng/data/wx-tail.wav
     SilenceThreshold: 5000
 
 Scheduled:
@@ -409,18 +412,21 @@ There is no dedicated Time & Weather weather provider for reading a classic Skyw
 
 ### SkywarnPlus-NG integration
 
-[SkywarnPlus-NG](https://github.com/hardenedpenguin/SkywarnPlus-NG) is a separate, independent rewrite with **no tail-message file of its own** — it only does a one-shot voice announcement when an alert first appears or changes, with no repeated reminder while it stays active. If you're running NG instead of classic SkywarnPlus, set:
+[SkywarnPlus-NG](https://github.com/hardenedpenguin/SkywarnPlus-NG) is a separate, independent rewrite with its own tail-message file (silent when clear, TTS'd alert audio when active — configurable in its own dashboard under Alert Behavior, default path `/var/lib/skywarnplus-ng/data/wx-tail.wav`). Point `WxTailFile` straight at that path — Herald reads and plays it directly, no bridge needed for the audio itself. This is also `WxTailFile`'s new default, so a fresh install already matches NG's default location.
+
+The one thing NG does differently from classic SkywarnPlus: it rewrites that file on *every* poll cycle regardless of whether the alert set actually changed (classic SkywarnPlus only rewrites on a real change). Since the WX/rotation alternation above relies on the file's mtime to know "is this genuinely new," that would make WX replay on every unkey instead of ever alternating with rotation. So when running NG, also set:
 
 ```yaml
 TailMessage:
   SkywarnPlus:
     Enable: true
+    WxTailFile: /var/lib/skywarnplus-ng/data/wx-tail.wav   # matches NG's own default
     NGEnable: true
     NGApiBase: http://127.0.0.1:8100   # NG's local dashboard API - default port
     NGPollIntervalSec: 30
 ```
 
-Herald then polls NG's local `/api/alerts` on its own schedule and, when the active-alert set changes, fetches per-alert audio from `/api/alerts/{id}/audio` and writes it to `WxTailFile` itself — everything else about the Tail Messages feature (`WxTailFile`/`SilenceThreshold`, WX/rotation alternation) works exactly the same as the classic SkywarnPlus integration above; Herald's playback logic doesn't know or care which one wrote the file.
+With `NGEnable` on, Herald separately polls NG's local `/api/alerts` on its own schedule purely to detect a genuine change in the active-alert set, and uses that instead of the file's mtime for the alternation decision — `WxTailFile`/`SilenceThreshold` and the alternation behavior itself work exactly the same either way. Leave `NGEnable` off if you're on classic SkywarnPlus, whose own file-rewrite behavior already matches what the mtime check expects.
 
 For weather announcements with NG, use `TimeWeather.Weather.Provider: tempest`/`wunderground`/`metar`/`openmeteo` — NG has no shared weather file of its own. If you're also running [ASL3-SkywarnPlus-NG-Bridge](https://github.com/N6LKA/ASL3-SkywarnPlus-NG-Bridge) for Allmon3/Supermon alert panels, set `TimeWeather.Weather.SnapshotEnable: true` so Herald writes the current-conditions snapshot that bridge's Allmon3 panel reads (see its README for the exact contract).
 

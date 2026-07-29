@@ -24,7 +24,6 @@ import traceback
 import configparser
 import urllib.request
 import urllib.parse
-import wave
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -78,15 +77,12 @@ DEFAULT_TW_WEATHER_CACHE_MIN = 10
 DEFAULT_TW_MODE = "recordings"
 DEFAULT_TW_LOOKAHEAD_SECONDS = 5
 
-# SkywarnPlus-NG has no tail-message concept of its own (it only does a
-# one-shot announcement per new/changed alert) - when TailMessage.SkywarnPlus.
-# NGEnable is set, Herald itself polls its local dashboard API and writes
-# swp_file, so the existing wx_is_active()/mtime-based playback logic below
-# needs no changes at all. Same /run rationale as TW_TEMP_OUTDIR above -
-# tmpfs, not PrivateTmp-isolated, root-only (this only ever runs inside the
-# daemon's own process, never web-UI-spawned) so no special permission
-# handling is needed here.
-NG_TMP_DIR = "/run/asl3-herald/swp-ng-tmp"
+# Default WxTailFile now matches SkywarnPlus-NG's own default tail-message
+# path (its Tail Message File Path setting) rather than the classic
+# SkywarnPlus fork's /tmp/SkywarnPlus/wx-tail.wav - Herald reads NG's file
+# directly, no bridge/copy needed. See ng_tail_poll_tick()'s docstring
+# further down for why NGEnable still exists (change-detection only).
+DEFAULT_SWP_WXTAILFILE = "/var/lib/skywarnplus-ng/data/wx-tail.wav"
 DEFAULT_SWP_NG_API_BASE = "http://127.0.0.1:8100"
 DEFAULT_SWP_NG_POLL_INTERVAL = 30
 
@@ -378,6 +374,7 @@ def load_state():
         "swp_next_is_rotation": False,
         "swp_ng_last_poll": 0.0,
         "swp_ng_last_signature": None,
+        "swp_ng_last_change": None,
         "weather_snapshot_last_write": 0.0,
         "playback_history": [],
         "timeweather_played": None,
@@ -1099,94 +1096,32 @@ def fetch_weather_wunderground(api_key, station_id):
         "wind_gust_mph": round(imperial["windGust"], 1) if imperial.get("windGust") is not None else None,
     }
 
-# ── SkywarnPlus-NG tail-message bridge ─────────────────────────────────────────
-# SkywarnPlus-NG (https://github.com/hardenedpenguin/SkywarnPlus-NG) has no
-# tail-message concept of its own - it only does a one-shot voice
-# announcement when an alert first appears or changes. When
-# TailMessage.SkywarnPlus.NGEnable is set, Herald itself polls NG's local
-# dashboard API on its own cadence and writes swp_file directly, so the
-# existing wx_is_active()/mtime-based playback logic elsewhere in this file
-# needs no changes at all - it stays oblivious to who wrote the file.
+# ── SkywarnPlus-NG change detection ─────────────────────────────────────────
+# SkywarnPlus-NG (https://github.com/hardenedpenguin/SkywarnPlus-NG) has its
+# own native tail-message file (audio/tail_message.py's TailMessageManager) -
+# silent when clear, TTS'd alert audio with its own separator/suffix/county-
+# name handling when active, written to a path NG's own config controls
+# (default /var/lib/skywarnplus-ng/data/wx-tail.wav). Point WxTailFile at
+# that same path and Herald plays it directly - no bridge, no copying.
+#
+# The one gap: NG rewrites that file on *every* poll cycle regardless of
+# whether the alert set actually changed (confirmed in its core/application.py
+# - no change-gate before calling update_tail_message()), unlike classic
+# SkywarnPlus which only rewrites on a real change. Herald's WX/rotation
+# alternation depends on detecting "is this genuinely new" - using the file's
+# mtime for that (as classic SkywarnPlus assumes) would see a "new" alert on
+# nearly every check and never alternate with rotation. So when NGEnable is
+# on, ng_tail_poll_tick() polls NG's /api/alerts on its own cadence purely to
+# compare the active-alert-ID set against last time, and records a change
+# timestamp only when it's genuinely different - that timestamp substitutes
+# for the file's mtime in the alternation check below, instead of the real
+# (unreliable, for this purpose) mtime.
 
-def ng_write_silence(dest_path):
-    """Writes a short silent WAV so wx_is_active() correctly reports no
-    active alert (file exists but stays under SilenceThreshold)."""
-    with wave.open(dest_path, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(8000)
-        w.writeframes(b"\x00\x00" * 800)  # 0.1s of silence at 8kHz
-
-def ng_download_alert_audio(api_base, alert_id, dest_path, timeout=25):
-    """Fetches TTS audio for one alert from SkywarnPlus-NG's dashboard API.
-    Generated fresh per call by NG (not cached there), so callers should
-    only hit this when the active-alert set has actually changed."""
-    url = "{}/api/alerts/{}/audio".format(api_base.rstrip("/"), urllib.parse.quote(str(alert_id), safe=""))
-    try:
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "asl3-herald/{} (github.com/N6LKA/asl3-herald)".format(VERSION),
-        })
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            if resp.status != 200:
-                log_warn(f"SkywarnPlus-NG audio fetch returned HTTP {resp.status} for alert {alert_id}")
-                return False
-            with open(dest_path, "wb") as f:
-                f.write(resp.read())
-        return True
-    except Exception as e:
-        log_warn(f"SkywarnPlus-NG audio fetch failed for alert {alert_id}: {e}")
-        return False
-
-def ng_build_tail_file(api_base, alerts, dest_path):
-    """Fetches TTS audio for each active alert from SkywarnPlus-NG and
-    writes it to dest_path - concatenated via sox when there's more than
-    one active alert - in the 8kHz mono 16-bit format Asterisk expects,
-    same format used everywhere else in Herald (see finish_piper_render_async).
-    Leaves dest_path untouched and returns False if nothing could be
-    fetched, rather than clobbering good audio with nothing."""
-    if not alerts:
-        ng_write_silence(dest_path)
-        return True
-
-    os.makedirs(NG_TMP_DIR, exist_ok=True)
-    fetched = []
-    combined_tmp = os.path.join(NG_TMP_DIR, "combined-{}.wav".format(uuid.uuid4().hex))
-    try:
-        for alert in alerts:
-            alert_id = alert.get("id")
-            if not alert_id:
-                continue
-            tmp_path = os.path.join(NG_TMP_DIR, "{}.wav".format(uuid.uuid4().hex))
-            if ng_download_alert_audio(api_base, alert_id, tmp_path):
-                fetched.append(tmp_path)
-
-        if not fetched:
-            log_warn("SkywarnPlus-NG: could not fetch audio for any active alert - leaving tail file unchanged")
-            return False
-
-        r = subprocess.run(
-            ["sox"] + fetched + ["-r", "8000", "-c", "1", "-b", "16", "-t", "wav", combined_tmp],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60,
-        )
-        if r.returncode != 0 or not os.path.exists(combined_tmp) or os.path.getsize(combined_tmp) == 0:
-            log_error("SkywarnPlus-NG: sox failed combining alert audio into tail file")
-            return False
-
-        with open(combined_tmp, "rb") as src, open(dest_path, "wb") as dst:
-            dst.write(src.read())
-        return True
-    finally:
-        for p in fetched + [combined_tmp]:
-            try:
-                os.remove(p)
-            except OSError:
-                pass
-
-def ng_tail_poll_tick(swp_ng_on, swp_ng_api, swp_ng_poll, swp_file, state, now):
+def ng_tail_poll_tick(swp_ng_on, swp_ng_api, swp_ng_poll, state, now):
     """Call once per main-loop iteration - internally rate-limited to only
     actually poll SkywarnPlus-NG's API every swp_ng_poll seconds, regardless
-    of PollInterval. Only rebuilds swp_file when the active-alert set has
-    changed since the last check."""
+    of PollInterval. Records swp_ng_last_change only when the active-alert
+    ID set has genuinely changed since the last check."""
     if not swp_ng_on:
         return
     if (now - (state.get("swp_ng_last_poll") or 0)) < swp_ng_poll:
@@ -1195,22 +1130,22 @@ def ng_tail_poll_tick(swp_ng_on, swp_ng_api, swp_ng_poll, swp_file, state, now):
 
     data = tw_http_get_json(swp_ng_api.rstrip("/") + "/api/alerts")
     if data is None:
-        log_debug("SkywarnPlus-NG: could not reach API this cycle - leaving tail file unchanged")
+        log_debug("SkywarnPlus-NG: could not reach API this cycle")
         return
     alerts = data.get("alerts", [])
 
     # Plain list, not a tuple: state round-trips through JSON (see save_state),
     # which would turn a tuple into a list anyway - compare like-for-like so
     # an empty result doesn't accidentally equal the pre-first-run default of
-    # None (that bug would skip ever writing the initial silent tail file).
+    # None (that bug would skip ever recognizing the very first alert).
     signature = sorted(a.get("id", "") for a in alerts)
     if signature == state.get("swp_ng_last_signature"):
         return
 
-    log_info(f"SkywarnPlus-NG: alert set changed ({len(alerts)} active) - rebuilding tail file")
-    if ng_build_tail_file(swp_ng_api, alerts, swp_file):
-        state["swp_ng_last_signature"] = signature
-        save_state(state)
+    log_info(f"SkywarnPlus-NG: alert set changed ({len(alerts)} active)")
+    state["swp_ng_last_signature"] = signature
+    state["swp_ng_last_change"] = now
+    save_state(state)
 
 def fetch_weather(state, provider, location, tempest_token, tempest_station,
                    wunderground_api_key=None, wunderground_station=None, default_country="us"):
@@ -2132,7 +2067,7 @@ def extract_config(config):
 
     swp      = tm.get("SkywarnPlus", {}) or {}
     swp_on   = swp.get("Enable", True)
-    swp_file = swp.get("WxTailFile", "/tmp/SkywarnPlus/wx-tail.wav")
+    swp_file = swp.get("WxTailFile", DEFAULT_SWP_WXTAILFILE)
     swp_thr  = swp.get("SilenceThreshold", 5000)
 
     # SkywarnPlus-NG has no tail-message file of its own - when enabled,
@@ -3197,9 +3132,9 @@ def main():
             now    = time.time()
             now_dt = datetime.now()
 
-            # ── SkywarnPlus-NG tail file (self-rate-limited, see docstring) ─
+            # ── SkywarnPlus-NG change detection (self-rate-limited, see docstring) ─
             if swp_on:
-                ng_tail_poll_tick(swp_ng_on, swp_ng_api, swp_ng_poll, swp_file, state, now)
+                ng_tail_poll_tick(swp_ng_on, swp_ng_api, swp_ng_poll, state, now)
 
             # ── Weather snapshot for other local programs (self-rate-limited) ─
             weather_snapshot_tick(timeweather, state, now)
@@ -3311,10 +3246,18 @@ def main():
                     log_info("Scheduled announcement in progress - delaying tail message to next unkey")
 
                 elif swp_active:
-                    try:
-                        swp_mtime = os.path.getmtime(swp_file)
-                    except OSError:
-                        swp_mtime = None
+                    if swp_ng_on:
+                        # NG rewrites its tail file on every poll cycle even
+                        # when nothing changed (see ng_tail_poll_tick()'s
+                        # docstring) - its mtime can't tell us "is this
+                        # genuinely new". Use the API-derived change
+                        # timestamp ng_tail_poll_tick() maintains instead.
+                        swp_mtime = state.get("swp_ng_last_change")
+                    else:
+                        try:
+                            swp_mtime = os.path.getmtime(swp_file)
+                        except OSError:
+                            swp_mtime = None
                     is_new_alert = swp_mtime is not None and swp_mtime != state.get("swp_last_mtime")
 
                     if is_new_alert:
