@@ -89,8 +89,16 @@
   #herald-ui .btn-play     { background: #2980b9; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-secondary{ background: #576574; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-primary{ background: #27ae60; color: #fff; border: none; border-radius: 4px; padding: 8px 16px; }
+  #herald-ui .secret-wrap { position: relative; }
+  #herald-ui .secret-wrap input { padding-right: 30px !important; }
+  #herald-ui .btn-eye {
+    position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; padding: 4px; margin: 0;
+    cursor: pointer; color: #9aa5b1; line-height: 0;
+  }
+  #herald-ui .btn-eye:hover { color: #e1e5ea; }
   #herald-ui .btn-toggle { background: #8e44ad; color: #fff; border: none; border-radius: 4px; }
-  #herald-ui input[type=text], #herald-ui input[type=time], #herald-ui select, #herald-ui textarea {
+  #herald-ui input[type=text], #herald-ui input[type=password], #herald-ui input[type=time], #herald-ui select, #herald-ui textarea {
     padding: 6px; margin: 4px 6px 4px 0;
   }
   #herald-ui textarea {
@@ -694,7 +702,10 @@
       <div class="field-row">
         <div>
           <label>Tempest Personal Access Token</label>
-          <input type="text" id="tw-tempest-token" style="width:380px;" placeholder="tempest.earth/account">
+          <div class="secret-wrap" style="width:380px;">
+            <input type="password" autocomplete="off" id="tw-tempest-token" style="width:100%; box-sizing:border-box;" placeholder="tempest.earth/account">
+            <button type="button" class="btn-eye" data-target="tw-tempest-token" aria-label="Show"></button>
+          </div>
         </div>
         <div>
           <label>Tempest Station ID (optional)</label>
@@ -707,7 +718,10 @@
       <div class="field-row">
         <div>
           <label>Wunderground API Key</label>
-          <input type="text" id="tw-wunderground-apikey" style="width:380px;" placeholder="weatherunderground.com/member/api-keys">
+          <div class="secret-wrap" style="width:380px;">
+            <input type="password" autocomplete="off" id="tw-wunderground-apikey" style="width:100%; box-sizing:border-box;" placeholder="weatherunderground.com/member/api-keys">
+            <button type="button" class="btn-eye" data-target="tw-wunderground-apikey" aria-label="Show"></button>
+          </div>
         </div>
         <div>
           <label>Wunderground Station ID</label>
