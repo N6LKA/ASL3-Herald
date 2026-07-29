@@ -262,66 +262,65 @@
 <!-- ══════════════════ TAIL MESSAGES (unkey-triggered) ══════════════════ -->
 <div class="tab-panel" id="tab-tail">
   <div class="card">
-    <div style="display:flex; gap:32px; flex-wrap:wrap;">
-      <div style="flex:1 1 260px;">
-        <h3 style="margin-top:0;">General Settings</h3>
-        <label>Min Interval Between Tail Messages (seconds)</label>
+    <h3 style="margin-top:0;">General Settings</h3>
+    <div style="display:flex; flex-wrap:wrap; gap:28px; align-items:center;">
+      <div>
+        <label>Min Interval Between Tail Messages (seconds)</label><br>
         <input type="text" id="set-min-interval" style="width: 100px;">
         <span class="muted" style="margin-left: 8px;">e.g. 300 = 5 min, 600 = 10 min, 900 = 15 min</span>
-
-        <div class="toggle-row" style="margin-top:12px;">
-          <span class="toggle-label">RF activation only</span>
-          <label class="toggle-switch">
-            <input type="checkbox" id="set-network-keyup-trigger">
-            <span class="toggle-slider"></span>
-          </label>
-          <span class="toggle-label">RF and Network activation</span>
-        </div>
-        <p class="muted" style="margin-top: 6px; margin-bottom: 0;">Off: tail messages play after a local RF unkey only.<br>On: tail messages also play after a connected AllStar node unkeys.</p>
       </div>
-
-      <div style="flex:1 1 380px; min-width:320px;">
-        <h3 style="margin-top:0;">SkywarnPlus</h3>
-        <div class="toggle-row" style="margin-top: 8px;">
-          <label class="toggle-switch">
-            <input type="checkbox" id="set-swp-enable">
-            <span class="toggle-slider"></span>
-          </label>
-          <span class="toggle-label">Enable SkywarnPlus WX tail integration</span>
-        </div>
-
-        <div id="set-swp-fields" style="display:flex; flex-wrap:nowrap; gap:16px; align-items:flex-start; margin-top:4px;">
-          <div style="flex:1 1 auto; min-width:0;">
-            <label>WX Tail File Path</label>
-            <input type="text" id="set-swp-wxfile" style="width: 100%; box-sizing:border-box;">
-          </div>
-          <div style="flex:0 0 auto;">
-            <label>Silence Threshold (bytes)</label>
-            <input type="text" id="set-swp-threshold" style="width: 90px; box-sizing:border-box;">
-          </div>
-        </div>
-        <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;">When enabled, active WX alerts take priority over tail message rotation. Herald alternates between the WX alert and your normal rotation — the alert plays first, then one rotation message, then the alert again. A new or updated alert file always plays immediately on the next unkey. When no alert is active, normal rotation resumes. SkywarnPlus messages do not affect the cron-scheduled announcement timing.</p>
-
-        <div class="toggle-row" style="margin-top: 14px;">
-          <label class="toggle-switch">
-            <input type="checkbox" id="set-swp-ng-enable">
-            <span class="toggle-slider"></span>
-          </label>
-          <span class="toggle-label">WX Tail File is written by SkywarnPlus-NG</span>
-        </div>
-        <div id="set-swp-ng-fields" style="display:flex; flex-wrap:nowrap; gap:16px; align-items:flex-start; margin-top:4px;">
-          <div style="flex:1 1 auto; min-width:0;">
-            <label>SkywarnPlus-NG API Base</label>
-            <input type="text" id="set-swp-ng-apibase" style="width: 100%; box-sizing:border-box;">
-          </div>
-          <div style="flex:0 0 auto;">
-            <label>Poll Interval (seconds)</label>
-            <input type="text" id="set-swp-ng-pollinterval" style="width: 90px; box-sizing:border-box;">
-          </div>
-        </div>
-        <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;"><a href="https://github.com/hardenedpenguin/SkywarnPlus-NG" target="_blank">SkywarnPlus-NG</a> writes WX Tail File itself — point the path above at its own Tail Message File Path setting (default <code>/var/lib/skywarnplus-ng/data/wx-tail.wav</code>). NG rewrites that file on every poll cycle even when nothing changed, though, so turning this on makes Herald separately poll NG's API on the interval above just to detect genuine alert changes — otherwise WX would replay on every unkey instead of alternating with rotation. Leave off if you're running the classic SkywarnPlus fork, whose own file only changes when an alert genuinely does.</p>
+      <div class="toggle-row">
+        <span class="toggle-label">RF activation only</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="set-network-keyup-trigger">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">RF and Network activation</span>
       </div>
     </div>
+    <p class="muted" style="margin-top: 6px; margin-bottom: 0;">Off: tail messages play after a local RF unkey only. On: tail messages also play after a connected AllStar node unkeys.</p>
+
+    <hr style="margin:20px 0; border:none; border-top:1px solid #444;">
+
+    <h3 style="margin-top:0;">SkywarnPlus</h3>
+    <div class="toggle-row" style="margin-top: 8px;">
+      <label class="toggle-switch">
+        <input type="checkbox" id="set-swp-enable">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Enable SkywarnPlus WX tail integration</span>
+    </div>
+
+    <div id="set-swp-fields" style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start; margin-top:4px;">
+      <div style="flex:1 1 320px; min-width:0;">
+        <label>WX Tail File Path</label>
+        <input type="text" id="set-swp-wxfile" style="width: 100%; box-sizing:border-box;">
+      </div>
+      <div style="flex:0 0 auto;">
+        <label>Silence Threshold (bytes)</label>
+        <input type="text" id="set-swp-threshold" style="width: 90px; box-sizing:border-box;">
+      </div>
+    </div>
+    <p class="muted" style="margin-top:8px; margin-bottom:0; font-size:0.9em;">When enabled, an active WX alert takes priority over the tail message rotation, alternating with it (alert, one rotation message, alert, ...) rather than repeating every unkey. A new or changed alert always plays right away; normal rotation resumes once it clears.</p>
+
+    <div class="toggle-row" style="margin-top: 14px;">
+      <label class="toggle-switch">
+        <input type="checkbox" id="set-swp-ng-enable">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">WX Tail File is written by SkywarnPlus-NG</span>
+    </div>
+    <div id="set-swp-ng-fields" style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start; margin-top:4px;">
+      <div style="flex:1 1 320px; min-width:0;">
+        <label>SkywarnPlus-NG API Base</label>
+        <input type="text" id="set-swp-ng-apibase" style="width: 100%; box-sizing:border-box;">
+      </div>
+      <div style="flex:0 0 auto;">
+        <label>Poll Interval (seconds)</label>
+        <input type="text" id="set-swp-ng-pollinterval" style="width: 90px; box-sizing:border-box;">
+      </div>
+    </div>
+    <p class="muted" style="margin-top:8px; margin-bottom:0; font-size:0.9em;">Turn this on if you're running <a href="https://github.com/hardenedpenguin/SkywarnPlus-NG" target="_blank">SkywarnPlus-NG</a>. Point WX Tail File Path above at its own Tail Message File Path setting (default <code>/var/lib/skywarnplus-ng/data/wx-tail.wav</code>) and set the API Base to its dashboard address. Leave off if you're running the classic SkywarnPlus fork instead.</p>
 
     <br>
     <button class="btn-primary" id="btn-save-tail-settings">Save &amp; Reload</button>
