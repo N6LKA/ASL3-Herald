@@ -458,11 +458,15 @@
   }
 
   function updateSwpFieldsVisibility() {
+    const enabled = document.getElementById('set-swp-enable').checked;
     // 'flex', not 'block' - #set-swp-fields is a flex row (WX Tail File
     // Path + Silence Threshold side by side); setting 'block' here was
     // silently clobbering that layout back to stacked on every page load.
-    document.getElementById('set-swp-fields').style.display =
-      document.getElementById('set-swp-enable').checked ? 'flex' : 'none';
+    document.getElementById('set-swp-fields').style.display = enabled ? 'flex' : 'none';
+    // The whole NG toggle/fields column is meaningless with WX tail
+    // integration off, so hide it too rather than leaving an orphaned
+    // "written by SkywarnPlus-NG" toggle with nothing for it to apply to.
+    document.getElementById('set-swp-ng-block').style.display = enabled ? '' : 'none';
   }
 
   function updateSwpNgFieldsVisibility() {
@@ -501,6 +505,7 @@
     // Master switch off: hide every option (nothing to configure), but
     // leave Save & Reload reachable so the disabled state can still be
     // saved, and hide Test since there'd be nothing to test.
+    document.getElementById('tw-mode-row').style.display = enabled ? 'block' : 'none';
     document.getElementById('tw-options-block').style.display = (enabled && !isTemplate) ? 'block' : 'none';
     document.getElementById('tw-templates-block').style.display = (enabled && isTemplate) ? 'block' : 'none';
     // Time Format and Weather are shared settings - Template mode's
@@ -897,6 +902,21 @@
   document.getElementById('tw-time-format').addEventListener('change', updateTwSectionVisibility);
   document.getElementById('tw-weather-enable').addEventListener('change', updateTwSectionVisibility);
   document.querySelectorAll('input[name="tw-mode"]').forEach(r => r.addEventListener('change', updateTwSectionVisibility));
+
+  // ── Show/hide toggle for secret fields (Tempest token, Wunderground key) ──
+  const EYE_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const EYE_OFF_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.8 21.8 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.8 21.8 0 0 1-3.22 4.56M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+  document.querySelectorAll('#herald-ui .btn-eye').forEach(btn => {
+    btn.innerHTML = EYE_SVG;
+    btn.addEventListener('click', () => {
+      const input = document.getElementById(btn.dataset.target);
+      if (!input) return;
+      const reveal = input.type === 'password';
+      input.type = reveal ? 'text' : 'password';
+      btn.innerHTML = reveal ? EYE_OFF_SVG : EYE_SVG;
+      btn.setAttribute('aria-label', reveal ? 'Hide' : 'Show');
+    });
+  });
 
   document.getElementById('btn-save-timeweather').addEventListener('click', async () => {
     const msgEl = document.getElementById('timeweather-msg');
