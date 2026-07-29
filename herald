@@ -28,6 +28,7 @@ General:
   voices [--json]                         List available TTS voices
   catalog-voices                          List the full Piper voice catalog with installed status
   install-voice <voice-id>                Download and install a Piper voice
+  remove-voice <voice-id>                 Remove an installed Piper voice
   playback-history                        Print recent playback history as JSON
   clear-history                           Clear the playback history
   export-config                           Print the full config as JSON (for backup)
@@ -384,6 +385,11 @@ cmd_catalog_voices() {
 cmd_install_voice() {
     need_root "$@"
     python3 "$DAEMON_PY" install-voice "$@"
+}
+
+cmd_remove_voice() {
+    need_root "$@"
+    python3 "$DAEMON_PY" remove-voice "$@"
 }
 
 # ── Tail message (rotation) commands ──────────────────────────────────────────
@@ -905,6 +911,7 @@ case "$CMD" in
     voices)              cmd_voices             "$@" ;;
     catalog-voices)       cmd_catalog_voices     "$@" ;;
     install-voice)        cmd_install_voice      "$@" ;;
+    remove-voice)         cmd_remove_voice       "$@" ;;
     add)                  cmd_add                "$@" ;;
     add-file)             cmd_add_file           "$@" ;;
     edit-rotation)        cmd_edit_rotation      "$@" ;;

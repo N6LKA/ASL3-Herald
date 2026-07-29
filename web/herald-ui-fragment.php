@@ -917,6 +917,7 @@
     </div>
     <div style="margin-top:10px;">
       <button class="btn-primary" id="btn-install-voice">Install Voice</button>
+      <button class="btn-danger" id="btn-remove-voice" style="display:none;">Remove Voice</button>
       <button id="btn-refresh-voices">Refresh</button>
       <span class="muted" id="voices-count"></span>
     </div>

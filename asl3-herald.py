@@ -2208,6 +2208,28 @@ def cmd_install_voice(config, args):
 
     print(json.dumps({"success": True, "message": f"Installed {voice_id}"}))
 
+def cmd_remove_voice(config, args):
+    voice_id = args.voice_id
+    if voice_id == DEFAULT_PIPER_VOICE:
+        print(json.dumps({
+            "success": False,
+            "message": f"{voice_id} is the default voice and can't be removed",
+        }))
+        return
+
+    onnx_path = os.path.join(PIPER_VOICE_DIR, voice_id + ".onnx")
+    json_path = onnx_path + ".json"
+    if not os.path.isfile(onnx_path) and not os.path.isfile(json_path):
+        print(json.dumps({"success": True, "message": f"{voice_id} is not installed"}))
+        return
+
+    for p in (onnx_path, json_path):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+    print(json.dumps({"success": True, "message": f"Removed {voice_id}"}))
+
 # ── CLI subcommands (used by the `herald` bash CLI and the web UI) ────────────
 
 def normalize_rotation(rotation):
@@ -2943,6 +2965,9 @@ def build_arg_parser():
     p_install_voice = sub.add_parser("install-voice", help="Download and install a Piper voice")
     p_install_voice.add_argument("voice_id")
 
+    p_remove_voice = sub.add_parser("remove-voice", help="Remove an installed Piper voice")
+    p_remove_voice.add_argument("voice_id")
+
     p_tw = sub.add_parser("update-timeweather", help="Update Time & Weather Announcements settings")
     p_tw.add_argument("--enable", choices=["true", "false"])
     p_tw.add_argument("--announce-time", dest="announce_time", choices=["true", "false"])
@@ -3051,6 +3076,8 @@ def cli_main():
         cmd_catalog_voices(config)
     elif args.command == "install-voice":
         cmd_install_voice(config, args)
+    elif args.command == "remove-voice":
+        cmd_remove_voice(config, args)
     elif args.command == "update-timeweather":
         cmd_update_timeweather(config, args)
     elif args.command == "test-timeweather":

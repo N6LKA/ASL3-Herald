@@ -270,12 +270,13 @@ A scheduled announcement waits for the node to unkey before playing (rather than
 
 Piper voices live at `/var/lib/piper-tts` — the same shared location [SkywarnPlus-NG](#skywarnplus-ng-integration) and ASL3's own `asl3-tts` package use. Install a voice through any of the three and it's usable by all of them; nothing is duplicated.
 
-`install.sh` installs only the default voice (`en_US-amy-medium`) up front. Browse and install any of the other 160+ available voices from the **Voices** box on the web UI's **Global Settings** tab (region + voice picker, "Install Voice" button) — no restart or reload needed, and the new voice shows up immediately in every voice dropdown (Tail Messages, Scheduled Announcements, Time & Weather Templates, Node ID Generator).
+`install.sh` installs only the default voice (`en_US-amy-medium`) up front. Browse and install any of the other 160+ available voices from the **Voices** box on the web UI's **Global Settings** tab (region + voice picker, "Install Voice" button) — no restart or reload needed, and the new voice shows up immediately in every voice dropdown (Tail Messages, Scheduled Announcements, Time & Weather Templates, Node ID Generator). Once a voice is installed, the same box shows a "Remove Voice" button instead (the default voice can't be removed); already-generated announcements keep playing fine after a voice is removed, but editing one that still references it will fail until a different voice is picked or it's reinstalled.
 
 ```bash
 herald voices                                              # list installed voices
 herald catalog-voices                                       # full catalog (region/language/installed status), as JSON
 sudo herald install-voice en_US-joe-medium                  # install a voice from the CLI instead of the web UI
+sudo herald remove-voice en_US-joe-medium                   # remove an installed voice from the CLI
 sudo herald add "Net starts in 5 minutes" --voice en_US-joe-medium --name net-warning
 ```
 

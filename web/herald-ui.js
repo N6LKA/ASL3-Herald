@@ -234,6 +234,16 @@
     const installedCount = _voiceCatalog.filter(v => v.installed).length;
     const countEl = document.getElementById('voices-count');
     if (countEl) countEl.textContent = installedCount + ' of ' + _voiceCatalog.length + ' voices installed';
+
+    updateVoiceButtons();
+  }
+
+  function updateVoiceButtons() {
+    const voiceId = document.getElementById('voices-select').value;
+    const entry = _voiceCatalog.find(v => v.id === voiceId);
+    const installed = !!(entry && entry.installed);
+    document.getElementById('btn-install-voice').style.display = installed ? 'none' : '';
+    document.getElementById('btn-remove-voice').style.display = installed ? '' : 'none';
   }
 
   // ── Load status + lists ────────────────────────────────────────────────────────────────────────
@@ -1050,6 +1060,7 @@
   });
 
   document.getElementById('voices-region').addEventListener('change', populateVoiceCatalogSelect);
+  document.getElementById('voices-select').addEventListener('change', updateVoiceButtons);
   document.getElementById('btn-refresh-voices').addEventListener('click', () => loadVoiceCatalog());
   document.getElementById('btn-install-voice').addEventListener('click', async () => {
     const voiceId = document.getElementById('voices-select').value;
@@ -1064,6 +1075,25 @@
     });
     btn.disabled = false;
     showMsg(msgEl, data.message || (data.success ? 'Installed' : 'Failed'), data.success !== false);
+    if (data.success !== false) {
+      await loadVoiceCatalog();
+      await loadVoices();
+    }
+  });
+  document.getElementById('btn-remove-voice').addEventListener('click', async () => {
+    const voiceId = document.getElementById('voices-select').value;
+    if (!voiceId) return;
+    if (!confirm('Remove voice ' + voiceLabel(voiceId) + '? Already-generated announcements keep playing fine, but editing one that still uses this voice (without picking a different one) will fail until it\'s reinstalled.')) return;
+    const msgEl = document.getElementById('voices-msg');
+    const btn = document.getElementById('btn-remove-voice');
+    btn.disabled = true;
+    showMsg(msgEl, 'Removing ' + voiceId + ' ...', true);
+    const data = await api('remove_voice.php', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ voice_id: voiceId }),
+    });
+    btn.disabled = false;
+    showMsg(msgEl, data.message || (data.success ? 'Removed' : 'Failed'), data.success !== false);
     if (data.success !== false) {
       await loadVoiceCatalog();
       await loadVoices();
