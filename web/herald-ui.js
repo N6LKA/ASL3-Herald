@@ -505,6 +505,7 @@
     // Master switch off: hide every option (nothing to configure), but
     // leave Save & Reload reachable so the disabled state can still be
     // saved, and hide Test since there'd be nothing to test.
+    document.getElementById('tw-mode-row').style.display = enabled ? 'block' : 'none';
     document.getElementById('tw-options-block').style.display = (enabled && !isTemplate) ? 'block' : 'none';
     document.getElementById('tw-templates-block').style.display = (enabled && isTemplate) ? 'block' : 'none';
     // Time Format and Weather are shared settings - Template mode's
