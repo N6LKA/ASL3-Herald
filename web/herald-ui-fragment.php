@@ -748,15 +748,15 @@
         <span class="toggle-slider"></span>
       </label>
       <span class="toggle-label">Write a weather snapshot file for other local programs</span>
-    </div>
-    <div id="tw-snapshot-fields" class="field-row" style="margin-top:4px;">
-      <div>
-        <label>Snapshot File Path</label>
-        <input type="text" id="tw-snapshot-path" style="width:430px; box-sizing:border-box;">
-      </div>
-      <div>
-        <label>Label (optional)</label>
-        <input type="text" id="tw-snapshot-label" style="width:430px; box-sizing:border-box;" placeholder="e.g. Home Station">
+      <div id="tw-snapshot-fields" style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+        <div>
+          <label>Snapshot File Path</label>
+          <input type="text" id="tw-snapshot-path" style="width:430px; box-sizing:border-box;">
+        </div>
+        <div>
+          <label>Label (optional)</label>
+          <input type="text" id="tw-snapshot-label" style="width:430px; box-sizing:border-box;" placeholder="e.g. Home Station">
+        </div>
       </div>
     </div>
     <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;">Writes the same weather data used above (no extra fetch) to a small JSON file — for example, for <a href="https://github.com/N6LKA/ASL3-SkywarnPlus-NG-Bridge" target="_blank">ASL3-SkywarnPlus-NG-Bridge</a>'s Allmon3 panel. Checked once a minute.</p>
