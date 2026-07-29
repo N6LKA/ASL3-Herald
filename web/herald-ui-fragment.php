@@ -80,8 +80,9 @@
   }
   /* Higher specificity than "#herald-ui button" above (extra class), so JS
      can still hide a button (e.g. Time & Weather's Test button when there's
-     nothing to test) despite that rule's !important. */
-  #herald-ui button.tw-hidden {
+     nothing to test, or the Voices box's Install/Remove toggle) despite
+     that rule's !important. */
+  #herald-ui button.btn-hidden {
     display: none !important;
   }
   #herald-ui .btn-danger { background: #e74c3c; color: #fff; border: none; border-radius: 4px; }
@@ -917,7 +918,7 @@
     </div>
     <div style="margin-top:10px;">
       <button class="btn-primary" id="btn-install-voice">Install Voice</button>
-      <button class="btn-danger" id="btn-remove-voice" style="display:none;">Remove Voice</button>
+      <button class="btn-danger btn-hidden" id="btn-remove-voice">Remove Voice</button>
       <button id="btn-refresh-voices">Refresh</button>
       <span class="muted" id="voices-count"></span>
     </div>

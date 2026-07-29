@@ -242,8 +242,8 @@
     const voiceId = document.getElementById('voices-select').value;
     const entry = _voiceCatalog.find(v => v.id === voiceId);
     const installed = !!(entry && entry.installed);
-    document.getElementById('btn-install-voice').style.display = installed ? 'none' : '';
-    document.getElementById('btn-remove-voice').style.display = installed ? '' : 'none';
+    document.getElementById('btn-install-voice').classList.toggle('btn-hidden', installed);
+    document.getElementById('btn-remove-voice').classList.toggle('btn-hidden', !installed);
   }
 
   // ── Load status + lists ────────────────────────────────────────────────────────────────────────
@@ -526,7 +526,7 @@
     // inline-block !important }" rule (added to defeat Bootstrap's flex
     // stretching on Allmon3 host pages) - toggle a class with matching
     // !important + higher specificity instead.
-    document.getElementById('btn-test-timeweather').classList.toggle('tw-hidden', !(enabled && hasContent));
+    document.getElementById('btn-test-timeweather').classList.toggle('btn-hidden', !(enabled && hasContent));
     document.getElementById('tw-nothing-warning').style.display = (enabled && !isTemplate && !hasContent) ? 'block' : 'none';
   }
 
