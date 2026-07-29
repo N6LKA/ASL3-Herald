@@ -262,6 +262,77 @@
 <!-- ══════════════════ TAIL MESSAGES (unkey-triggered) ══════════════════ -->
 <div class="tab-panel" id="tab-tail">
   <div class="card">
+    <h3>Tail Message Rotation</h3>
+    <p class="muted">Plays on the next transmission unkey, gated by MinInterval. A SkywarnPlus WX alert always takes priority over the rotation.</p>
+    <table id="tail-table">
+      <thead><tr><th>#</th><th>File</th><th>Days</th><th>Window</th><th>Node</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="add-form">
+      <h3 id="tail-form-heading">Add a Tail Message</h3>
+
+      <label>Name (letters, numbers, hyphens only — no spaces)</label>
+      <input type="text" id="tail-name" placeholder="e.g. weekend-notice">
+
+      <div class="field-row" style="margin-top: 8px;">
+        <div>
+          <label>Days (optional — leave Daily for always eligible)</label>
+          <div class="days-picker" id="tail-days">
+            <label><input type="checkbox" value="daily" id="tail-day-daily" checked> Daily</label>
+            <label><input type="checkbox" value="sunday"> Sun</label>
+            <label><input type="checkbox" value="monday"> Mon</label>
+            <label><input type="checkbox" value="tuesday"> Tue</label>
+            <label><input type="checkbox" value="wednesday"> Wed</label>
+            <label><input type="checkbox" value="thursday"> Thu</label>
+            <label><input type="checkbox" value="friday"> Fri</label>
+            <label><input type="checkbox" value="saturday"> Sat</label>
+          </div>
+        </div>
+        <div>
+          <label>Time Window (optional)</label>
+          <input type="time" id="tail-time-start" style="width: 110px;">
+          <span class="muted">to</span>
+          <input type="time" id="tail-time-end" style="width: 110px;">
+        </div>
+        <div>
+          <label>Node Override (optional)</label>
+          <input type="text" id="tail-node" style="width: 120px;" placeholder="e.g. 501261">
+        </div>
+      </div>
+
+      <div class="source-toggle" style="margin-top: 16px;">
+        <label><input type="radio" name="tail-source" value="tts" checked> Text-to-Speech</label>
+        <label><input type="radio" name="tail-source" value="file"> Upload File</label>
+      </div>
+
+      <div id="tail-tts-fields">
+        <div class="tts-row">
+          <div class="tts-voice">
+            <label>Voice</label>
+            <select id="tail-voice" style="display: block;"></select>
+            <p class="muted" style="font-size:0.8em; margin:4px 0 0;">More voices: Global Settings &rarr; Voices</p>
+          </div>
+          <div class="tts-text">
+            <label>Text</label>
+            <textarea id="tail-text" rows="3" placeholder="e.g. This is a test transmission" style="width: 100%;"></textarea>
+          </div>
+        </div>
+      </div>
+      <div id="tail-file-fields" style="display:none;">
+        <label>Audio file (.wav or .mp3)</label>
+        <input type="file" id="tail-file" accept=".wav,.mp3">
+        <span class="muted" id="tail-file-keep-note" style="display:none;">Leave blank to keep the existing audio.</span>
+      </div>
+
+      <br>
+      <button class="btn-primary" id="btn-add-tail">Add to Rotation</button>
+      <button id="tail-edit-cancel" style="display:none;">Cancel Edit</button>
+      <div class="msg" id="tail-msg"></div>
+    </div>
+  </div>
+
+  <div class="card">
     <h3 style="margin-top:0;">General Settings</h3>
     <div style="display:flex; flex-wrap:wrap; gap:28px; align-items:flex-start;">
       <div>
@@ -333,77 +404,6 @@
     <br>
     <button class="btn-primary" id="btn-save-tail-settings">Save &amp; Reload</button>
     <div class="msg" id="tail-settings-msg"></div>
-  </div>
-
-  <div class="card">
-    <h3>Tail Message Rotation</h3>
-    <p class="muted">Plays on the next transmission unkey, gated by MinInterval. A SkywarnPlus WX alert always takes priority over the rotation.</p>
-    <table id="tail-table">
-      <thead><tr><th>#</th><th>File</th><th>Days</th><th>Window</th><th>Node</th><th>Status</th><th>Actions</th></tr></thead>
-      <tbody></tbody>
-    </table>
-
-    <div class="add-form">
-      <h3 id="tail-form-heading">Add a Tail Message</h3>
-
-      <label>Name (letters, numbers, hyphens only — no spaces)</label>
-      <input type="text" id="tail-name" placeholder="e.g. weekend-notice">
-
-      <div class="field-row" style="margin-top: 8px;">
-        <div>
-          <label>Days (optional — leave Daily for always eligible)</label>
-          <div class="days-picker" id="tail-days">
-            <label><input type="checkbox" value="daily" id="tail-day-daily" checked> Daily</label>
-            <label><input type="checkbox" value="sunday"> Sun</label>
-            <label><input type="checkbox" value="monday"> Mon</label>
-            <label><input type="checkbox" value="tuesday"> Tue</label>
-            <label><input type="checkbox" value="wednesday"> Wed</label>
-            <label><input type="checkbox" value="thursday"> Thu</label>
-            <label><input type="checkbox" value="friday"> Fri</label>
-            <label><input type="checkbox" value="saturday"> Sat</label>
-          </div>
-        </div>
-        <div>
-          <label>Time Window (optional)</label>
-          <input type="time" id="tail-time-start" style="width: 110px;">
-          <span class="muted">to</span>
-          <input type="time" id="tail-time-end" style="width: 110px;">
-        </div>
-        <div>
-          <label>Node Override (optional)</label>
-          <input type="text" id="tail-node" style="width: 120px;" placeholder="e.g. 501261">
-        </div>
-      </div>
-
-      <div class="source-toggle" style="margin-top: 16px;">
-        <label><input type="radio" name="tail-source" value="tts" checked> Text-to-Speech</label>
-        <label><input type="radio" name="tail-source" value="file"> Upload File</label>
-      </div>
-
-      <div id="tail-tts-fields">
-        <div class="tts-row">
-          <div class="tts-voice">
-            <label>Voice</label>
-            <select id="tail-voice" style="display: block;"></select>
-            <p class="muted" style="font-size:0.8em; margin:4px 0 0;">More voices: Global Settings &rarr; Voices</p>
-          </div>
-          <div class="tts-text">
-            <label>Text</label>
-            <textarea id="tail-text" rows="3" placeholder="e.g. This is a test transmission" style="width: 100%;"></textarea>
-          </div>
-        </div>
-      </div>
-      <div id="tail-file-fields" style="display:none;">
-        <label>Audio file (.wav or .mp3)</label>
-        <input type="file" id="tail-file" accept=".wav,.mp3">
-        <span class="muted" id="tail-file-keep-note" style="display:none;">Leave blank to keep the existing audio.</span>
-      </div>
-
-      <br>
-      <button class="btn-primary" id="btn-add-tail">Add to Rotation</button>
-      <button id="tail-edit-cancel" style="display:none;">Cancel Edit</button>
-      <div class="msg" id="tail-msg"></div>
-    </div>
   </div>
 </div>
 
