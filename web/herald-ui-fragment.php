@@ -85,8 +85,9 @@
   #herald-ui button.btn-hidden {
     display: none !important;
   }
-  #herald-ui .btn-danger { background: #e74c3c; color: #fff; border: none; border-radius: 4px; }
-  #herald-ui .btn-play   { background: #2980b9; color: #fff; border: none; border-radius: 4px; }
+  #herald-ui .btn-danger   { background: #e74c3c; color: #fff; border: none; border-radius: 4px; }
+  #herald-ui .btn-play     { background: #2980b9; color: #fff; border: none; border-radius: 4px; }
+  #herald-ui .btn-secondary{ background: #576574; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-primary{ background: #27ae60; color: #fff; border: none; border-radius: 4px; padding: 8px 16px; }
   #herald-ui .btn-toggle { background: #8e44ad; color: #fff; border: none; border-radius: 4px; }
   #herald-ui input[type=text], #herald-ui input[type=time], #herald-ui select, #herald-ui textarea {
@@ -919,7 +920,7 @@
     <div style="margin-top:10px;">
       <button class="btn-primary" id="btn-install-voice">Install Voice</button>
       <button class="btn-danger btn-hidden" id="btn-remove-voice">Remove Voice</button>
-      <button id="btn-refresh-voices">Refresh</button>
+      <button class="btn-secondary" id="btn-refresh-voices">Refresh</button>
       <span class="muted" id="voices-count"></span>
     </div>
     <div class="msg" id="voices-msg"></div>
@@ -928,7 +929,7 @@
   <div class="card">
     <h3>Backup &amp; Restore</h3>
     <p class="muted">Export the full configuration (rotation, scheduled announcements, and settings) as a JSON file, or restore from a previously exported file. Restoring replaces the entire configuration.</p>
-    <button id="btn-export-config">Download Config Backup</button>
+    <button class="btn-secondary" id="btn-export-config">Download Config Backup</button>
     <br><br>
     <label>Restore from backup file</label>
     <input type="file" id="config-import-file" accept=".json">
