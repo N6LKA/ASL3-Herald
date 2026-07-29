@@ -752,11 +752,11 @@
     <div id="tw-snapshot-fields" class="field-row" style="margin-top:4px;">
       <div>
         <label>Snapshot File Path</label>
-        <input type="text" id="tw-snapshot-path" style="width:320px; box-sizing:border-box;">
+        <input type="text" id="tw-snapshot-path" style="width:430px; box-sizing:border-box;">
       </div>
-      <div style="flex:1 1 auto; min-width:0;">
+      <div>
         <label>Label (optional)</label>
-        <input type="text" id="tw-snapshot-label" style="width:100%; box-sizing:border-box;" placeholder="e.g. Home Station">
+        <input type="text" id="tw-snapshot-label" style="width:430px; box-sizing:border-box;" placeholder="e.g. Home Station">
       </div>
     </div>
     <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;">Writes the same weather data used above (no extra fetch) to a small JSON file — for example, for <a href="https://github.com/N6LKA/ASL3-SkywarnPlus-NG-Bridge" target="_blank">ASL3-SkywarnPlus-NG-Bridge</a>'s Allmon3 panel. Checked once a minute.</p>
