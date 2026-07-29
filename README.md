@@ -6,7 +6,7 @@
 
 **A full-featured announcement and audio suite for ASL3/app_rpt.**
 
-`asl3-herald` started as a drop-in replacement for the native `app_rpt` tail message function and has grown into a complete announcement toolkit: reliable unkey-triggered tail messages, cron-style scheduled announcements, [SkywarnPlus](https://github.com/N6LKA/SkywarnPlus) weather alert integration with priority playback, built-in time & weather announcements (either a pre-recorded sound pack or your own Piper-TTS-rendered custom messages), a station ID audio generator, neural TTS voices throughout, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
+`asl3-herald` started as a drop-in replacement for the native `app_rpt` tail message function and has grown into a complete announcement toolkit: reliable unkey-triggered tail messages, cron-style scheduled announcements, SkywarnPlus weather alert integration with priority playback (works with classic SkywarnPlus or [SkywarnPlus-NG](https://github.com/hardenedpenguin/SkywarnPlus-NG) — see [SkywarnPlus Integration](#skywarnplus-integration)), built-in time & weather announcements (either a pre-recorded sound pack or your own Piper-TTS-rendered custom messages), a station ID audio generator, neural TTS voices throughout, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
 
 ---
 
@@ -33,8 +33,8 @@
   - Announces the current time (12- or 24-hour, with an optional "Good morning/afternoon/evening" smart greeting) and/or current weather conditions — time only, weather only, or both, independently configurable
   - Runs on the same cron-style schedule as Scheduled Announcements (top of every hour by default, but any pattern works) and **takes priority over Scheduled Announcements** if both are due at the same moment
   - Also triggerable **on demand over DTMF** (map a function in `rpt.conf` to `herald play-timeweather`), independent of the schedule
-  - Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or — if SkywarnPlus is already installed — its already-fetched data, avoiding a second independent poller
-  - **Two modes**: **Recordings** (default) builds the announcement from a pre-recorded sound pack — fast, fixed wording. **Custom Templates** lets you write your own message(s) with tags (`{smart_greeting}` `{time}` `{conditions}` `{temperature}` `{feels_like}` `{humidity}` `{callsign}`), rendered fresh with Piper TTS each time; with more than one message configured, a different one is picked at random each occurrence (never the same one twice in a row). Rendering happens a few seconds ahead of the scheduled moment (configurable) so playback is still instant when it's due.
+  - Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or any Personal Weather Station uploading to Weather Underground (including a Tempest station also configured to feed WU) — Tempest, Open-Meteo, and METAR all include wind speed/direction/gust in addition to temperature, feels-like, humidity, and condition
+  - **Two modes**: **Recordings** (default) builds the announcement from a pre-recorded sound pack — fast, fixed wording. **Custom Templates** lets you write your own message(s) with tags (`{smart_greeting}` `{time}` `{conditions}` `{temperature}` `{feels_like}` `{humidity}` `{wind_speed}` `{wind_gust}` `{callsign}`), rendered fresh with Piper TTS each time; with more than one message configured, a different one is picked at random each occurrence (never the same one twice in a row). Rendering happens a few seconds ahead of the scheduled moment (configurable) so playback is still instant when it's due. A tag left blank because the current provider/reading has no data for it (e.g. no gust, or a provider with no wind at all) is silently omitted rather than failing the whole message.
   - **Top-of-the-hour phrasing** — in 12-hour format, choose whether an exact-hour time (e.g. 3:00) says "Three PM" (default) or "Three O'Clock PM"; no effect any other minute. 24-hour format always says "hundred hours" at the top of the hour (e.g. "Sixteen Hundred Hours"), matching the original Time-Weather-Announce script's convention.
   - **Minute pronunciation** (Custom Templates mode) — choose "Oh" or "Zero" for single-digit minutes, e.g. "Four Oh Six" vs "Four Zero Six" (12-hour) or "Sixteen Oh Six" vs "Sixteen Zero Six" (24-hour).
   - **Test with any time, not just right now** — the Test button (and `herald test-timeweather --at HH:MM`) can preview as if it were any time of day, so checking things like the o'clock phrasing above or the smart-greeting boundaries doesn't mean waiting for the real clock to get there.
@@ -100,7 +100,7 @@ This tarball form is used instead of the raw GitHub URL because `raw.githubuserc
 
 The installer will:
 1. Install `python3-yaml`, `sox`, and `libsox-fmt-mp3` if not already present
-2. Install Piper TTS 1.2.0 (binary + 19 voices) — this step downloads approximately 1.2 GB and may take several minutes
+2. Install Piper TTS 1.2.0 (binary + the default `en_US-amy-medium` voice) into the shared `/var/lib/piper-tts` — more voices can be installed later from the web UI's Voices tab
 3. Copy `asl3-herald.py` to `/usr/local/bin/asl3-herald/`
 4. Install the `herald` management command to `/usr/local/bin/herald`
 5. Create `/etc/asterisk/scripts/asl3-herald/` with an example config (if no config exists)
@@ -147,8 +147,11 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 | `TailMessage.Rotation[].Node` | _(daemon's `Node`)_ | Optional: target a specific node number for this entry (multinodes= setups) |
 | `TailMessage.Rotation[].Enabled` | `true` | Set to `false` to disable an entry without removing it; re-enable with `herald toggle-rotation <name>` or the web UI |
 | `TailMessage.SkywarnPlus.Enable` | `true` | Enable SkywarnPlus WX tail integration |
-| `TailMessage.SkywarnPlus.WxTailFile` | `/tmp/SkywarnPlus/wx-tail.wav` | Path to SkywarnPlus wx-tail.wav |
+| `TailMessage.SkywarnPlus.WxTailFile` | `/var/lib/skywarnplus-ng/data/wx-tail.wav` | Path to the WX tail WAV — matches SkywarnPlus-NG's own default; set to `/tmp/SkywarnPlus/wx-tail.wav` for the classic fork |
 | `TailMessage.SkywarnPlus.SilenceThreshold` | `5000` | File size (bytes) to distinguish active alerts from silence |
+| `TailMessage.SkywarnPlus.NGEnable` | `false` | See [SkywarnPlus-NG integration](#skywarnplus-ng-integration) — needed alongside `WxTailFile` above when running NG, not needed for the classic fork |
+| `TailMessage.SkywarnPlus.NGApiBase` | `http://127.0.0.1:8100` | NG's local dashboard API |
+| `TailMessage.SkywarnPlus.NGPollIntervalSec` | `30` | How often Herald polls NG's API for change detection |
 | `Scheduled[].Name` | _(required)_ | Unique name for the scheduled announcement |
 | `Scheduled[].Cron` | _(required)_ | 5-field cron expression: `MIN HOUR DOM MON DOW` |
 | `Scheduled[].File` | _(required)_ | Path to WAV file to play |
@@ -172,7 +175,7 @@ TailMessage:
     - /etc/asterisk/scripts/asl3-herald/announcements/tail1.wav
   SkywarnPlus:
     Enable: true
-    WxTailFile: /tmp/SkywarnPlus/wx-tail.wav
+    WxTailFile: /var/lib/skywarnplus-ng/data/wx-tail.wav
     SilenceThreshold: 5000
 
 Scheduled:
@@ -265,34 +268,15 @@ A scheduled announcement waits for the node to unkey before playing (rather than
 
 `herald add` and `herald add-schedule` prefer **Piper** (neural TTS, installed by `install.sh`) for natural-sounding voices, and fall back to `festival` or `espeak-ng` if Piper isn't available.
 
-> **Install size note:** The Piper binary plus all 19 included voices totals approximately **1.2 GB**. The installer downloads them during `install.sh` and the step may take several minutes depending on your connection. Voices already present on disk are skipped on reinstall, so updates are fast.
+Piper voices live at `/var/lib/piper-tts` — the same shared location [SkywarnPlus-NG](#skywarnplus-ng-integration) and ASL3's own `asl3-tts` package use. Install a voice through any of the three and it's usable by all of them; nothing is duplicated.
 
-**Included Piper voices:**
-
-| Voice | Character |
-|---|---|
-| `en_US-amy-medium` | Amy — US Female ⭐ default |
-| `en_US-arctic-medium` | Arctic — US Multi-speaker |
-| `en_US-bryce-medium` | Bryce — US Male |
-| `en_US-hfc_female-medium` | HFC Female — US Female |
-| `en_US-hfc_male-medium` | HFC Male — US Male |
-| `en_US-joe-medium` | Joe — US Male |
-| `en_US-john-medium` | John — US Male |
-| `en_US-kristin-medium` | Kristin — US Female |
-| `en_US-kusal-medium` | Kusal — US Male |
-| `en_US-lessac-medium` | Lessac — US Female |
-| `en_US-libritts_r-medium` | LibriTTS — US Neutral |
-| `en_US-norman-medium` | Norman — US Male |
-| `en_US-ryan-medium` | Ryan — US Male |
-| `en_GB-alan-medium` | Alan — British Male |
-| `en_GB-alba-medium` | Alba — Scottish Female |
-| `en_GB-aru-medium` | Aru — British Female |
-| `en_GB-cori-medium` | Cori — British Female |
-| `en_GB-jenny_dioco-medium` | Jenny — British Female |
-| `en_GB-northern_english_male-medium` | Northern English Male — British Male |
+`install.sh` installs only the default voice (`en_US-amy-medium`) up front. Browse and install any of the other 160+ available voices from the **Voices** box on the web UI's **Global Settings** tab (region + voice picker, "Install Voice" button) — no restart or reload needed, and the new voice shows up immediately in every voice dropdown (Tail Messages, Scheduled Announcements, Time & Weather Templates, Node ID Generator). Once a voice is installed, the same box shows a "Remove Voice" button instead (the default voice can't be removed); already-generated announcements keep playing fine after a voice is removed, but editing one that still references it will fail until a different voice is picked or it's reinstalled.
 
 ```bash
 herald voices                                              # list installed voices
+herald catalog-voices                                       # full catalog (region/language/installed status), as JSON
+sudo herald install-voice en_US-joe-medium                  # install a voice from the CLI instead of the web UI
+sudo herald remove-voice en_US-joe-medium                   # remove an installed voice from the CLI
 sudo herald add "Net starts in 5 minutes" --voice en_US-joe-medium --name net-warning
 ```
 
@@ -303,20 +287,7 @@ sudo apt install festival sox
 sudo apt install espeak-ng sox
 ```
 
-**Adding more voices manually** — the 19 above are just what `install.sh` downloads by default; Piper has many more, including other languages (Spanish, French, German, and others), browsable at [huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices/tree/main). Every voice is two files, a `.onnx` model and a matching `.onnx.json` config — download both into `/opt/piper/voices/` and it's usable immediately, no restart or reload needed:
-
-```bash
-# Example: add German voice "de_DE-thorsten-medium"
-sudo curl -fsSL "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx" -o /opt/piper/voices/de_DE-thorsten-medium.onnx
-sudo curl -fsSL "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx.json" -o /opt/piper/voices/de_DE-thorsten-medium.onnx.json
-sudo chmod 644 /opt/piper/voices/de_DE-thorsten-medium.onnx*
-```
-
-Find the right path for any voice by browsing the link above — the URL pattern is always `<language>/<language-region>/<name>/<quality>/<language-region>-<name>-<quality>.onnx` (and the same path with `.json` on the end). The new voice shows up right away in `herald voices` and every voice dropdown in the web UI, labeled by its raw filename (e.g. `de_DE-thorsten-medium`) rather than a friendly display name — Herald only has friendly names for the 19 it ships by default.
-
-If a `curl` command above fails with a 403 error, HuggingFace is blocking direct downloads from your server's IP (a known issue with some hosts) — download the same two URLs in a regular web browser instead and copy the files to `/opt/piper/voices/` (e.g. via `scp`).
-
-For a non-English voice, remember Herald just passes whatever text you type straight to Piper — write your announcement text in that language too.
+For a non-English voice, remember Herald just passes whatever text you type straight to Piper — write your announcement text in that language too. A voice not in Herald's catalog (or installed by some other means) still shows up in every dropdown once its `.onnx`/`.onnx.json` pair is in `/var/lib/piper-tts` — just labeled by its raw filename instead of a friendly display name.
 
 ---
 
@@ -368,7 +339,8 @@ journalctl -u asl3-herald -f          # Follow live log output
 | `/var/www/html/supermon/asl3-herald.php` | Supermon entry point (installed alongside Supermon's own `index.php`) |
 | `install.sh` / `uninstall.sh` (repo root) | Installer / uninstaller — not installed on the node itself |
 | `/etc/sudoers.d/asl3-herald-web` | Narrow passwordless sudo rule for `www-data` to run `herald` |
-| `/opt/piper/` | Piper TTS binary and voice models |
+| `/opt/piper/` | Piper TTS binary |
+| `/var/lib/piper-tts/` | Piper voice models (shared with SkywarnPlus-NG / asl3-tts) |
 
 ---
 
@@ -398,18 +370,34 @@ State (rotation index, WX alternation, scheduled "waiting for unkey" status, and
 
 ## SkywarnPlus Integration
 
-Herald integrates with SkywarnPlus two different ways, with two different compatibility requirements:
-
 **Tail Messages' WX alert integration** (`TailMessage.SkywarnPlus`) — no changes to SkywarnPlus are required; Herald just reads the existing `wx-tail.wav` file SkywarnPlus already generates:
 
 - **No active alerts:** `wx-tail.wav` is a small silent file (~1644 bytes)
 - **Active alerts:** `wx-tail.wav` contains the weather alert audio (typically 50KB+)
 
-Set `SilenceThreshold: 5000` (the default) to reliably distinguish between the two. This part works with any SkywarnPlus install, including the original unmaintained upstream.
+Set `SilenceThreshold: 5000` (the default) to reliably distinguish between the two. This works with any classic SkywarnPlus install (any fork, or the original archived [Mason10198/SkywarnPlus](https://github.com/Mason10198/SkywarnPlus) upstream).
 
-**Time & Weather's `skywarnplus` weather provider** (`TimeWeather.Weather.Provider: skywarnplus`) — **requires [N6LKA's SkywarnPlus fork](https://github.com/N6LKA/SkywarnPlus) specifically.** It reads `/tmp/SkywarnPlus/swp-data.json`, written by `Allmon3_Compat.py` — a module that exists only in that fork, not in the original upstream project. If you want Herald's weather announcements sourced from SkywarnPlus (rather than polling METAR/Open-Meteo/Tempest directly), you need the fork installed. The fork also adds Tempest as a weather source inside SkywarnPlus itself, which only matters for this provider - the original upstream has no Tempest support at all.
+There is no dedicated Time & Weather weather provider for reading a classic SkywarnPlus install's already-fetched data — use `TimeWeather.Weather.Provider: tempest`/`wunderground`/`metar`/`openmeteo` directly (see [Time & Weather](#time--weather-announcements) above) if you want weather announcements independent of your SkywarnPlus setup.
 
-**Note:** the original SkywarnPlus author, Mason (Mason10198), no longer maintains the project — [the original repo](https://github.com/Mason10198/SkywarnPlus) is archived and read-only. Larry (N6LKA) maintains an active fork that keeps SkywarnPlus working and up to date: **[github.com/N6LKA/SkywarnPlus](https://github.com/N6LKA/SkywarnPlus)**.
+### SkywarnPlus-NG integration
+
+[SkywarnPlus-NG](https://github.com/hardenedpenguin/SkywarnPlus-NG) is a separate, independent rewrite with its own tail-message file (silent when clear, TTS'd alert audio when active — configurable in its own dashboard under Alert Behavior, default path `/var/lib/skywarnplus-ng/data/wx-tail.wav`). Point `WxTailFile` straight at that path — Herald reads and plays it directly, no bridge needed for the audio itself. This is also `WxTailFile`'s new default, so a fresh install already matches NG's default location.
+
+The one thing NG does differently from classic SkywarnPlus: it rewrites that file on *every* poll cycle regardless of whether the alert set actually changed (classic SkywarnPlus only rewrites on a real change). Since the WX/rotation alternation above relies on the file's mtime to know "is this genuinely new," that would make WX replay on every unkey instead of ever alternating with rotation. So when running NG, also set:
+
+```yaml
+TailMessage:
+  SkywarnPlus:
+    Enable: true
+    WxTailFile: /var/lib/skywarnplus-ng/data/wx-tail.wav   # matches NG's own default
+    NGEnable: true
+    NGApiBase: http://127.0.0.1:8100   # NG's local dashboard API - default port
+    NGPollIntervalSec: 30
+```
+
+With `NGEnable` on, Herald separately polls NG's local `/api/alerts` on its own schedule purely to detect a genuine change in the active-alert set, and uses that instead of the file's mtime for the alternation decision — `WxTailFile`/`SilenceThreshold` and the alternation behavior itself work exactly the same either way. Leave `NGEnable` off if you're on classic SkywarnPlus, whose own file-rewrite behavior already matches what the mtime check expects.
+
+For weather announcements with NG, use `TimeWeather.Weather.Provider: tempest`/`wunderground`/`metar`/`openmeteo` — NG has no shared weather file of its own. If you're also running [ASL3-SkywarnPlus-NG-Bridge](https://github.com/N6LKA/ASL3-SkywarnPlus-NG-Bridge) for Allmon3/Supermon alert panels, set `TimeWeather.Weather.SnapshotEnable: true` so Herald writes the current-conditions snapshot that bridge's Allmon3 panel reads (see its README for the exact contract).
 
 ---
 

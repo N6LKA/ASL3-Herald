@@ -16,6 +16,7 @@ import glob
 import json
 import uuid
 import random
+import shutil
 import signal
 import socket
 import argparse
@@ -72,11 +73,19 @@ TW_COORD_CACHE  = os.path.join(INSTALL_DIR, "timeweather-coords.cache")
 # by build_timeweather_audio() since /run's own contents don't survive a
 # reboot either.
 TW_TEMP_OUTDIR  = "/run/asl3-herald/timeweather-tmp"
-SWP_WEATHER_FILE = "/tmp/SkywarnPlus/swp-data.json"
 DEFAULT_TW_CRON = "0 * * * *"
 DEFAULT_TW_WEATHER_CACHE_MIN = 10
 DEFAULT_TW_MODE = "recordings"
 DEFAULT_TW_LOOKAHEAD_SECONDS = 5
+
+# Default WxTailFile now matches SkywarnPlus-NG's own default tail-message
+# path (its Tail Message File Path setting) rather than the classic
+# SkywarnPlus fork's /tmp/SkywarnPlus/wx-tail.wav - Herald reads NG's file
+# directly, no bridge/copy needed. See ng_tail_poll_tick()'s docstring
+# further down for why NGEnable still exists (change-detection only).
+DEFAULT_SWP_WXTAILFILE = "/var/lib/skywarnplus-ng/data/wx-tail.wav"
+DEFAULT_SWP_NG_API_BASE = "http://127.0.0.1:8100"
+DEFAULT_SWP_NG_POLL_INTERVAL = 30
 
 # Template mode (Piper-rendered custom messages) — same Piper install used by
 # Rotation/Scheduled TTS (see generate_tts_file() in the `herald` bash CLI).
@@ -84,9 +93,15 @@ DEFAULT_TW_LOOKAHEAD_SECONDS = 5
 # daemon's own lookahead pre-render (see timeweather_template_tick()) has to
 # run from inside the long-running Python process, not a one-off subprocess.
 PIPER_BIN = "/opt/piper/bin/piper/piper"
-PIPER_VOICE_DIR = "/opt/piper/voices"
+# Shared with SkywarnPlus-NG and ASL3's own asl3-tts package (same
+# rhasspy/piper-voices source, same <id>.onnx/<id>.onnx.json naming) - a
+# voice installed by any of the three shows up as installed for all of them.
+PIPER_VOICE_DIR = "/var/lib/piper-tts"
 DEFAULT_PIPER_VOICE = "en_US-amy-medium"
-TW_TEMPLATE_TAGS = ("smart_greeting", "time", "conditions", "temperature", "feels_like", "humidity", "callsign")
+VOICE_CATALOG_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), "piper-voices-catalog.json")
+HF_VOICES_REPO = "rhasspy/piper-voices"
+TW_TEMPLATE_TAGS = ("smart_greeting", "time", "conditions", "temperature", "feels_like", "humidity",
+                     "wind_speed", "wind_gust", "callsign")
 # How long past a message's target play time to keep waiting on a still-
 # in-progress Piper render before giving up on that occurrence entirely -
 # mirrors the same "never wedge forever" philosophy as MAX_BUSY_SECONDS.
@@ -363,6 +378,10 @@ def load_state():
         "scheduled_busy_until": 0.0,
         "swp_last_mtime": None,
         "swp_next_is_rotation": False,
+        "swp_ng_last_poll": 0.0,
+        "swp_ng_last_signature": None,
+        "swp_ng_last_change": None,
+        "weather_snapshot_last_write": 0.0,
         "playback_history": [],
         "timeweather_played": None,
         "timeweather_pending": False,
@@ -812,6 +831,12 @@ def tw_text_condition_word(text):
         return "clear"
     return None if not c else "clear"
 
+def degrees_to_cardinal(deg):
+    """0-360 wind direction degrees -> 16-point cardinal (N, NNE, NE, ...)."""
+    dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+            "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+    return dirs[round(float(deg) / 22.5) % 16]
+
 # ── Coordinate resolution (Open-Meteo needs lat/lon, not a postal code) ───────
 
 def _tw_load_coord_cache():
@@ -928,11 +953,24 @@ def fetch_weather_metar(icao):
     t_c = -int(m.group(1)[1:]) if m.group(1).startswith("M") else int(m.group(1))
     temp_f = round(t_c * 9 / 5 + 32)
 
+    # Wind group e.g. "18008KT" (180 deg, 8kt), "VRB03KT", "18008G15KT" (gust 15kt).
+    wind_mph = wind_dir = wind_gust_mph = None
+    wm = re.search(r"\b(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?KT\b", metar)
+    if wm:
+        if wm.group(1) != "VRB":
+            wind_dir = degrees_to_cardinal(int(wm.group(1)))
+        wind_mph = round(int(wm.group(2)) * 1.15078, 1)
+        if wm.group(3):
+            wind_gust_mph = round(int(wm.group(3)) * 1.15078, 1)
+
     return {
         "temp_f": temp_f,
         "condition": tw_metar_condition_word(metar),
         "feels_like_f": None,   # not available from METAR
         "humidity": None,       # not available from METAR
+        "wind_mph": wind_mph,
+        "wind_dir": wind_dir,
+        "wind_gust_mph": wind_gust_mph,
     }
 
 def fetch_weather_openmeteo(location, default_country="us"):
@@ -945,8 +983,8 @@ def fetch_weather_openmeteo(location, default_country="us"):
         "https://api.open-meteo.com/v1/forecast?" + urllib.parse.urlencode({
             "latitude": lat, "longitude": lon,
             "current": "temperature_2m,apparent_temperature,relative_humidity_2m,"
-                       "weather_code,is_day",
-            "temperature_unit": "fahrenheit", "timezone": "auto",
+                       "weather_code,is_day,wind_speed_10m,wind_direction_10m,wind_gusts_10m",
+            "temperature_unit": "fahrenheit", "wind_speed_unit": "mph", "timezone": "auto",
         })
     )
     if not data or "current" not in data:
@@ -962,6 +1000,9 @@ def fetch_weather_openmeteo(location, default_country="us"):
         "condition": tw_openmeteo_condition_word(cur.get("weather_code", 0), cur.get("is_day", 1) == 1),
         "feels_like_f": round(cur["apparent_temperature"]) if cur.get("apparent_temperature") is not None else None,
         "humidity": round(cur["relative_humidity_2m"]) if cur.get("relative_humidity_2m") is not None else None,
+        "wind_mph": round(cur["wind_speed_10m"], 1) if cur.get("wind_speed_10m") is not None else None,
+        "wind_dir": degrees_to_cardinal(cur["wind_direction_10m"]) if cur.get("wind_direction_10m") is not None else None,
+        "wind_gust_mph": round(cur["wind_gusts_10m"], 1) if cur.get("wind_gusts_10m") is not None else None,
     }
 
 def fetch_weather_tempest(state, token, station_id):
@@ -985,7 +1026,7 @@ def fetch_weather_tempest(state, token, station_id):
 
     data = tw_http_get_json(
         "https://swd.weatherflow.com/swd/rest/better_forecast?" + urllib.parse.urlencode({
-            "station_id": resolved_station_id, "units_temp": "f", "token": token,
+            "station_id": resolved_station_id, "units_temp": "f", "units_wind": "mph", "token": token,
         })
     )
     cc = (data or {}).get("current_conditions") or {}
@@ -993,51 +1034,138 @@ def fetch_weather_tempest(state, token, station_id):
         log_debug(f"Tempest: no current conditions for station {resolved_station_id}")
         return None
 
+    wind_dir = cc.get("wind_direction_cardinal")
+    if not wind_dir and cc.get("wind_direction") is not None:
+        wind_dir = degrees_to_cardinal(cc["wind_direction"])
+
     return {
         "temp_f": round(cc["air_temperature"]),
         "condition": tw_text_condition_word(cc.get("conditions", "")),
         "feels_like_f": round(cc["feels_like"]) if cc.get("feels_like") is not None else None,
         "humidity": round(cc["relative_humidity"]) if cc.get("relative_humidity") is not None else None,
+        "wind_mph": round(cc["wind_avg"], 1) if cc.get("wind_avg") is not None else None,
+        "wind_dir": wind_dir,
+        "wind_gust_mph": round(cc["wind_gust"], 1) if cc.get("wind_gust") is not None else None,
     }
 
-def fetch_weather_skywarnplus():
+def wunderground_apparent_temp_f(temp_f, heat_index, wind_chill):
+    """Approximate NWS-style apparent ("feels like") temperature: heat index
+    when it's hot, wind chill when it's cold, otherwise the actual temp. The
+    Wunderground PWS API has no single feels-like field of its own."""
     try:
-        with open(SWP_WEATHER_FILE) as f:
-            payload = json.load(f)
-    except Exception:
-        log_warn(f"SkywarnPlus weather file not found or unreadable: {SWP_WEATHER_FILE}")
+        t = float(temp_f)
+    except (TypeError, ValueError):
         return None
-
-    w = payload.get("weather")
-    if not w:
-        log_warn("SkywarnPlus weather file has no 'weather' data (WeatherEnable may be off in its config.yaml)")
-        return None
-
-    def _num(v):
+    if heat_index is not None and t >= 80:
         try:
-            return float(v)
+            return round(float(heat_index), 1)
         except (TypeError, ValueError):
-            return None
+            pass
+    if wind_chill is not None and t <= 50:
+        try:
+            return round(float(wind_chill), 1)
+        except (TypeError, ValueError):
+            pass
+    return round(t, 1)
 
-    temp_f = _num(w.get("temp_f"))
-    feels_f = _num(w.get("feels_like_f"))
-    humidity = _num(w.get("humidity"))
+def fetch_weather_wunderground(api_key, station_id):
+    """Fetch weather from a Weather Underground Personal Weather Station
+    (works for any PWS uploading to WU, including a Tempest station
+    configured to also feed WU - not just WU-native hardware). No condition
+    text available from this API."""
+    if not api_key or not station_id:
+        log_warn("Wunderground requires both TimeWeather.Weather.Wunderground.ApiKey and StationID")
+        return None
+    data = tw_http_get_json(
+        "https://api.weather.com/v2/pws/observations/current?" + urllib.parse.urlencode({
+            "stationId": station_id, "format": "json", "units": "e", "apiKey": api_key,
+        })
+    )
+    observations = (data or {}).get("observations") or []
+    if not observations:
+        log_debug(f"Wunderground: no observations for station {station_id}")
+        return None
+    obs = observations[0]
+    imperial = obs.get("imperial") or {}
+    if imperial.get("temp") is None:
+        return None
+
+    feels_f = wunderground_apparent_temp_f(imperial["temp"], imperial.get("heatIndex"), imperial.get("windChill"))
+
     return {
-        "temp_f": round(temp_f) if temp_f is not None else None,
-        "condition": tw_text_condition_word(w.get("condition", "")),
-        "feels_like_f": round(feels_f) if feels_f is not None else None,
-        "humidity": round(humidity) if humidity is not None else None,
+        "temp_f": round(imperial["temp"]),
+        "condition": None,
+        "feels_like_f": feels_f,
+        "humidity": round(obs["humidity"]) if obs.get("humidity") is not None else None,
+        "wind_mph": round(imperial["windSpeed"], 1) if imperial.get("windSpeed") is not None else None,
+        "wind_dir": degrees_to_cardinal(imperial["winddir"]) if imperial.get("winddir") is not None else None,
+        "wind_gust_mph": round(imperial["windGust"], 1) if imperial.get("windGust") is not None else None,
     }
 
-def fetch_weather(state, provider, location, tempest_token, tempest_station, default_country="us"):
+# ── SkywarnPlus-NG change detection ─────────────────────────────────────────
+# SkywarnPlus-NG (https://github.com/hardenedpenguin/SkywarnPlus-NG) has its
+# own native tail-message file (audio/tail_message.py's TailMessageManager) -
+# silent when clear, TTS'd alert audio with its own separator/suffix/county-
+# name handling when active, written to a path NG's own config controls
+# (default /var/lib/skywarnplus-ng/data/wx-tail.wav). Point WxTailFile at
+# that same path and Herald plays it directly - no bridge, no copying.
+#
+# The one gap: NG rewrites that file on *every* poll cycle regardless of
+# whether the alert set actually changed (confirmed in its core/application.py
+# - no change-gate before calling update_tail_message()), unlike classic
+# SkywarnPlus which only rewrites on a real change. Herald's WX/rotation
+# alternation depends on detecting "is this genuinely new" - using the file's
+# mtime for that (as classic SkywarnPlus assumes) would see a "new" alert on
+# nearly every check and never alternate with rotation. So when NGEnable is
+# on, ng_tail_poll_tick() polls NG's /api/alerts on its own cadence purely to
+# compare the active-alert-ID set against last time, and records a change
+# timestamp only when it's genuinely different - that timestamp substitutes
+# for the file's mtime in the alternation check below, instead of the real
+# (unreliable, for this purpose) mtime.
+
+def ng_tail_poll_tick(swp_ng_on, swp_ng_api, swp_ng_poll, state, now):
+    """Call once per main-loop iteration - internally rate-limited to only
+    actually poll SkywarnPlus-NG's API every swp_ng_poll seconds, regardless
+    of PollInterval. Records swp_ng_last_change only when the active-alert
+    ID set has genuinely changed since the last check."""
+    if not swp_ng_on:
+        return
+    if (now - (state.get("swp_ng_last_poll") or 0)) < swp_ng_poll:
+        return
+    state["swp_ng_last_poll"] = now
+
+    data = tw_http_get_json(swp_ng_api.rstrip("/") + "/api/alerts")
+    if data is None:
+        log_debug("SkywarnPlus-NG: could not reach API this cycle")
+        return
+    alerts = data.get("alerts", [])
+
+    # Plain list, not a tuple: state round-trips through JSON (see save_state),
+    # which would turn a tuple into a list anyway - compare like-for-like so
+    # an empty result doesn't accidentally equal the pre-first-run default of
+    # None (that bug would skip ever recognizing the very first alert).
+    signature = sorted(a.get("id", "") for a in alerts)
+    if signature == state.get("swp_ng_last_signature"):
+        return
+
+    log_info(f"SkywarnPlus-NG: alert set changed ({len(alerts)} active)")
+    state["swp_ng_last_signature"] = signature
+    state["swp_ng_last_change"] = now
+    save_state(state)
+
+def fetch_weather(state, provider, location, tempest_token, tempest_station,
+                   wunderground_api_key=None, wunderground_station=None, default_country="us"):
     """Dispatch to the right provider(s), matching weather.sh's fallback rules."""
     provider = (provider or "auto").lower()
 
-    if provider == "skywarnplus":
-        return fetch_weather_skywarnplus()
-
     if provider == "tempest":
         result = fetch_weather_tempest(state, tempest_token, tempest_station)
+        if result is None and location:
+            result = fetch_weather_openmeteo(location, default_country)
+        return result
+
+    if provider == "wunderground":
+        result = fetch_weather_wunderground(wunderground_api_key, wunderground_station)
         if result is None and location:
             result = fetch_weather_openmeteo(location, default_country)
         return result
@@ -1062,22 +1190,11 @@ def fetch_weather(state, provider, location, tempest_token, tempest_station, def
     return result if result is not None else fetch_weather_metar(location)
 
 def fetch_weather_cached(state, provider, location, tempest_token, tempest_station,
+                          wunderground_api_key=None, wunderground_station=None,
                           cache_max_age_min=DEFAULT_TW_WEATHER_CACHE_MIN, default_country="us"):
     """Throttled wrapper: reuses the last successful reading if it's still
     fresh, and falls back to a stale reading (rather than nothing) if a fresh
-    fetch fails outright.
-
-    The skywarnplus provider is exempt from this throttle entirely - it's
-    just a local file read (SkywarnPlus already manages its own Tempest/
-    Wunderground/wttr fetch freshness independently), not a live API call,
-    so there's no cost to reading it fresh every time. Confirmed live:
-    without this, Herald could report weather up to CacheMaxAgeMin stale
-    relative to what SkywarnPlus's own file (and therefore Allmon3/Supermon,
-    which read that file directly with no extra caching layer) already show
-    as current."""
-    if provider == "skywarnplus":
-        return fetch_weather_skywarnplus()
-
+    fetch fails outright."""
     cache = state.get("timeweather_weather_cache")
     if cache and cache.get("provider") == provider:
         try:
@@ -1087,7 +1204,8 @@ def fetch_weather_cached(state, provider, location, tempest_token, tempest_stati
         except Exception:
             pass
 
-    weather = fetch_weather(state, provider, location, tempest_token, tempest_station, default_country)
+    weather = fetch_weather(state, provider, location, tempest_token, tempest_station,
+                             wunderground_api_key, wunderground_station, default_country)
     if weather:
         state["timeweather_weather_cache"] = {
             "provider": provider, "weather": weather,
@@ -1097,6 +1215,49 @@ def fetch_weather_cached(state, provider, location, tempest_token, tempest_stati
         log_warn("Time & Weather fetch failed, reusing last cached reading")
         weather = cache["weather"]
     return weather
+
+DEFAULT_WEATHER_SNAPSHOT_PATH = "/tmp/asl3-herald/weather.json"
+
+def write_weather_snapshot(weather, label, path):
+    """Writes a small current-conditions JSON snapshot for other local
+    programs to read - see ASL3-SkywarnPlus-NG-Bridge's README ('Weather
+    snapshot contract') for the exact shape this needs to match, since
+    that's the program that actually reads it (for the Allmon3 panel)."""
+    try:
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(path, "w") as f:
+            json.dump({"weather": weather, "weather_label": label or ""}, f)
+    except Exception as e:
+        log_warn(f"Could not write weather snapshot to {path}: {e}")
+
+def weather_snapshot_tick(tw_cfg, state, now):
+    """Call once per main-loop iteration - rate-limited to once a minute
+    regardless of PollInterval, and reuses Time & Weather's own cached
+    fetch (fetch_weather_cached), so this never causes an extra API call
+    beyond what the hourly announcement feature already makes."""
+    wcfg = tw_cfg.get("Weather", {}) or {}
+    if not wcfg.get("SnapshotEnable", False):
+        return
+    if (now - (state.get("weather_snapshot_last_write") or 0)) < 60:
+        return
+    state["weather_snapshot_last_write"] = now
+
+    tempest_cfg = wcfg.get("Tempest", {}) or {}
+    wunderground_cfg = wcfg.get("Wunderground", {}) or {}
+    weather = fetch_weather_cached(
+        state, wcfg.get("Provider", "auto"), wcfg.get("Location", ""),
+        tempest_cfg.get("Token", ""), tempest_cfg.get("StationID", ""),
+        wunderground_api_key=wunderground_cfg.get("ApiKey", ""),
+        wunderground_station=wunderground_cfg.get("StationID", ""),
+        cache_max_age_min=wcfg.get("CacheMaxAgeMin", DEFAULT_TW_WEATHER_CACHE_MIN),
+    )
+    if not weather:
+        log_debug("Weather snapshot: no weather data available this cycle - leaving snapshot unchanged")
+        return
+    write_weather_snapshot(weather, wcfg.get("SnapshotLabel", ""),
+                            wcfg.get("SnapshotPath", DEFAULT_WEATHER_SNAPSHOT_PATH))
 
 # ── Announcement audio assembly ────────────────────────────────────────────────
 # Concatenates pre-recorded GSM snippets exactly like saytime.pl did (GSM
@@ -1397,6 +1558,10 @@ def substitute_template_tags(text, tw_cfg, weather, now_dt):
             values["feels_like"] = f"{_convert(weather['feels_like_f'])} {unit_word}"
         if weather.get("humidity") is not None:
             values["humidity"] = f"{weather['humidity']} percent"
+        if weather.get("wind_mph") is not None:
+            values["wind_speed"] = f"{round(weather['wind_mph'])} miles per hour"
+        if weather.get("wind_gust_mph") is not None:
+            values["wind_gust"] = f"{round(weather['wind_gust_mph'])} miles per hour"
 
     def _sub(m):
         tag = m.group(1)
@@ -1593,10 +1758,13 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, mode="scheduled", warning
         weather = None
         if wcfg.get("Enable", True):
             tempest_cfg = wcfg.get("Tempest", {}) or {}
+            wunderground_cfg = wcfg.get("Wunderground", {}) or {}
             weather = fetch_weather_cached(
                 state, wcfg.get("Provider", "auto"), wcfg.get("Location", ""),
                 tempest_cfg.get("Token", ""), tempest_cfg.get("StationID", ""),
-                wcfg.get("CacheMaxAgeMin", DEFAULT_TW_WEATHER_CACHE_MIN),
+                wunderground_api_key=wunderground_cfg.get("ApiKey", ""),
+                wunderground_station=wunderground_cfg.get("StationID", ""),
+                cache_max_age_min=wcfg.get("CacheMaxAgeMin", DEFAULT_TW_WEATHER_CACHE_MIN),
             )
             if not weather:
                 log_warn("Time & Weather: no weather data available, announcing time only")
@@ -1797,10 +1965,13 @@ def timeweather_template_tick(tw_cfg, state, node, now, now_dt):
         warnings = []
         if wcfg.get("Enable", True):
             tempest_cfg = wcfg.get("Tempest", {}) or {}
+            wunderground_cfg = wcfg.get("Wunderground", {}) or {}
             weather = fetch_weather_cached(
                 state, wcfg.get("Provider", "auto"), wcfg.get("Location", ""),
                 tempest_cfg.get("Token", ""), tempest_cfg.get("StationID", ""),
-                wcfg.get("CacheMaxAgeMin", DEFAULT_TW_WEATHER_CACHE_MIN),
+                wunderground_api_key=wunderground_cfg.get("ApiKey", ""),
+                wunderground_station=wunderground_cfg.get("StationID", ""),
+                cache_max_age_min=wcfg.get("CacheMaxAgeMin", DEFAULT_TW_WEATHER_CACHE_MIN),
             )
             if not weather:
                 warnings.append("No weather data available - announced time only")
@@ -1902,8 +2073,16 @@ def extract_config(config):
 
     swp      = tm.get("SkywarnPlus", {}) or {}
     swp_on   = swp.get("Enable", True)
-    swp_file = swp.get("WxTailFile", "/tmp/SkywarnPlus/wx-tail.wav")
+    swp_file = swp.get("WxTailFile", DEFAULT_SWP_WXTAILFILE)
     swp_thr  = swp.get("SilenceThreshold", 5000)
+
+    # SkywarnPlus-NG has no tail-message file of its own - when enabled,
+    # Herald fetches active-alert audio from its local dashboard API and
+    # writes swp_file itself, on its own poll cadence (independent of
+    # PollInterval, since there's no reason to hit the API every second).
+    swp_ng_on   = swp.get("NGEnable", False)
+    swp_ng_api  = swp.get("NGApiBase", DEFAULT_SWP_NG_API_BASE)
+    swp_ng_poll = swp.get("NGPollIntervalSec", DEFAULT_SWP_NG_POLL_INTERVAL)
 
     scheduled = config.get("Scheduled", []) or []
 
@@ -1919,9 +2098,137 @@ def extract_config(config):
         "swp_on":          swp_on,
         "swp_file":        swp_file,
         "swp_thr":         swp_thr,
+        "swp_ng_on":       swp_ng_on,
+        "swp_ng_api":      swp_ng_api,
+        "swp_ng_poll":     swp_ng_poll,
         "scheduled":       scheduled,
         "timeweather":     tw,
     }
+
+# ── Piper voice catalog (Voices tab) ────────────────────────────────────────
+# Same rhasspy/piper-voices source and <id>.onnx/<id>.onnx.json naming
+# SkywarnPlus-NG and ASL3's own asl3-tts package use against the shared
+# PIPER_VOICE_DIR - install a voice here and it's installed for all three.
+
+def load_voice_catalog():
+    """Loads the vendored Piper voice catalog (same region/language grouping
+    SkywarnPlus-NG ships - see piper-voices-catalog.json's own 'source'
+    field for provenance). Returns the raw dict, or None if missing/corrupt."""
+    try:
+        with open(VOICE_CATALOG_FILE) as f:
+            return json.load(f)
+    except Exception as e:
+        log_error(f"Could not load voice catalog {VOICE_CATALOG_FILE}: {e}")
+        return None
+
+def installed_voice_ids():
+    """Set of voice IDs with both .onnx and .onnx.json present in PIPER_VOICE_DIR."""
+    installed = set()
+    if not os.path.isdir(PIPER_VOICE_DIR):
+        return installed
+    for f in os.listdir(PIPER_VOICE_DIR):
+        if f.endswith(".onnx") and os.path.isfile(os.path.join(PIPER_VOICE_DIR, f + ".json")):
+            installed.add(f[: -len(".onnx")])
+    return installed
+
+def cmd_catalog_voices(config):
+    """Full voice catalog with per-voice installed status, for the Voices tab."""
+    catalog = load_voice_catalog()
+    if catalog is None:
+        print(json.dumps({"success": False, "message": "Voice catalog not found"}))
+        return
+    installed = installed_voice_ids()
+    voices = []
+    for voice_id, v in catalog.get("voices", {}).items():
+        voices.append({
+            "id": voice_id,
+            "label": v.get("label", voice_id),
+            "region": v.get("region", "Other"),
+            "language": v.get("language", ""),
+            "locale": v.get("locale", ""),
+            "quality": v.get("quality", ""),
+            "installed": voice_id in installed,
+        })
+    print(json.dumps({
+        "success": True,
+        "regions": catalog.get("regions", []),
+        "voices": voices,
+    }))
+
+def cmd_install_voice(config, args):
+    voice_id = args.voice_id
+    catalog = load_voice_catalog()
+    if catalog is None:
+        print(json.dumps({"success": False, "message": "Voice catalog not found"}))
+        return
+    entry = catalog.get("voices", {}).get(voice_id)
+    if not entry:
+        print(json.dumps({"success": False, "message": f"Unknown voice: {voice_id}"}))
+        return
+
+    onnx_path = os.path.join(PIPER_VOICE_DIR, voice_id + ".onnx")
+    json_path = onnx_path + ".json"
+    if os.path.isfile(onnx_path) and os.path.isfile(json_path):
+        print(json.dumps({"success": True, "message": f"{voice_id} already installed"}))
+        return
+
+    try:
+        os.makedirs(PIPER_VOICE_DIR, exist_ok=True)
+    except Exception as e:
+        print(json.dumps({"success": False, "message": f"Could not create {PIPER_VOICE_DIR}: {e}"}))
+        return
+
+    hf_path = entry.get("huggingface_path", "")
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError:
+        print(json.dumps({
+            "success": False,
+            "message": "huggingface_hub not installed - re-run install.sh to add it",
+        }))
+        return
+
+    try:
+        for filename, dest in (
+            (f"{hf_path}/{voice_id}.onnx", onnx_path),
+            (f"{hf_path}/{voice_id}.onnx.json", json_path),
+        ):
+            tmp = hf_hub_download(repo_id=HF_VOICES_REPO, filename=filename, repo_type="model")
+            shutil.copy(tmp, dest)
+            os.chmod(dest, 0o644)
+    except Exception as e:
+        # Don't leave a half-installed voice behind - both files present or neither.
+        for p in (onnx_path, json_path):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+        print(json.dumps({"success": False, "message": f"Download failed: {e}"}))
+        return
+
+    print(json.dumps({"success": True, "message": f"Installed {voice_id}"}))
+
+def cmd_remove_voice(config, args):
+    voice_id = args.voice_id
+    if voice_id == DEFAULT_PIPER_VOICE:
+        print(json.dumps({
+            "success": False,
+            "message": f"{voice_id} is the default voice and can't be removed",
+        }))
+        return
+
+    onnx_path = os.path.join(PIPER_VOICE_DIR, voice_id + ".onnx")
+    json_path = onnx_path + ".json"
+    if not os.path.isfile(onnx_path) and not os.path.isfile(json_path):
+        print(json.dumps({"success": True, "message": f"{voice_id} is not installed"}))
+        return
+
+    for p in (onnx_path, json_path):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+    print(json.dumps({"success": True, "message": f"Removed {voice_id}"}))
 
 # ── CLI subcommands (used by the `herald` bash CLI and the web UI) ────────────
 
@@ -1959,25 +2266,22 @@ def scheduled_with_health(scheduled):
         out.append(s2)
     return out
 
-SWP_INSTALL_MARKER = "/usr/local/bin/SkywarnPlus/SkywarnPlus.py"
+SWP_NG_CONFIG_FILE = "/etc/skywarnplus-ng/config.yaml"
 
-def skywarnplus_weather_status():
-    """Returns (installed, weather_available) for the UI's SkywarnPlus
-    recommendation banner and provider validation."""
-    installed = os.path.exists(SWP_INSTALL_MARKER)
-    weather_available = False
-    try:
-        with open(SWP_WEATHER_FILE) as f:
-            weather_available = bool(json.load(f).get("weather"))
-    except Exception:
-        pass
-    return installed, weather_available
+def skywarnplus_ng_installed():
+    """For the UI's SkywarnPlus-NG banner - reminds the user to enable the
+    weather snapshot if they're also running ASL3-SkywarnPlus-NG-Bridge.
+    No equivalent check for the classic SkywarnPlus fork - that fork has no
+    other users and its 'skywarnplus' weather provider was removed."""
+    return os.path.exists(SWP_NG_CONFIG_FILE)
 
 def timeweather_with_health(tw):
     out = dict(tw)
     wcfg = dict(out.get("Weather", {}) or {})
     tempest_cfg = dict(wcfg.get("Tempest", {}) or {})
     wcfg["Tempest"] = tempest_cfg
+    wunderground_cfg = dict(wcfg.get("Wunderground", {}) or {})
+    wcfg["Wunderground"] = wunderground_cfg
     out["Weather"] = wcfg
     out.setdefault("Schedule", {}).setdefault("Cron", DEFAULT_TW_CRON)
     tpl = dict(out.get("Templates", {}) or {})
@@ -1986,22 +2290,11 @@ def timeweather_with_health(tw):
     tpl.setdefault("LookaheadSeconds", DEFAULT_TW_LOOKAHEAD_SECONDS)
     out["Templates"] = tpl
 
-    swp_installed, swp_weather_available = skywarnplus_weather_status()
-
-    # install.sh only pre-selects "skywarnplus" for a genuinely brand-new
-    # config; an existing Herald install upgrading to pick up this feature
-    # never gets that file mutation (existing configs are never touched), so
-    # its Provider key is simply absent. Default the *displayed* value the
-    # same smart way here, purely at read time - this doesn't write anything
-    # to disk, it just means the UI shows the same recommended default
-    # either way until the user actually saves a choice.
-    if "Provider" not in wcfg:
-        wcfg["Provider"] = "skywarnplus" if swp_installed else "auto"
+    wcfg.setdefault("Provider", "auto")
 
     out["_health"] = {
         "sound_files_installed": os.path.exists(os.path.join(TW_SOUND_BASE, "the-time-is.gsm")),
-        "skywarnplus_installed": swp_installed,
-        "skywarnplus_weather_available": swp_weather_available,
+        "skywarnplus_ng_installed": skywarnplus_ng_installed(),
         "piper_installed": os.path.isfile(PIPER_BIN) and os.access(PIPER_BIN, os.X_OK),
     }
     return out
@@ -2025,6 +2318,9 @@ def cmd_list_json(config):
                 "enable":           cfg["swp_on"],
                 "wx_tail_file":     cfg["swp_file"],
                 "silence_threshold": cfg["swp_thr"],
+                "ng_enable":        cfg["swp_ng_on"],
+                "ng_apibase":       cfg["swp_ng_api"],
+                "ng_pollinterval":  cfg["swp_ng_poll"],
             },
         },
         "scheduled": scheduled_with_health(cfg["scheduled"]),
@@ -2359,6 +2655,12 @@ def cmd_update_settings(config, args):
         swp["WxTailFile"] = args.swp_wxfile
     if args.swp_threshold is not None:
         swp["SilenceThreshold"] = args.swp_threshold
+    if args.swp_ng_enable is not None:
+        swp["NGEnable"] = (args.swp_ng_enable == "true")
+    if args.swp_ng_apibase is not None:
+        swp["NGApiBase"] = args.swp_ng_apibase
+    if args.swp_ng_pollinterval is not None:
+        swp["NGPollIntervalSec"] = args.swp_ng_pollinterval
 
     save_config(config)
     print(json.dumps({"success": True, "message": "Settings updated"}))
@@ -2411,6 +2713,19 @@ def cmd_update_timeweather(config, args):
         tempest["Token"] = args.tempest_token
     if args.tempest_station is not None:
         tempest["StationID"] = args.tempest_station
+
+    wunderground = w.setdefault("Wunderground", {})
+    if args.wunderground_api_key is not None:
+        wunderground["ApiKey"] = args.wunderground_api_key
+    if args.wunderground_station is not None:
+        wunderground["StationID"] = args.wunderground_station
+
+    if args.weather_snapshot_enable is not None:
+        w["SnapshotEnable"] = (args.weather_snapshot_enable == "true")
+    if args.weather_snapshot_path is not None:
+        w["SnapshotPath"] = args.weather_snapshot_path
+    if args.weather_snapshot_label is not None:
+        w["SnapshotLabel"] = args.weather_snapshot_label
 
     save_config(config)
     print(json.dumps({"success": True, "message": "Time & Weather settings updated"}))
@@ -2641,6 +2956,17 @@ def build_arg_parser():
     p_settings.add_argument("--swp-enable",    dest="swp_enable",    choices=["true", "false"])
     p_settings.add_argument("--swp-wxfile",    dest="swp_wxfile")
     p_settings.add_argument("--swp-threshold", dest="swp_threshold", type=int)
+    p_settings.add_argument("--swp-ng-enable", dest="swp_ng_enable", choices=["true", "false"])
+    p_settings.add_argument("--swp-ng-apibase", dest="swp_ng_apibase")
+    p_settings.add_argument("--swp-ng-pollinterval", dest="swp_ng_pollinterval", type=int)
+
+    sub.add_parser("catalog-voices", help="List the full Piper voice catalog with installed status")
+
+    p_install_voice = sub.add_parser("install-voice", help="Download and install a Piper voice")
+    p_install_voice.add_argument("voice_id")
+
+    p_remove_voice = sub.add_parser("remove-voice", help="Remove an installed Piper voice")
+    p_remove_voice.add_argument("voice_id")
 
     p_tw = sub.add_parser("update-timeweather", help="Update Time & Weather Announcements settings")
     p_tw.add_argument("--enable", choices=["true", "false"])
@@ -2652,7 +2978,7 @@ def build_arg_parser():
     p_tw.add_argument("--mode", choices=["recordings", "template"])
     p_tw.add_argument("--cron")
     p_tw.add_argument("--weather-enable", dest="weather_enable", choices=["true", "false"])
-    p_tw.add_argument("--provider", choices=["auto", "metar", "openmeteo", "tempest", "skywarnplus"])
+    p_tw.add_argument("--provider", choices=["auto", "metar", "openmeteo", "tempest", "wunderground"])
     p_tw.add_argument("--location")
     p_tw.add_argument("--temp-unit", dest="temp_unit", choices=["F", "C"])
     p_tw.add_argument("--announce-condition", dest="announce_condition", choices=["true", "false"])
@@ -2661,6 +2987,11 @@ def build_arg_parser():
     p_tw.add_argument("--cache-max-age", dest="cache_max_age", type=int)
     p_tw.add_argument("--tempest-token", dest="tempest_token")
     p_tw.add_argument("--tempest-station", dest="tempest_station")
+    p_tw.add_argument("--wunderground-api-key", dest="wunderground_api_key")
+    p_tw.add_argument("--wunderground-station", dest="wunderground_station")
+    p_tw.add_argument("--weather-snapshot-enable", dest="weather_snapshot_enable", choices=["true", "false"])
+    p_tw.add_argument("--weather-snapshot-path", dest="weather_snapshot_path")
+    p_tw.add_argument("--weather-snapshot-label", dest="weather_snapshot_label")
     p_tw.add_argument("--callsign")
     p_tw.add_argument("--lookahead-seconds", dest="lookahead_seconds", type=int)
 
@@ -2741,6 +3072,12 @@ def cli_main():
         cmd_import_config(args)
     elif args.command == "update-settings":
         cmd_update_settings(config, args)
+    elif args.command == "catalog-voices":
+        cmd_catalog_voices(config)
+    elif args.command == "install-voice":
+        cmd_install_voice(config, args)
+    elif args.command == "remove-voice":
+        cmd_remove_voice(config, args)
     elif args.command == "update-timeweather":
         cmd_update_timeweather(config, args)
     elif args.command == "test-timeweather":
@@ -2801,6 +3138,9 @@ def main():
     swp_on          = cfg["swp_on"]
     swp_file        = cfg["swp_file"]
     swp_thr         = cfg["swp_thr"]
+    swp_ng_on       = cfg["swp_ng_on"]
+    swp_ng_api      = cfg["swp_ng_api"]
+    swp_ng_poll     = cfg["swp_ng_poll"]
     scheduled       = cfg["scheduled"]
     timeweather     = cfg["timeweather"]
 
@@ -2856,6 +3196,8 @@ def main():
 
     if swp_on:
         log_info(f"SkywarnPlus integration enabled ({swp_file})")
+        if swp_ng_on:
+            log_info(f"SkywarnPlus-NG bridge enabled ({swp_ng_api}, poll every {swp_ng_poll}s)")
     if rotation:
         log_info(f"Rotation: {len(rotation)} message(s)")
     if scheduled:
@@ -2890,6 +3232,9 @@ def main():
                 swp_on          = cfg["swp_on"]
                 swp_file        = cfg["swp_file"]
                 swp_thr         = cfg["swp_thr"]
+                swp_ng_on       = cfg["swp_ng_on"]
+                swp_ng_api      = cfg["swp_ng_api"]
+                swp_ng_poll     = cfg["swp_ng_poll"]
                 scheduled       = cfg["scheduled"]
                 timeweather     = cfg["timeweather"]
                 # Re-read AMI credentials from system files on SIGHUP so changes
@@ -2931,6 +3276,13 @@ def main():
 
             now    = time.time()
             now_dt = datetime.now()
+
+            # ── SkywarnPlus-NG change detection (self-rate-limited, see docstring) ─
+            if swp_on:
+                ng_tail_poll_tick(swp_ng_on, swp_ng_api, swp_ng_poll, state, now)
+
+            # ── Weather snapshot for other local programs (self-rate-limited) ─
+            weather_snapshot_tick(timeweather, state, now)
 
             # ── Poll AMI / CLI for keyup state ────────────────────────────
             unkey_detected = False
@@ -3039,10 +3391,18 @@ def main():
                     log_info("Scheduled announcement in progress - delaying tail message to next unkey")
 
                 elif swp_active:
-                    try:
-                        swp_mtime = os.path.getmtime(swp_file)
-                    except OSError:
-                        swp_mtime = None
+                    if swp_ng_on:
+                        # NG rewrites its tail file on every poll cycle even
+                        # when nothing changed (see ng_tail_poll_tick()'s
+                        # docstring) - its mtime can't tell us "is this
+                        # genuinely new". Use the API-derived change
+                        # timestamp ng_tail_poll_tick() maintains instead.
+                        swp_mtime = state.get("swp_ng_last_change")
+                    else:
+                        try:
+                            swp_mtime = os.path.getmtime(swp_file)
+                        except OSError:
+                            swp_mtime = None
                     is_new_alert = swp_mtime is not None and swp_mtime != state.get("swp_last_mtime")
 
                     if is_new_alert:

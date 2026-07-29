@@ -167,6 +167,18 @@
     'en_GB-jenny_dioco-medium':            'Jenny (British Female)',
     'en_GB-northern_english_male-medium':  'Northern English Male',
   };
+  // ── Voice catalog (Global Settings -> Voices) ─────────────────────────────
+  // Catalog-derived labels take priority so any voice installed via the
+  // Voices tab (or via SkywarnPlus-NG/asl3-tts, since they share the same
+  // catalog + voice directory) gets a friendly name, not just the original
+  // fixed 19-voice VOICE_LABELS map above.
+  let _voiceCatalog = [];
+  let _catalogLabels = {};
+
+  function voiceLabel(id) {
+    return VOICE_LABELS[id] || _catalogLabels[id] || id;
+  }
+
   async function loadVoices() {
     const data = await api('voices.php');
     const voices = (data && data.voices) || [];
@@ -179,11 +191,59 @@
       }
       voices.forEach(v => {
         const opt = document.createElement('option');
-        opt.value = v; opt.textContent = VOICE_LABELS[v] || v;
+        opt.value = v; opt.textContent = voiceLabel(v);
         sel.appendChild(opt);
       });
       if (voices.includes(DEFAULT_VOICE)) sel.value = DEFAULT_VOICE;
     });
+  }
+
+  async function loadVoiceCatalog() {
+    const data = await api('catalog_voices.php');
+    if (!data || data.success === false) return;
+    _voiceCatalog = data.voices || [];
+    _catalogLabels = {};
+    _voiceCatalog.forEach(v => { _catalogLabels[v.id] = v.label; });
+
+    const regionSel = document.getElementById('voices-region');
+    const prevRegion = regionSel.value;
+    regionSel.innerHTML = '';
+    (data.regions || []).forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r; opt.textContent = r;
+      regionSel.appendChild(opt);
+    });
+    if (prevRegion && (data.regions || []).includes(prevRegion)) regionSel.value = prevRegion;
+
+    populateVoiceCatalogSelect();
+  }
+
+  function populateVoiceCatalogSelect() {
+    const region = document.getElementById('voices-region').value;
+    const sel = document.getElementById('voices-select');
+    const prevVoice = sel.value;
+    sel.innerHTML = '';
+    _voiceCatalog.filter(v => v.region === region).forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = v.label + (v.installed ? ' (installed)' : ' (not installed)');
+      sel.appendChild(opt);
+    });
+    if (prevVoice) sel.value = prevVoice;
+
+    const installedCount = _voiceCatalog.filter(v => v.installed).length;
+    const countEl = document.getElementById('voices-count');
+    if (countEl) countEl.textContent = installedCount + ' of ' + _voiceCatalog.length + ' voices installed';
+
+    updateVoiceButtons();
+  }
+
+  function updateVoiceButtons() {
+    const voiceId = document.getElementById('voices-select').value;
+    const entry = _voiceCatalog.find(v => v.id === voiceId);
+    const installed = !!(entry && entry.installed);
+    document.getElementById('btn-install-voice').classList.toggle('btn-hidden', installed);
+    document.getElementById('btn-remove-voice').classList.toggle('btn-hidden', !installed);
   }
 
   // ── Load status + lists ────────────────────────────────────────────────────────────────────────
@@ -194,6 +254,8 @@
     document.getElementById('hs-node').textContent = data.node || '—';
     document.getElementById('hs-mininterval').textContent = data.tail_message.min_interval;
     const swpEnabled = !!data.tail_message.skywarnplus.enable;
+    const swpIsNg = !!data.tail_message.skywarnplus.ng_enable;
+    document.getElementById('hs-swp-label').textContent = swpIsNg ? 'SkywarnPlus-NG:' : 'SkywarnPlus:';
     const hsSwp = document.getElementById('hs-swp');
     hsSwp.textContent = swpEnabled ? 'Enabled' : 'Disabled';
     hsSwp.style.color = swpEnabled ? '#27ae60' : '#e74c3c';
@@ -221,6 +283,10 @@
     document.getElementById('set-swp-wxfile').value = data.tail_message.skywarnplus.wx_tail_file || '';
     document.getElementById('set-swp-threshold').value = data.tail_message.skywarnplus.silence_threshold;
     updateSwpFieldsVisibility();
+    document.getElementById('set-swp-ng-enable').checked = !!data.tail_message.skywarnplus.ng_enable;
+    document.getElementById('set-swp-ng-apibase').value = data.tail_message.skywarnplus.ng_apibase || '';
+    document.getElementById('set-swp-ng-pollinterval').value = data.tail_message.skywarnplus.ng_pollinterval;
+    updateSwpNgFieldsVisibility();
 
     const defaultNode = data.node || '—';
     const tbody = document.querySelector('#tail-table tbody');
@@ -311,9 +377,15 @@
     document.getElementById('tw-cache-max-age').value = twWeather.CacheMaxAgeMin || 10;
     document.getElementById('tw-tempest-token').value = (twWeather.Tempest && twWeather.Tempest.Token) || '';
     document.getElementById('tw-tempest-station').value = (twWeather.Tempest && twWeather.Tempest.StationID) || '';
+    document.getElementById('tw-wunderground-apikey').value = (twWeather.Wunderground && twWeather.Wunderground.ApiKey) || '';
+    document.getElementById('tw-wunderground-station').value = (twWeather.Wunderground && twWeather.Wunderground.StationID) || '';
+    document.getElementById('tw-snapshot-enable').checked = !!twWeather.SnapshotEnable;
+    document.getElementById('tw-snapshot-path').value = twWeather.SnapshotPath || '/tmp/asl3-herald/weather.json';
+    document.getElementById('tw-snapshot-label').value = twWeather.SnapshotLabel || '';
+    updateSnapshotFieldsVisibility();
     document.getElementById('tw-callsign').value = twTemplates.Callsign || '';
     document.getElementById('tw-lookahead-seconds').value = twTemplates.LookaheadSeconds || 5;
-    twSwpInstalled = !!twHealth.skywarnplus_installed;
+    twSwpNgInstalled = !!twHealth.skywarnplus_ng_installed;
     updateTwProviderFields();
     updateTwSectionVisibility();
 
@@ -334,7 +406,7 @@
       if (!enabled) tr.classList.add('sched-disabled');
       tr.innerHTML =
         '<td class="col-wrap">' + escapeAttr(m.Text) + '</td>' +
-        '<td>' + escapeAttr(VOICE_LABELS[m.Voice] || m.Voice) + '</td>' +
+        '<td>' + escapeAttr(voiceLabel(m.Voice)) + '</td>' +
         '<td><button class="' + (enabled ? 'btn-enable' : 'btn-disable') + ' btn-toggle-tw-msg" data-id="' + escapeAttr(m.Id) + '">' + (enabled ? 'Enabled' : 'Disabled') + '</button></td>' +
         '<td>' +
         '<button class="btn-test-tw-msg" data-id="' + escapeAttr(m.Id) + '">Test</button>' +
@@ -355,7 +427,7 @@
       nodeIdStatus.textContent = 'No Node ID has been generated yet.';
     } else {
       nodeIdStatus.textContent = 'Currently deployed: "' + (nodeId.Text || '') + '" (' +
-        (VOICE_LABELS[nodeId.Voice] || nodeId.Voice) + ')' +
+        voiceLabel(nodeId.Voice) + ')' +
         (nodeId.GeneratedAt ? ' - generated ' + nodeId.GeneratedAt : '');
     }
 
@@ -364,7 +436,7 @@
   }
 
   // ── Time & Weather Announcements ──────────────────────────────────────────────────────────
-  let twSwpInstalled = false;
+  let twSwpNgInstalled = false;
 
   function applyTwCronToPicker(cronExpr) {
     const parts = String(cronExpr || '0 * * * *').split(/\s+/);
@@ -393,18 +465,23 @@
       document.getElementById('set-swp-enable').checked ? 'flex' : 'none';
   }
 
+  function updateSwpNgFieldsVisibility() {
+    document.getElementById('set-swp-ng-fields').style.display =
+      document.getElementById('set-swp-ng-enable').checked ? 'flex' : 'none';
+  }
+
+  function updateSnapshotFieldsVisibility() {
+    document.getElementById('tw-snapshot-fields').style.display =
+      document.getElementById('tw-snapshot-enable').checked ? 'flex' : 'none';
+  }
+
   function updateTwProviderFields() {
     const provider = document.getElementById('tw-provider').value;
     document.getElementById('tw-tempest-fields').style.display = provider === 'tempest' ? 'block' : 'none';
+    document.getElementById('tw-wunderground-fields').style.display = provider === 'wunderground' ? 'block' : 'none';
     document.getElementById('tw-location-field').style.display =
-      (provider === 'tempest' || provider === 'skywarnplus') ? 'none' : 'block';
-    document.getElementById('tw-swp-banner').style.display =
-      (twSwpInstalled && provider !== 'skywarnplus') ? 'block' : 'none';
-    // The skywarnplus provider is a local file read, not a live API call -
-    // fetch_weather_cached() bypasses Herald's own throttle for it entirely
-    // (SkywarnPlus already manages its own fetch freshness), so this
-    // setting has no effect for that provider.
-    document.getElementById('tw-cache-field').style.display = provider === 'skywarnplus' ? 'none' : 'block';
+      (provider === 'tempest' || provider === 'wunderground') ? 'none' : 'block';
+    document.getElementById('tw-swp-ng-banner').style.display = twSwpNgInstalled ? 'block' : 'none';
   }
 
   // Time/Weather cards only make sense once their own toggle is on -
@@ -449,7 +526,7 @@
     // inline-block !important }" rule (added to defeat Bootstrap's flex
     // stretching on Allmon3 host pages) - toggle a class with matching
     // !important + higher specificity instead.
-    document.getElementById('btn-test-timeweather').classList.toggle('tw-hidden', !(enabled && hasContent));
+    document.getElementById('btn-test-timeweather').classList.toggle('btn-hidden', !(enabled && hasContent));
     document.getElementById('tw-nothing-warning').style.display = (enabled && !isTemplate && !hasContent) ? 'block' : 'none';
   }
 
@@ -795,6 +872,9 @@
         swp_enable: document.getElementById('set-swp-enable').checked,
         swp_wxfile: document.getElementById('set-swp-wxfile').value.trim(),
         swp_threshold: document.getElementById('set-swp-threshold').value,
+        swp_ng_enable: document.getElementById('set-swp-ng-enable').checked,
+        swp_ng_apibase: document.getElementById('set-swp-ng-apibase').value.trim(),
+        swp_ng_pollinterval: document.getElementById('set-swp-ng-pollinterval').value,
       }),
     });
     showMsg(msgEl, data.message || (data.success ? 'Settings saved and reloaded' : 'Failed'), data.success);
@@ -803,6 +883,7 @@
   document.getElementById('btn-save-settings').addEventListener('click', () => saveSettings('settings-msg'));
   document.getElementById('btn-save-tail-settings').addEventListener('click', () => saveSettings('tail-settings-msg'));
   document.getElementById('set-swp-enable').addEventListener('change', updateSwpFieldsVisibility);
+  document.getElementById('set-swp-ng-enable').addEventListener('change', updateSwpNgFieldsVisibility);
 
   // ── Time & Weather Announcements ─────────────────────────────────────────────────────────────
   document.getElementById('tw-cron-hourly').addEventListener('click', () => {
@@ -811,6 +892,7 @@
 
   document.getElementById('tw-provider').addEventListener('change', updateTwProviderFields);
   document.getElementById('tw-enable').addEventListener('change', updateTwSectionVisibility);
+  document.getElementById('tw-snapshot-enable').addEventListener('change', updateSnapshotFieldsVisibility);
   document.getElementById('tw-announce-time').addEventListener('change', updateTwSectionVisibility);
   document.getElementById('tw-time-format').addEventListener('change', updateTwSectionVisibility);
   document.getElementById('tw-weather-enable').addEventListener('change', updateTwSectionVisibility);
@@ -839,6 +921,11 @@
         cache_max_age: document.getElementById('tw-cache-max-age').value,
         tempest_token: document.getElementById('tw-tempest-token').value.trim(),
         tempest_station: document.getElementById('tw-tempest-station').value.trim(),
+        wunderground_api_key: document.getElementById('tw-wunderground-apikey').value.trim(),
+        wunderground_station: document.getElementById('tw-wunderground-station').value.trim(),
+        weather_snapshot_enable: document.getElementById('tw-snapshot-enable').checked,
+        weather_snapshot_path: document.getElementById('tw-snapshot-path').value.trim(),
+        weather_snapshot_label: document.getElementById('tw-snapshot-label').value.trim(),
         callsign: document.getElementById('tw-callsign').value.trim(),
         lookahead_seconds: document.getElementById('tw-lookahead-seconds').value,
       }),
@@ -972,7 +1059,52 @@
     if (data.success !== false) loadHistory();
   });
 
-  loadVoices();
-  loadAll();
+  document.getElementById('voices-region').addEventListener('change', populateVoiceCatalogSelect);
+  document.getElementById('voices-select').addEventListener('change', updateVoiceButtons);
+  document.getElementById('btn-refresh-voices').addEventListener('click', () => loadVoiceCatalog());
+  document.getElementById('btn-install-voice').addEventListener('click', async () => {
+    const voiceId = document.getElementById('voices-select').value;
+    if (!voiceId) return;
+    const msgEl = document.getElementById('voices-msg');
+    const btn = document.getElementById('btn-install-voice');
+    btn.disabled = true;
+    showMsg(msgEl, 'Installing ' + voiceId + ' ...', true);
+    const data = await api('install_voice.php', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ voice_id: voiceId }),
+    });
+    btn.disabled = false;
+    showMsg(msgEl, data.message || (data.success ? 'Installed' : 'Failed'), data.success !== false);
+    if (data.success !== false) {
+      await loadVoiceCatalog();
+      await loadVoices();
+    }
+  });
+  document.getElementById('btn-remove-voice').addEventListener('click', async () => {
+    const voiceId = document.getElementById('voices-select').value;
+    if (!voiceId) return;
+    if (!confirm('Remove voice ' + voiceLabel(voiceId) + '? Already-generated announcements keep playing fine, but editing one that still uses this voice (without picking a different one) will fail until it\'s reinstalled.')) return;
+    const msgEl = document.getElementById('voices-msg');
+    const btn = document.getElementById('btn-remove-voice');
+    btn.disabled = true;
+    showMsg(msgEl, 'Removing ' + voiceId + ' ...', true);
+    const data = await api('remove_voice.php', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ voice_id: voiceId }),
+    });
+    btn.disabled = false;
+    showMsg(msgEl, data.message || (data.success ? 'Removed' : 'Failed'), data.success !== false);
+    if (data.success !== false) {
+      await loadVoiceCatalog();
+      await loadVoices();
+    }
+  });
+
+  // Catalog first so voiceLabel() has friendly names ready before anything
+  // that renders a voice dropdown/label (loadVoices, loadAll) runs.
+  loadVoiceCatalog().then(() => {
+    loadVoices();
+    loadAll();
+  });
   _cdPoller = setInterval(_pollCountdown, 10000);
 })();

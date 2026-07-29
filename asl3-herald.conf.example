@@ -57,13 +57,28 @@ TailMessage:
     #   Node: "501261"
 
   SkywarnPlus:
-    # Play the SkywarnPlus wx-tail.wav instead of rotation when WX alerts are active.
-    # wx-tail.wav is a large file (>5000 bytes) when alerts are present, silent when not.
+    # Play the WX tail file instead of rotation when WX alerts are active.
+    # It's a large file (>5000 bytes) when alerts are present, silent when not.
     # WX alerts always take priority over the rotation.
     Enable: true
-    WxTailFile: /tmp/SkywarnPlus/wx-tail.wav
+    # Default matches SkywarnPlus-NG's own default Tail Message File Path -
+    # if you're on the classic SkywarnPlus fork instead, set this to
+    # /tmp/SkywarnPlus/wx-tail.wav (or wherever its config.yaml points).
+    WxTailFile: /var/lib/skywarnplus-ng/data/wx-tail.wav
     # File size threshold to distinguish an active alert file from the silent placeholder
     SilenceThreshold: 5000
+    #
+    # SkywarnPlus-NG (https://github.com/hardenedpenguin/SkywarnPlus-NG) writes
+    # WxTailFile above itself - no bridge needed for that part. BUT it rewrites
+    # that file on every poll cycle even when nothing changed (unlike the
+    # classic fork, which only rewrites on a real change), which would break
+    # the WX/rotation alternation above if Herald relied on the file's mtime
+    # like it does for the classic fork. When NGEnable is true, Herald instead
+    # polls NG's local dashboard API just to detect genuine alert-set changes,
+    # and uses that instead of the file's mtime for the alternation decision.
+    NGEnable: false
+    NGApiBase: http://127.0.0.1:8100
+    NGPollIntervalSec: 30
 
 # Scheduled announcements — play at specific times, regardless of tail message interval
 # Days: "daily" or a list: ["saturday", "sunday"]  (case-insensitive)
@@ -153,23 +168,19 @@ TimeWeather:
   Weather:
     Enable: true
 
-    # auto        - ICAO airport codes use METAR (falling back to Open-Meteo),
-    #               everything else uses Open-Meteo (falling back to METAR)
-    # metar       - Force NOAA METAR (ICAO airport codes only)
-    # openmeteo   - Force Open-Meteo (free, no API key, any ZIP/postal/ICAO code)
-    # tempest     - Your own WeatherFlow Tempest station (requires Tempest.Token below)
-    # skywarnplus - Read already-fetched weather from SkywarnPlus's
-    #               /tmp/SkywarnPlus/swp-data.json instead of polling an API here.
-    #               Requires N6LKA's SkywarnPlus fork specifically
-    #               (github.com/N6LKA/SkywarnPlus) with WeatherEnable: true in
-    #               its own config.yaml - swp-data.json doesn't exist in the
-    #               original archived upstream project. Recommended if you're
-    #               already on the fork, to avoid two independent pollers
-    #               hitting the same weather source.
+    # auto          - ICAO airport codes use METAR (falling back to Open-Meteo),
+    #                 everything else uses Open-Meteo (falling back to METAR)
+    # metar         - Force NOAA METAR (ICAO airport codes only)
+    # openmeteo     - Force Open-Meteo (free, no API key, any ZIP/postal/ICAO code)
+    # tempest       - Your own WeatherFlow Tempest station (requires Tempest.Token below)
+    # wunderground  - Any Personal Weather Station uploading to Weather Underground
+    #                 (requires Wunderground.ApiKey/StationID below) - including a
+    #                 Tempest station also configured to feed WU, not just WU-native
+    #                 hardware. No condition text available from this API.
     Provider: auto
 
     # ZIP/postal code or ICAO airport code (e.g. "92320" or "KONT").
-    # Ignored for the tempest and skywarnplus providers.
+    # Ignored for the tempest and wunderground providers.
     Location: ""
 
     TemperatureUnit: F  # F or C
@@ -185,6 +196,20 @@ TimeWeather:
     Tempest:
       Token: ""       # WeatherFlow Personal Access Token — tempest.earth/account
       StationID: ""   # leave blank to auto-detect (cached after first lookup)
+
+    Wunderground:
+      ApiKey: ""      # weatherunderground.com/member/api-keys
+      StationID: ""   # e.g. KCASTATION1
+
+    # Writes a small current-conditions JSON snapshot for other local
+    # programs to read (e.g. ASL3-SkywarnPlus-NG-Bridge, for the Allmon3
+    # panel — see that repo's README, "Weather snapshot contract"). Reuses
+    # this section's own cached fetch above (CacheMaxAgeMin), so enabling
+    # this does not cause any extra API calls beyond what Time & Weather's
+    # own announcements already make. Checked once a minute internally.
+    SnapshotEnable: false
+    SnapshotPath: /tmp/asl3-herald/weather.json
+    SnapshotLabel: ""   # optional, shown on the Allmon3 panel e.g. "Home Station"
 
   # ── Template mode settings (ignored when Mode: recordings) ────────────────
   # Requires Piper TTS (installed by install.sh). Weather.* above still

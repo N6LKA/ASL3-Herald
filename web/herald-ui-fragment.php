@@ -80,12 +80,14 @@
   }
   /* Higher specificity than "#herald-ui button" above (extra class), so JS
      can still hide a button (e.g. Time & Weather's Test button when there's
-     nothing to test) despite that rule's !important. */
-  #herald-ui button.tw-hidden {
+     nothing to test, or the Voices box's Install/Remove toggle) despite
+     that rule's !important. */
+  #herald-ui button.btn-hidden {
     display: none !important;
   }
-  #herald-ui .btn-danger { background: #e74c3c; color: #fff; border: none; border-radius: 4px; }
-  #herald-ui .btn-play   { background: #2980b9; color: #fff; border: none; border-radius: 4px; }
+  #herald-ui .btn-danger   { background: #e74c3c; color: #fff; border: none; border-radius: 4px; }
+  #herald-ui .btn-play     { background: #2980b9; color: #fff; border: none; border-radius: 4px; }
+  #herald-ui .btn-secondary{ background: #576574; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-primary{ background: #27ae60; color: #fff; border: none; border-radius: 4px; padding: 8px 16px; }
   #herald-ui .btn-toggle { background: #8e44ad; color: #fff; border: none; border-radius: 4px; }
   #herald-ui input[type=text], #herald-ui input[type=time], #herald-ui select, #herald-ui textarea {
@@ -188,7 +190,7 @@
 <div class="status-bar" id="herald-status-bar">
   <span><strong>Node:</strong> <span id="hs-node">—</span></span>
   <span><strong>MinInterval:</strong> <span id="hs-mininterval">—</span>s</span>
-  <span><strong>SkywarnPlus:</strong> <span id="hs-swp">—</span></span>
+  <span><strong id="hs-swp-label">SkywarnPlus:</strong> <span id="hs-swp">—</span></span>
   <span><strong>Herald:</strong> <span id="hs-enabled">—</span></span>
   <span><strong>Next tail:</strong> <span id="hs-countdown">—</span></span>
 </div>
@@ -243,7 +245,7 @@
     <ul style="margin: 8px 0 8px 20px; line-height: 1.8;">
       <li><strong>Takes priority over Scheduled Announcements</strong> — if both are due at the same moment, Time & Weather always plays first; the Scheduled entry just plays right after instead of being skipped.</li>
       <li><strong>Waits for the node to unkey</strong>, same as Scheduled Announcements.</li>
-      <li>Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or — if SkywarnPlus is already installed — its already-fetched weather data, avoiding a second independent poller.</li>
+      <li>Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or any Personal Weather Station uploading to Weather Underground (including a Tempest station also configured to feed WU) — Tempest, Open-Meteo, and METAR all include wind speed/direction/gust in addition to temperature, feels-like, humidity, and condition.</li>
       <li>Can also be triggered <strong>on demand via DTMF</strong>, independent of the schedule above (which doesn't have to be hourly - any cron pattern works). To enable this, add a function to your node's <code>rpt.conf</code> that runs <code>/usr/local/bin/herald play-timeweather</code>.</li>
     </ul>
   </div>
@@ -291,6 +293,25 @@
           </div>
         </div>
         <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;">When enabled, active WX alerts take priority over tail message rotation. Herald alternates between the WX alert and your normal rotation — the alert plays first, then one rotation message, then the alert again. A new or updated alert file always plays immediately on the next unkey. When no alert is active, normal rotation resumes. SkywarnPlus messages do not affect the cron-scheduled announcement timing.</p>
+
+        <div class="toggle-row" style="margin-top: 14px;">
+          <label class="toggle-switch">
+            <input type="checkbox" id="set-swp-ng-enable">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">WX Tail File is written by SkywarnPlus-NG</span>
+        </div>
+        <div id="set-swp-ng-fields" style="display:flex; flex-wrap:nowrap; gap:16px; align-items:flex-start; margin-top:4px;">
+          <div style="flex:1 1 auto; min-width:0;">
+            <label>SkywarnPlus-NG API Base</label>
+            <input type="text" id="set-swp-ng-apibase" style="width: 100%; box-sizing:border-box;">
+          </div>
+          <div style="flex:0 0 auto;">
+            <label>Poll Interval (seconds)</label>
+            <input type="text" id="set-swp-ng-pollinterval" style="width: 90px; box-sizing:border-box;">
+          </div>
+        </div>
+        <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;"><a href="https://github.com/hardenedpenguin/SkywarnPlus-NG" target="_blank">SkywarnPlus-NG</a> writes WX Tail File itself — point the path above at its own Tail Message File Path setting (default <code>/var/lib/skywarnplus-ng/data/wx-tail.wav</code>). NG rewrites that file on every poll cycle even when nothing changed, though, so turning this on makes Herald separately poll NG's API on the interval above just to detect genuine alert changes — otherwise WX would replay on every unkey instead of alternating with rotation. Leave off if you're running the classic SkywarnPlus fork, whose own file only changes when an alert genuinely does.</p>
       </div>
     </div>
 
@@ -349,6 +370,7 @@
           <div class="tts-voice">
             <label>Voice</label>
             <select id="tail-voice" style="display: block;"></select>
+            <p class="muted" style="font-size:0.8em; margin:4px 0 0;">More voices: Global Settings &rarr; Voices</p>
           </div>
           <div class="tts-text">
             <label>Text</label>
@@ -448,6 +470,7 @@
           <div class="tts-voice">
             <label>Voice</label>
             <select id="sched-voice" style="display: block;"></select>
+            <p class="muted" style="font-size:0.8em; margin:4px 0 0;">More voices: Global Settings &rarr; Voices</p>
           </div>
           <div class="tts-text">
             <label>Text</label>
@@ -573,6 +596,7 @@
         <div class="tts-voice">
           <label>Voice</label>
           <select id="tw-msg-voice" style="display:block;"></select>
+          <p class="muted" style="font-size:0.8em; margin:4px 0 0;">More voices: Global Settings &rarr; Voices</p>
         </div>
         <div class="tts-text">
           <label>Text</label>
@@ -589,7 +613,9 @@
         <code>{temperature}</code> temperature &nbsp;|&nbsp;
         <code>{feels_like}</code> feels-like temperature &nbsp;|&nbsp;
         <code>{humidity}</code> humidity<br>
-        <span class="muted">Weather tags need Weather enabled below with a working provider. A tag with no data available is silently left blank rather than failing the whole message.</span>
+        <code>{wind_speed}</code> wind speed &nbsp;|&nbsp;
+        <code>{wind_gust}</code> wind gust speed<br>
+        <span class="muted">Weather tags need Weather enabled below with a working provider. A tag with no data available is silently left blank rather than failing the whole message — <code>{wind_speed}</code>/<code>{wind_gust}</code> in particular aren't available from every provider (e.g. METAR gust, or a calm reading with no gust at all).</span>
       </div>
 
       <br>
@@ -636,8 +662,8 @@
 
   <div class="card" id="tw-weather-card">
     <h3>Weather</h3>
-    <div id="tw-swp-banner" class="banner-info" style="display:none;">
-      SkywarnPlus is installed on this system. If it's <a href="https://github.com/N6LKA/SkywarnPlus" target="_blank">N6LKA's fork</a> (required for this provider - the original archived upstream doesn't support it), using the <strong>SkywarnPlus</strong> weather provider below avoids running a second, independent weather poller.
+    <div id="tw-swp-ng-banner" class="banner-info" style="display:none;">
+      <a href="https://github.com/hardenedpenguin/SkywarnPlus-NG" target="_blank">SkywarnPlus-NG</a> is installed on this system. Turn on <strong>Write a weather snapshot file for other local programs</strong> below if you're also running <a href="https://github.com/N6LKA/ASL3-SkywarnPlus-NG-Bridge" target="_blank">ASL3-SkywarnPlus-NG-Bridge</a> for Allmon3.
     </div>
 
     <div class="field-row">
@@ -648,7 +674,7 @@
           <option value="metar">NOAA METAR (ICAO airport codes only)</option>
           <option value="openmeteo">Open-Meteo (free, no key, any location)</option>
           <option value="tempest">My WeatherFlow Tempest station</option>
-          <option value="skywarnplus">SkywarnPlus (reads its already-fetched weather)</option>
+          <option value="wunderground">My Weather Underground PWS station</option>
         </select>
       </div>
       <div id="tw-location-field">
@@ -675,6 +701,20 @@
           <input type="text" id="tw-tempest-station" style="width:140px;" placeholder="auto-detect if blank">
         </div>
       </div>
+    </div>
+
+    <div id="tw-wunderground-fields" style="display:none; margin-top:10px;">
+      <div class="field-row">
+        <div>
+          <label>Wunderground API Key</label>
+          <input type="text" id="tw-wunderground-apikey" style="width:380px;" placeholder="weatherunderground.com/member/api-keys">
+        </div>
+        <div>
+          <label>Wunderground Station ID</label>
+          <input type="text" id="tw-wunderground-station" style="width:160px;" placeholder="e.g. KCASTATION1">
+        </div>
+      </div>
+      <p class="muted" style="margin-top:6px; margin-bottom:0;">Works for any PWS uploading to Weather Underground, including a Tempest station configured to also feed WU — not just WU-native hardware. No condition text is available from this API (temperature, feels-like, humidity, and wind only).</p>
     </div>
 
     <div id="tw-weather-announce-toggles">
@@ -706,6 +746,25 @@
       <input type="text" id="tw-cache-max-age" style="width:80px;">
       <span class="muted" style="margin-left:8px;">Skip re-fetching weather if the last reading is still this fresh — independent of how often the announcement itself plays.</span>
     </div>
+
+    <div class="toggle-row" style="margin-top: 14px;">
+      <label class="toggle-switch">
+        <input type="checkbox" id="tw-snapshot-enable">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">Write a weather snapshot file for other local programs</span>
+      <div id="tw-snapshot-fields" style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+        <div>
+          <label>Snapshot File Path</label>
+          <input type="text" id="tw-snapshot-path" style="width:430px; box-sizing:border-box;">
+        </div>
+        <div>
+          <label>Label (optional)</label>
+          <input type="text" id="tw-snapshot-label" style="width:430px; box-sizing:border-box;" placeholder="e.g. Home Station">
+        </div>
+      </div>
+    </div>
+    <p class="muted" style="margin-top:10px; margin-bottom:0; font-size:0.9em;">Writes the same weather data used above (no extra fetch) to a small JSON file — for example, for <a href="https://github.com/N6LKA/ASL3-SkywarnPlus-NG-Bridge" target="_blank">ASL3-SkywarnPlus-NG-Bridge</a>'s Allmon3 panel. Checked once a minute.</p>
   </div>
 
   <div class="card" id="tw-schedule-card">
@@ -745,13 +804,15 @@
   </div>
 
   <div class="card">
-    <button class="btn-primary" id="btn-save-timeweather">Save &amp; Reload</button>
-    <button class="btn-play" id="btn-test-timeweather">Test (local playback)</button>
-    <span style="margin-left:16px;">
-      <label for="tw-test-at" style="display:inline; font-size:0.9em;">Preview time (optional)</label>
-      <input type="text" id="tw-test-at" placeholder="HH:MM" style="width:70px; margin-left:6px;">
-    </span>
-    <span class="muted" style="display:block; margin-top:4px; font-size:0.85em;">Leave blank to test with the real current time. Set a time (24-hour, e.g. 15:00) to preview how it'll sound at that moment - handy for checking things like top-of-the-hour phrasing without waiting for the real clock.</span>
+    <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap;">
+      <button class="btn-primary" id="btn-save-timeweather">Save &amp; Reload</button>
+      <button class="btn-play" id="btn-test-timeweather">Test (local playback)</button>
+      <span>
+        <label for="tw-test-at" style="display:inline; font-size:0.9em;">Preview time (optional)</label>
+        <input type="text" id="tw-test-at" placeholder="HH:MM" style="width:70px; margin-left:6px;">
+      </span>
+      <span class="muted" style="font-size:0.85em; max-width:460px;">Leave blank to test with the real current time. Set a time (24-hour, e.g. 15:00) to preview how it'll sound at that moment - handy for checking things like top-of-the-hour phrasing without waiting for the real clock.</span>
+    </div>
     <div class="msg" id="timeweather-msg"></div>
   </div>
 </div>
@@ -797,6 +858,7 @@
       <div class="tts-voice">
         <label>Voice</label>
         <select id="nodeid-voice" style="display:block;"></select>
+        <p class="muted" style="font-size:0.8em; margin:4px 0 0;">More voices: Global Settings &rarr; Voices</p>
       </div>
       <div class="tts-text">
         <label>ID Text</label>
@@ -843,9 +905,31 @@
   </div>
 
   <div class="card">
+    <h3 style="margin-top:0;">Voices</h3>
+    <p class="muted">Browse and install additional Piper TTS voices (shared with SkywarnPlus-NG / ASL3's own asl-tts — install once, usable everywhere). Installed voices automatically appear in the voice dropdowns on Tail Messages, Scheduled Announcements, and Time &amp; Weather Templates.</p>
+    <div class="field-row">
+      <div>
+        <label>Region</label>
+        <select id="voices-region" style="width:220px;"></select>
+      </div>
+      <div style="flex:1 1 auto; min-width:0;">
+        <label>Voice</label>
+        <select id="voices-select" style="width:100%; box-sizing:border-box;"></select>
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <button class="btn-primary" id="btn-install-voice">Install Voice</button>
+      <button class="btn-danger btn-hidden" id="btn-remove-voice">Remove Voice</button>
+      <button class="btn-secondary" id="btn-refresh-voices">Refresh</button>
+      <span class="muted" id="voices-count"></span>
+    </div>
+    <div class="msg" id="voices-msg"></div>
+  </div>
+
+  <div class="card">
     <h3>Backup &amp; Restore</h3>
     <p class="muted">Export the full configuration (rotation, scheduled announcements, and settings) as a JSON file, or restore from a previously exported file. Restoring replaces the entire configuration.</p>
-    <button id="btn-export-config">Download Config Backup</button>
+    <button class="btn-secondary" id="btn-export-config">Download Config Backup</button>
     <br><br>
     <label>Restore from backup file</label>
     <input type="file" id="config-import-file" accept=".json">

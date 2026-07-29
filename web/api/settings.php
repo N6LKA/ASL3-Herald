@@ -38,6 +38,18 @@ if ($swpThreshold === false || $swpThreshold < 0) {
     herald_json_response(['success' => false, 'message' => 'Invalid silence threshold'], 400);
 }
 
+$swpNgEnable = ($input['swp_ng_enable'] ?? false) ? 'true' : 'false';
+
+$swpNgApiBase = trim($input['swp_ng_apibase'] ?? '');
+if ($swpNgApiBase !== '' && !preg_match('#^https?://[a-zA-Z0-9_.:\[\]-]+(/[a-zA-Z0-9_./-]*)?$#', $swpNgApiBase)) {
+    herald_json_response(['success' => false, 'message' => 'Invalid SkywarnPlus-NG API base URL'], 400);
+}
+
+$swpNgPollInterval = filter_var($input['swp_ng_pollinterval'] ?? null, FILTER_VALIDATE_INT);
+if ($swpNgPollInterval === false || $swpNgPollInterval < 1) {
+    herald_json_response(['success' => false, 'message' => 'Invalid SkywarnPlus-NG poll interval'], 400);
+}
+
 herald_respond_from_cli(herald_run_sudo([
     'update-settings',
     '--node', $node,
@@ -47,4 +59,7 @@ herald_respond_from_cli(herald_run_sudo([
     '--swp-enable', $swpEnable,
     '--swp-wxfile', $swpWxFile,
     '--swp-threshold', (string) $swpThreshold,
+    '--swp-ng-enable', $swpNgEnable,
+    '--swp-ng-apibase', $swpNgApiBase,
+    '--swp-ng-pollinterval', (string) $swpNgPollInterval,
 ]));
