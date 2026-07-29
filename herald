@@ -8,7 +8,8 @@ ANNOUNCE_DIR="$INSTALL_DIR/announcements"
 DISABLE_FLAG="$INSTALL_DIR/asl3-herald-disabled"
 DAEMON_PY="/usr/local/bin/asl3-herald/asl3-herald.py"
 PIPER_BIN="/opt/piper/bin/piper/piper"
-PIPER_VOICE_DIR="/opt/piper/voices"
+# Shared with SkywarnPlus-NG and ASL3's own asl3-tts package.
+PIPER_VOICE_DIR="/var/lib/piper-tts"
 NODE_ID_DIR="$INSTALL_DIR/node-id"
 NODE_ID_FILE="$NODE_ID_DIR/node-id.wav"
 NODE_ID_FILE_NOEXT="$NODE_ID_DIR/node-id"
@@ -25,6 +26,8 @@ General:
   reload                                  Reload config without restarting (SIGHUP)
   list-json                               Print config as JSON (used by the web UI)
   voices [--json]                         List available TTS voices
+  catalog-voices                          List the full Piper voice catalog with installed status
+  install-voice <voice-id>                Download and install a Piper voice
   playback-history                        Print recent playback history as JSON
   clear-history                           Clear the playback history
   export-config                           Print the full config as JSON (for backup)
@@ -372,6 +375,15 @@ cmd_voices() {
     else
         echo "  (none installed)"
     fi
+}
+
+cmd_catalog_voices() {
+    python3 "$DAEMON_PY" catalog-voices "$@"
+}
+
+cmd_install_voice() {
+    need_root "$@"
+    python3 "$DAEMON_PY" install-voice "$@"
 }
 
 # ── Tail message (rotation) commands ──────────────────────────────────────────
@@ -891,6 +903,8 @@ case "$CMD" in
     list-json)            cmd_list_json          "$@" ;;
     toggle)               cmd_toggle             "$@" ;;
     voices)              cmd_voices             "$@" ;;
+    catalog-voices)       cmd_catalog_voices     "$@" ;;
+    install-voice)        cmd_install_voice      "$@" ;;
     add)                  cmd_add                "$@" ;;
     add-file)             cmd_add_file           "$@" ;;
     edit-rotation)        cmd_edit_rotation      "$@" ;;

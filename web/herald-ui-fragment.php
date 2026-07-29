@@ -368,6 +368,7 @@
           <div class="tts-voice">
             <label>Voice</label>
             <select id="tail-voice" style="display: block;"></select>
+            <p class="muted" style="font-size:0.8em; margin:4px 0 0;">More voices: Global Settings &rarr; Voices</p>
           </div>
           <div class="tts-text">
             <label>Text</label>
@@ -467,6 +468,7 @@
           <div class="tts-voice">
             <label>Voice</label>
             <select id="sched-voice" style="display: block;"></select>
+            <p class="muted" style="font-size:0.8em; margin:4px 0 0;">More voices: Global Settings &rarr; Voices</p>
           </div>
           <div class="tts-text">
             <label>Text</label>
@@ -592,6 +594,7 @@
         <div class="tts-voice">
           <label>Voice</label>
           <select id="tw-msg-voice" style="display:block;"></select>
+          <p class="muted" style="font-size:0.8em; margin:4px 0 0;">More voices: Global Settings &rarr; Voices</p>
         </div>
         <div class="tts-text">
           <label>Text</label>
@@ -853,6 +856,7 @@
       <div class="tts-voice">
         <label>Voice</label>
         <select id="nodeid-voice" style="display:block;"></select>
+        <p class="muted" style="font-size:0.8em; margin:4px 0 0;">More voices: Global Settings &rarr; Voices</p>
       </div>
       <div class="tts-text">
         <label>ID Text</label>
@@ -896,6 +900,27 @@
     <br>
     <button class="btn-primary" id="btn-save-settings">Save &amp; Reload</button>
     <div class="msg" id="settings-msg"></div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">Voices</h3>
+    <p class="muted">Browse and install additional Piper TTS voices (shared with SkywarnPlus-NG / ASL3's own asl-tts — install once, usable everywhere). Installed voices automatically appear in the voice dropdowns on Tail Messages, Scheduled Announcements, and Time &amp; Weather Templates.</p>
+    <div class="field-row">
+      <div>
+        <label>Region</label>
+        <select id="voices-region" style="width:220px;"></select>
+      </div>
+      <div style="flex:1 1 auto; min-width:0;">
+        <label>Voice</label>
+        <select id="voices-select" style="width:100%; box-sizing:border-box;"></select>
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <button class="btn-primary" id="btn-install-voice">Install Voice</button>
+      <button id="btn-refresh-voices">Refresh</button>
+      <span class="muted" id="voices-count"></span>
+    </div>
+    <div class="msg" id="voices-msg"></div>
   </div>
 
   <div class="card">

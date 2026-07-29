@@ -132,15 +132,18 @@ elif [[ -d "$CONFIG_DIR" ]]; then
     info "  Remove manually with: sudo rm -rf $CONFIG_DIR"
 fi
 
-# ── Piper TTS (preserved by default — large download) ─────────────────────────
+# ── Piper TTS binary (preserved by default — large download) ──────────────────
+# Voices live in the shared /var/lib/piper-tts (SkywarnPlus-NG / asl3-tts also
+# use it) and are never touched here, purge or not - removing them would break
+# whichever of those is still installed.
 
 if [[ "$PURGE_PIPER" == "true" ]]; then
     if [[ -d "$PIPER_DIR" ]]; then
-        warn "Purging Piper TTS ($PIPER_DIR)..."
+        warn "Purging Piper TTS binary ($PIPER_DIR)..."
         rm -rf "$PIPER_DIR"
     fi
 elif [[ -d "$PIPER_DIR" ]]; then
-    info "Piper TTS preserved at: $PIPER_DIR"
+    info "Piper TTS binary preserved at: $PIPER_DIR"
     info "  Remove manually with: sudo rm -rf $PIPER_DIR"
 fi
 
@@ -151,6 +154,7 @@ echo -e "  ${GREEN}asl3-herald has been uninstalled.${NC}"
 echo ""
 echo "  Options for next time (pass after --  when piping through sudo bash -s):"
 echo "    --purge-config   also remove config, announcements, and state"
-echo "    --purge-piper    also remove the Piper TTS binary and voices"
+echo "    --purge-piper    also remove the Piper TTS binary (voices are shared"
+echo "                     with SkywarnPlus-NG/asl3-tts and always preserved)"
 echo "    --purge-all      both of the above"
 echo ""

@@ -100,7 +100,7 @@ This tarball form is used instead of the raw GitHub URL because `raw.githubuserc
 
 The installer will:
 1. Install `python3-yaml`, `sox`, and `libsox-fmt-mp3` if not already present
-2. Install Piper TTS 1.2.0 (binary + 19 voices) — this step downloads approximately 1.2 GB and may take several minutes
+2. Install Piper TTS 1.2.0 (binary + the default `en_US-amy-medium` voice) into the shared `/var/lib/piper-tts` — more voices can be installed later from the web UI's Voices tab
 3. Copy `asl3-herald.py` to `/usr/local/bin/asl3-herald/`
 4. Install the `herald` management command to `/usr/local/bin/herald`
 5. Create `/etc/asterisk/scripts/asl3-herald/` with an example config (if no config exists)
@@ -268,34 +268,14 @@ A scheduled announcement waits for the node to unkey before playing (rather than
 
 `herald add` and `herald add-schedule` prefer **Piper** (neural TTS, installed by `install.sh`) for natural-sounding voices, and fall back to `festival` or `espeak-ng` if Piper isn't available.
 
-> **Install size note:** The Piper binary plus all 19 included voices totals approximately **1.2 GB**. The installer downloads them during `install.sh` and the step may take several minutes depending on your connection. Voices already present on disk are skipped on reinstall, so updates are fast.
+Piper voices live at `/var/lib/piper-tts` — the same shared location [SkywarnPlus-NG](#skywarnplus-ng-integration) and ASL3's own `asl3-tts` package use. Install a voice through any of the three and it's usable by all of them; nothing is duplicated.
 
-**Included Piper voices:**
-
-| Voice | Character |
-|---|---|
-| `en_US-amy-medium` | Amy — US Female ⭐ default |
-| `en_US-arctic-medium` | Arctic — US Multi-speaker |
-| `en_US-bryce-medium` | Bryce — US Male |
-| `en_US-hfc_female-medium` | HFC Female — US Female |
-| `en_US-hfc_male-medium` | HFC Male — US Male |
-| `en_US-joe-medium` | Joe — US Male |
-| `en_US-john-medium` | John — US Male |
-| `en_US-kristin-medium` | Kristin — US Female |
-| `en_US-kusal-medium` | Kusal — US Male |
-| `en_US-lessac-medium` | Lessac — US Female |
-| `en_US-libritts_r-medium` | LibriTTS — US Neutral |
-| `en_US-norman-medium` | Norman — US Male |
-| `en_US-ryan-medium` | Ryan — US Male |
-| `en_GB-alan-medium` | Alan — British Male |
-| `en_GB-alba-medium` | Alba — Scottish Female |
-| `en_GB-aru-medium` | Aru — British Female |
-| `en_GB-cori-medium` | Cori — British Female |
-| `en_GB-jenny_dioco-medium` | Jenny — British Female |
-| `en_GB-northern_english_male-medium` | Northern English Male — British Male |
+`install.sh` installs only the default voice (`en_US-amy-medium`) up front. Browse and install any of the other 160+ available voices from the **Voices** box on the web UI's **Global Settings** tab (region + voice picker, "Install Voice" button) — no restart or reload needed, and the new voice shows up immediately in every voice dropdown (Tail Messages, Scheduled Announcements, Time & Weather Templates, Node ID Generator).
 
 ```bash
 herald voices                                              # list installed voices
+herald catalog-voices                                       # full catalog (region/language/installed status), as JSON
+sudo herald install-voice en_US-joe-medium                  # install a voice from the CLI instead of the web UI
 sudo herald add "Net starts in 5 minutes" --voice en_US-joe-medium --name net-warning
 ```
 
@@ -306,20 +286,7 @@ sudo apt install festival sox
 sudo apt install espeak-ng sox
 ```
 
-**Adding more voices manually** — the 19 above are just what `install.sh` downloads by default; Piper has many more, including other languages (Spanish, French, German, and others), browsable at [huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices/tree/main). Every voice is two files, a `.onnx` model and a matching `.onnx.json` config — download both into `/opt/piper/voices/` and it's usable immediately, no restart or reload needed:
-
-```bash
-# Example: add German voice "de_DE-thorsten-medium"
-sudo curl -fsSL "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx" -o /opt/piper/voices/de_DE-thorsten-medium.onnx
-sudo curl -fsSL "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx.json" -o /opt/piper/voices/de_DE-thorsten-medium.onnx.json
-sudo chmod 644 /opt/piper/voices/de_DE-thorsten-medium.onnx*
-```
-
-Find the right path for any voice by browsing the link above — the URL pattern is always `<language>/<language-region>/<name>/<quality>/<language-region>-<name>-<quality>.onnx` (and the same path with `.json` on the end). The new voice shows up right away in `herald voices` and every voice dropdown in the web UI, labeled by its raw filename (e.g. `de_DE-thorsten-medium`) rather than a friendly display name — Herald only has friendly names for the 19 it ships by default.
-
-If a `curl` command above fails with a 403 error, HuggingFace is blocking direct downloads from your server's IP (a known issue with some hosts) — download the same two URLs in a regular web browser instead and copy the files to `/opt/piper/voices/` (e.g. via `scp`).
-
-For a non-English voice, remember Herald just passes whatever text you type straight to Piper — write your announcement text in that language too.
+For a non-English voice, remember Herald just passes whatever text you type straight to Piper — write your announcement text in that language too. A voice not in Herald's catalog (or installed by some other means) still shows up in every dropdown once its `.onnx`/`.onnx.json` pair is in `/var/lib/piper-tts` — just labeled by its raw filename instead of a friendly display name.
 
 ---
 
@@ -371,7 +338,8 @@ journalctl -u asl3-herald -f          # Follow live log output
 | `/var/www/html/supermon/asl3-herald.php` | Supermon entry point (installed alongside Supermon's own `index.php`) |
 | `install.sh` / `uninstall.sh` (repo root) | Installer / uninstaller — not installed on the node itself |
 | `/etc/sudoers.d/asl3-herald-web` | Narrow passwordless sudo rule for `www-data` to run `herald` |
-| `/opt/piper/` | Piper TTS binary and voice models |
+| `/opt/piper/` | Piper TTS binary |
+| `/var/lib/piper-tts/` | Piper voice models (shared with SkywarnPlus-NG / asl3-tts) |
 
 ---
 

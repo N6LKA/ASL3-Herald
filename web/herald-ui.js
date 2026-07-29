@@ -186,6 +186,45 @@
     });
   }
 
+  // ── Voice catalog (Global Settings -> Voices) ─────────────────────────────
+  let _voiceCatalog = [];
+
+  async function loadVoiceCatalog() {
+    const data = await api('catalog_voices.php');
+    if (!data || data.success === false) return;
+    _voiceCatalog = data.voices || [];
+
+    const regionSel = document.getElementById('voices-region');
+    const prevRegion = regionSel.value;
+    regionSel.innerHTML = '';
+    (data.regions || []).forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r; opt.textContent = r;
+      regionSel.appendChild(opt);
+    });
+    if (prevRegion && (data.regions || []).includes(prevRegion)) regionSel.value = prevRegion;
+
+    populateVoiceCatalogSelect();
+  }
+
+  function populateVoiceCatalogSelect() {
+    const region = document.getElementById('voices-region').value;
+    const sel = document.getElementById('voices-select');
+    const prevVoice = sel.value;
+    sel.innerHTML = '';
+    _voiceCatalog.filter(v => v.region === region).forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = v.label + (v.installed ? ' (installed)' : ' (not installed)');
+      sel.appendChild(opt);
+    });
+    if (prevVoice) sel.value = prevVoice;
+
+    const installedCount = _voiceCatalog.filter(v => v.installed).length;
+    const countEl = document.getElementById('voices-count');
+    if (countEl) countEl.textContent = installedCount + ' of ' + _voiceCatalog.length + ' voices installed';
+  }
+
   // ── Load status + lists ────────────────────────────────────────────────────────────────────────
   async function loadAll() {
     const data = await api('list.php');
@@ -999,7 +1038,29 @@
     if (data.success !== false) loadHistory();
   });
 
+  document.getElementById('voices-region').addEventListener('change', populateVoiceCatalogSelect);
+  document.getElementById('btn-refresh-voices').addEventListener('click', () => loadVoiceCatalog());
+  document.getElementById('btn-install-voice').addEventListener('click', async () => {
+    const voiceId = document.getElementById('voices-select').value;
+    if (!voiceId) return;
+    const msgEl = document.getElementById('voices-msg');
+    const btn = document.getElementById('btn-install-voice');
+    btn.disabled = true;
+    showMsg(msgEl, 'Installing ' + voiceId + ' ...', true);
+    const data = await api('install_voice.php', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ voice_id: voiceId }),
+    });
+    btn.disabled = false;
+    showMsg(msgEl, data.message || (data.success ? 'Installed' : 'Failed'), data.success !== false);
+    if (data.success !== false) {
+      await loadVoiceCatalog();
+      await loadVoices();
+    }
+  });
+
   loadVoices();
+  loadVoiceCatalog();
   loadAll();
   _cdPoller = setInterval(_pollCountdown, 10000);
 })();

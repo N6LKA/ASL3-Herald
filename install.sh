@@ -125,7 +125,29 @@ fi
 # ── Piper TTS (neural voices, preferred) ───────────────────────────────────────
 
 PIPER_BIN="/opt/piper/bin/piper/piper"
-PIPER_VOICE_DIR="/opt/piper/voices"
+# Shared with SkywarnPlus-NG and ASL3's own asl3-tts package (same
+# rhasspy/piper-voices source and <id>.onnx/<id>.onnx.json naming) - a voice
+# installed by any of the three is installed for all of them.
+PIPER_VOICE_DIR="/var/lib/piper-tts"
+OLD_PIPER_VOICE_DIR="/opt/piper/voices"
+
+# One-time migration for existing installs: move (not copy) any voices
+# already downloaded at the old Herald-only location into the shared one -
+# no-op if OLD_PIPER_VOICE_DIR doesn't exist or is already empty.
+if [[ -d "$OLD_PIPER_VOICE_DIR" ]] && compgen -G "$OLD_PIPER_VOICE_DIR/*.onnx" > /dev/null 2>&1; then
+    info "Moving existing Piper voices from $OLD_PIPER_VOICE_DIR to shared $PIPER_VOICE_DIR ..."
+    mkdir -p "$PIPER_VOICE_DIR"
+    for f in "$OLD_PIPER_VOICE_DIR"/*.onnx "$OLD_PIPER_VOICE_DIR"/*.onnx.json; do
+        [[ -f "$f" ]] || continue
+        dest="$PIPER_VOICE_DIR/$(basename "$f")"
+        if [[ -f "$dest" ]]; then
+            rm -f "$f"  # already present at the new location - drop the duplicate
+        else
+            mv "$f" "$dest"
+        fi
+    done
+    rmdir "$OLD_PIPER_VOICE_DIR" 2>/dev/null || true
+fi
 
 if [[ -f "$PIPER_BIN" && -x "$PIPER_BIN" ]]; then
     info "Piper TTS already installed at $PIPER_BIN — skipping download"
@@ -214,27 +236,10 @@ PYEOF
         fi
     }
 
-    # US English voices
-    download_voice "en_US-amy-medium.onnx"         "en/en_US/amy/medium/en_US-amy-medium.onnx"                       "en/en_US/amy/medium/en_US-amy-medium.onnx.json"
-    download_voice "en_US-arctic-medium.onnx"      "en/en_US/arctic/medium/en_US-arctic-medium.onnx"                 "en/en_US/arctic/medium/en_US-arctic-medium.onnx.json"
-    download_voice "en_US-bryce-medium.onnx"       "en/en_US/bryce/medium/en_US-bryce-medium.onnx"                   "en/en_US/bryce/medium/en_US-bryce-medium.onnx.json"
-    download_voice "en_US-hfc_female-medium.onnx"  "en/en_US/hfc_female/medium/en_US-hfc_female-medium.onnx"         "en/en_US/hfc_female/medium/en_US-hfc_female-medium.onnx.json"
-    download_voice "en_US-hfc_male-medium.onnx"    "en/en_US/hfc_male/medium/en_US-hfc_male-medium.onnx"             "en/en_US/hfc_male/medium/en_US-hfc_male-medium.onnx.json"
-    download_voice "en_US-joe-medium.onnx"         "en/en_US/joe/medium/en_US-joe-medium.onnx"                       "en/en_US/joe/medium/en_US-joe-medium.onnx.json"
-    download_voice "en_US-john-medium.onnx"        "en/en_US/john/medium/en_US-john-medium.onnx"                     "en/en_US/john/medium/en_US-john-medium.onnx.json"
-    download_voice "en_US-kristin-medium.onnx"     "en/en_US/kristin/medium/en_US-kristin-medium.onnx"               "en/en_US/kristin/medium/en_US-kristin-medium.onnx.json"
-    download_voice "en_US-kusal-medium.onnx"       "en/en_US/kusal/medium/en_US-kusal-medium.onnx"                   "en/en_US/kusal/medium/en_US-kusal-medium.onnx.json"
-    download_voice "en_US-lessac-medium.onnx"      "en/en_US/lessac/medium/en_US-lessac-medium.onnx"                 "en/en_US/lessac/medium/en_US-lessac-medium.onnx.json"
-    download_voice "en_US-libritts_r-medium.onnx"  "en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx"         "en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx.json"
-    download_voice "en_US-norman-medium.onnx"      "en/en_US/norman/medium/en_US-norman-medium.onnx"                 "en/en_US/norman/medium/en_US-norman-medium.onnx.json"
-    download_voice "en_US-ryan-medium.onnx"        "en/en_US/ryan/medium/en_US-ryan-medium.onnx"                     "en/en_US/ryan/medium/en_US-ryan-medium.onnx.json"
-    # British English voices
-    download_voice "en_GB-alan-medium.onnx"                  "en/en_GB/alan/medium/en_GB-alan-medium.onnx"                                       "en/en_GB/alan/medium/en_GB-alan-medium.onnx.json"
-    download_voice "en_GB-alba-medium.onnx"                  "en/en_GB/alba/medium/en_GB-alba-medium.onnx"                                       "en/en_GB/alba/medium/en_GB-alba-medium.onnx.json"
-    download_voice "en_GB-aru-medium.onnx"                   "en/en_GB/aru/medium/en_GB-aru-medium.onnx"                                         "en/en_GB/aru/medium/en_GB-aru-medium.onnx.json"
-    download_voice "en_GB-cori-medium.onnx"                  "en/en_GB/cori/medium/en_GB-cori-medium.onnx"                                       "en/en_GB/cori/medium/en_GB-cori-medium.onnx.json"
-    download_voice "en_GB-jenny_dioco-medium.onnx"           "en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium.onnx"                         "en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium.onnx.json"
-    download_voice "en_GB-northern_english_male-medium.onnx" "en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.onnx"     "en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.onnx.json"
+    # Only the default voice at install time - browse/install any of the other
+    # 160+ catalog voices afterward from the Voices box on the web UI's
+    # Global Settings tab (Configuration -> Voices).
+    download_voice "en_US-amy-medium.onnx" "en/en_US/amy/medium/en_US-amy-medium.onnx" "en/en_US/amy/medium/en_US-amy-medium.onnx.json"
 
     chmod 644 "$PIPER_VOICE_DIR"/*.onnx "$PIPER_VOICE_DIR"/*.onnx.json 2>/dev/null || true
     VOICES_INSTALLED=()
@@ -257,6 +262,7 @@ mkdir -p "$INSTALL_DIR"
 
 fetch_repo_file "asl3-herald.py" "$INSTALL_DIR/asl3-herald.py"
 fetch_repo_file "version.txt"    "$INSTALL_DIR/version.txt"
+fetch_repo_file "piper-voices-catalog.json" "$INSTALL_DIR/piper-voices-catalog.json"
 chmod +x "$INSTALL_DIR/asl3-herald.py"
 
 # ── Sound files for Time & Weather Announcements ───────────────────────────────
@@ -393,7 +399,7 @@ mkdir -p "$WEB_DIR/api" "$WEB_DIR/img"
 for f in herald-common.php herald-ui-fragment.php herald-ui.js; do
     fetch_repo_file "web/$f" "$WEB_DIR/$f"
 done
-for f in list.php voices.php play.php reload.php toggle.php toggle_scheduled.php toggle_rotation.php remove.php add_rotation.php add_scheduled.php edit_rotation.php edit_scheduled.php settings.php reorder_rotation.php playback_history.php clear_history.php config_export.php config_import.php version_check.php timeweather.php timeweather_test.php add_timeweather_message.php edit_timeweather_message.php remove_timeweather_message.php toggle_timeweather_message.php node_id.php node_id_test.php; do
+for f in list.php voices.php catalog_voices.php install_voice.php play.php reload.php toggle.php toggle_scheduled.php toggle_rotation.php remove.php add_rotation.php add_scheduled.php edit_rotation.php edit_scheduled.php settings.php reorder_rotation.php playback_history.php clear_history.php config_export.php config_import.php version_check.php timeweather.php timeweather_test.php add_timeweather_message.php edit_timeweather_message.php remove_timeweather_message.php toggle_timeweather_message.php node_id.php node_id_test.php; do
     fetch_repo_file "web/api/$f" "$WEB_DIR/api/$f"
 done
 for f in asl3-herald-icon.svg asl3-herald-banner.svg; do

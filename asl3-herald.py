@@ -16,6 +16,7 @@ import glob
 import json
 import uuid
 import random
+import shutil
 import signal
 import socket
 import argparse
@@ -92,8 +93,13 @@ DEFAULT_SWP_NG_POLL_INTERVAL = 30
 # daemon's own lookahead pre-render (see timeweather_template_tick()) has to
 # run from inside the long-running Python process, not a one-off subprocess.
 PIPER_BIN = "/opt/piper/bin/piper/piper"
-PIPER_VOICE_DIR = "/opt/piper/voices"
+# Shared with SkywarnPlus-NG and ASL3's own asl3-tts package (same
+# rhasspy/piper-voices source, same <id>.onnx/<id>.onnx.json naming) - a
+# voice installed by any of the three shows up as installed for all of them.
+PIPER_VOICE_DIR = "/var/lib/piper-tts"
 DEFAULT_PIPER_VOICE = "en_US-amy-medium"
+VOICE_CATALOG_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), "piper-voices-catalog.json")
+HF_VOICES_REPO = "rhasspy/piper-voices"
 TW_TEMPLATE_TAGS = ("smart_greeting", "time", "conditions", "temperature", "feels_like", "humidity",
                      "wind_speed", "wind_gust", "callsign")
 # How long past a message's target play time to keep waiting on a still-
@@ -2099,6 +2105,109 @@ def extract_config(config):
         "timeweather":     tw,
     }
 
+# ── Piper voice catalog (Voices tab) ────────────────────────────────────────
+# Same rhasspy/piper-voices source and <id>.onnx/<id>.onnx.json naming
+# SkywarnPlus-NG and ASL3's own asl3-tts package use against the shared
+# PIPER_VOICE_DIR - install a voice here and it's installed for all three.
+
+def load_voice_catalog():
+    """Loads the vendored Piper voice catalog (same region/language grouping
+    SkywarnPlus-NG ships - see piper-voices-catalog.json's own 'source'
+    field for provenance). Returns the raw dict, or None if missing/corrupt."""
+    try:
+        with open(VOICE_CATALOG_FILE) as f:
+            return json.load(f)
+    except Exception as e:
+        log_error(f"Could not load voice catalog {VOICE_CATALOG_FILE}: {e}")
+        return None
+
+def installed_voice_ids():
+    """Set of voice IDs with both .onnx and .onnx.json present in PIPER_VOICE_DIR."""
+    installed = set()
+    if not os.path.isdir(PIPER_VOICE_DIR):
+        return installed
+    for f in os.listdir(PIPER_VOICE_DIR):
+        if f.endswith(".onnx") and os.path.isfile(os.path.join(PIPER_VOICE_DIR, f + ".json")):
+            installed.add(f[: -len(".onnx")])
+    return installed
+
+def cmd_catalog_voices(config):
+    """Full voice catalog with per-voice installed status, for the Voices tab."""
+    catalog = load_voice_catalog()
+    if catalog is None:
+        print(json.dumps({"success": False, "message": "Voice catalog not found"}))
+        return
+    installed = installed_voice_ids()
+    voices = []
+    for voice_id, v in catalog.get("voices", {}).items():
+        voices.append({
+            "id": voice_id,
+            "label": v.get("label", voice_id),
+            "region": v.get("region", "Other"),
+            "language": v.get("language", ""),
+            "locale": v.get("locale", ""),
+            "quality": v.get("quality", ""),
+            "installed": voice_id in installed,
+        })
+    print(json.dumps({
+        "success": True,
+        "regions": catalog.get("regions", []),
+        "voices": voices,
+    }))
+
+def cmd_install_voice(config, args):
+    voice_id = args.voice_id
+    catalog = load_voice_catalog()
+    if catalog is None:
+        print(json.dumps({"success": False, "message": "Voice catalog not found"}))
+        return
+    entry = catalog.get("voices", {}).get(voice_id)
+    if not entry:
+        print(json.dumps({"success": False, "message": f"Unknown voice: {voice_id}"}))
+        return
+
+    onnx_path = os.path.join(PIPER_VOICE_DIR, voice_id + ".onnx")
+    json_path = onnx_path + ".json"
+    if os.path.isfile(onnx_path) and os.path.isfile(json_path):
+        print(json.dumps({"success": True, "message": f"{voice_id} already installed"}))
+        return
+
+    try:
+        os.makedirs(PIPER_VOICE_DIR, exist_ok=True)
+    except Exception as e:
+        print(json.dumps({"success": False, "message": f"Could not create {PIPER_VOICE_DIR}: {e}"}))
+        return
+
+    hf_path = entry.get("huggingface_path", "")
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError:
+        print(json.dumps({
+            "success": False,
+            "message": "huggingface_hub not installed - re-run install.sh to add it",
+        }))
+        return
+
+    try:
+        for filename, dest in (
+            (f"{hf_path}/{voice_id}.onnx", onnx_path),
+            (f"{hf_path}/{voice_id}.onnx.json", json_path),
+        ):
+            tmp = hf_hub_download(repo_id=HF_VOICES_REPO, filename=filename, repo_type="model")
+            shutil.copy(tmp, dest)
+            os.chmod(dest, 0o644)
+    except Exception as e:
+        # Don't leave a half-installed voice behind - both files present or neither.
+        for p in (onnx_path, json_path):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+        print(json.dumps({"success": False, "message": f"Download failed: {e}"}))
+        return
+
+    print(json.dumps({"success": True, "message": f"Installed {voice_id}"}))
+
 # ── CLI subcommands (used by the `herald` bash CLI and the web UI) ────────────
 
 def normalize_rotation(rotation):
@@ -2829,6 +2938,11 @@ def build_arg_parser():
     p_settings.add_argument("--swp-ng-apibase", dest="swp_ng_apibase")
     p_settings.add_argument("--swp-ng-pollinterval", dest="swp_ng_pollinterval", type=int)
 
+    sub.add_parser("catalog-voices", help="List the full Piper voice catalog with installed status")
+
+    p_install_voice = sub.add_parser("install-voice", help="Download and install a Piper voice")
+    p_install_voice.add_argument("voice_id")
+
     p_tw = sub.add_parser("update-timeweather", help="Update Time & Weather Announcements settings")
     p_tw.add_argument("--enable", choices=["true", "false"])
     p_tw.add_argument("--announce-time", dest="announce_time", choices=["true", "false"])
@@ -2933,6 +3047,10 @@ def cli_main():
         cmd_import_config(args)
     elif args.command == "update-settings":
         cmd_update_settings(config, args)
+    elif args.command == "catalog-voices":
+        cmd_catalog_voices(config)
+    elif args.command == "install-voice":
+        cmd_install_voice(config, args)
     elif args.command == "update-timeweather":
         cmd_update_timeweather(config, args)
     elif args.command == "test-timeweather":
