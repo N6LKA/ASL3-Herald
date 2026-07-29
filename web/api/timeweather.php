@@ -92,7 +92,7 @@ if ($weatherSnapshotPath === '' || !preg_match('#^/[a-zA-Z0-9_./-]+$#', $weather
 }
 
 $weatherSnapshotLabel = trim($input['weather_snapshot_label'] ?? '');
-if ($weatherSnapshotLabel !== '' && !preg_match('/^[a-zA-Z0-9 \'-]{1,60}$/', $weatherSnapshotLabel)) {
+if ($weatherSnapshotLabel !== '' && !preg_match('/^[a-zA-Z0-9 ,.\'-]{1,60}$/', $weatherSnapshotLabel)) {
     herald_json_response(['success' => false, 'message' => 'Invalid weather snapshot label'], 400);
 }
 

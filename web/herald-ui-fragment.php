@@ -702,7 +702,7 @@
       <div class="field-row">
         <div>
           <label>Wunderground API Key</label>
-          <input type="text" id="tw-wunderground-apikey" style="width:280px;" placeholder="weatherunderground.com/member/api-keys">
+          <input type="text" id="tw-wunderground-apikey" style="width:380px;" placeholder="weatherunderground.com/member/api-keys">
         </div>
         <div>
           <label>Wunderground Station ID</label>
