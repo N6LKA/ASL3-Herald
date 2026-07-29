@@ -6,7 +6,7 @@
 
 **A full-featured announcement and audio suite for ASL3/app_rpt.**
 
-`asl3-herald` started as a drop-in replacement for the native `app_rpt` tail message function and has grown into a complete announcement toolkit: reliable unkey-triggered tail messages, cron-style scheduled announcements, [SkywarnPlus](https://github.com/N6LKA/SkywarnPlus) weather alert integration with priority playback, built-in time & weather announcements (either a pre-recorded sound pack or your own Piper-TTS-rendered custom messages), a station ID audio generator, neural TTS voices throughout, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
+`asl3-herald` started as a drop-in replacement for the native `app_rpt` tail message function and has grown into a complete announcement toolkit: reliable unkey-triggered tail messages, cron-style scheduled announcements, SkywarnPlus weather alert integration with priority playback (works with classic SkywarnPlus or [SkywarnPlus-NG](https://github.com/hardenedpenguin/SkywarnPlus-NG) — see [SkywarnPlus Integration](#skywarnplus-integration)), built-in time & weather announcements (either a pre-recorded sound pack or your own Piper-TTS-rendered custom messages), a station ID audio generator, neural TTS voices throughout, and an optional web UI for Allmon3 and Supermon (v7.4+ and v8+) — all things the built-in tail message either doesn't support or handles unreliably.
 
 ---
 

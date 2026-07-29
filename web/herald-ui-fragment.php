@@ -243,7 +243,7 @@
     <ul style="margin: 8px 0 8px 20px; line-height: 1.8;">
       <li><strong>Takes priority over Scheduled Announcements</strong> — if both are due at the same moment, Time & Weather always plays first; the Scheduled entry just plays right after instead of being skipped.</li>
       <li><strong>Waits for the node to unkey</strong>, same as Scheduled Announcements.</li>
-      <li>Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or — if SkywarnPlus is already installed — its already-fetched weather data, avoiding a second independent poller.</li>
+      <li>Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or any Personal Weather Station uploading to Weather Underground (including a Tempest station also configured to feed WU) — Tempest, Open-Meteo, and METAR all include wind speed/direction/gust in addition to temperature, feels-like, humidity, and condition.</li>
       <li>Can also be triggered <strong>on demand via DTMF</strong>, independent of the schedule above (which doesn't have to be hourly - any cron pattern works). To enable this, add a function to your node's <code>rpt.conf</code> that runs <code>/usr/local/bin/herald play-timeweather</code>.</li>
     </ul>
   </div>
