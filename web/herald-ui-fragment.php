@@ -799,13 +799,15 @@
   </div>
 
   <div class="card">
-    <button class="btn-primary" id="btn-save-timeweather">Save &amp; Reload</button>
-    <button class="btn-play" id="btn-test-timeweather">Test (local playback)</button>
-    <span style="margin-left:16px;">
-      <label for="tw-test-at" style="display:inline; font-size:0.9em;">Preview time (optional)</label>
-      <input type="text" id="tw-test-at" placeholder="HH:MM" style="width:70px; margin-left:6px;">
-    </span>
-    <span class="muted" style="display:block; margin-top:4px; font-size:0.85em;">Leave blank to test with the real current time. Set a time (24-hour, e.g. 15:00) to preview how it'll sound at that moment - handy for checking things like top-of-the-hour phrasing without waiting for the real clock.</span>
+    <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap;">
+      <button class="btn-primary" id="btn-save-timeweather">Save &amp; Reload</button>
+      <button class="btn-play" id="btn-test-timeweather">Test (local playback)</button>
+      <span>
+        <label for="tw-test-at" style="display:inline; font-size:0.9em;">Preview time (optional)</label>
+        <input type="text" id="tw-test-at" placeholder="HH:MM" style="width:70px; margin-left:6px;">
+      </span>
+      <span class="muted" style="font-size:0.85em; max-width:360px;">Leave blank to test with the real current time. Set a time (24-hour, e.g. 15:00) to preview how it'll sound at that moment - handy for checking things like top-of-the-hour phrasing without waiting for the real clock.</span>
+    </div>
     <div class="msg" id="timeweather-msg"></div>
   </div>
 </div>
