@@ -148,7 +148,7 @@
     document.getElementById(sliderId).value = v;
     document.getElementById(displayId).textContent = v + 'x';
   }
-  ['tail', 'sched', 'tw-msg'].forEach(prefix => {
+  ['tail', 'sched', 'tw-msg', 'nodeid'].forEach(prefix => {
     const slider = document.getElementById(prefix + '-speed');
     const display = document.getElementById(prefix + '-speed-display');
     slider.addEventListener('input', () => {
@@ -460,6 +460,7 @@
     const nodeIdHealth = nodeId._health || {};
     document.getElementById('nodeid-text').value = nodeId.Text || '';
     if (nodeId.Voice) document.getElementById('nodeid-voice').value = nodeId.Voice;
+    setSpeedSlider('nodeid-speed', 'nodeid-speed-display', nodeId.Speed || 1.0);
     document.getElementById('nodeid-piper-warning').style.display =
       nodeIdHealth.piper_installed === false ? 'block' : 'none';
     const nodeIdStatus = document.getElementById('nodeid-status');
@@ -1017,9 +1018,10 @@
     const msgEl = document.getElementById('nodeid-msg');
     const text = document.getElementById('nodeid-text').value.trim();
     const voice = document.getElementById('nodeid-voice').value;
+    const speed = document.getElementById('nodeid-speed').value;
     if (!text) { showMsg(msgEl, 'ID text is required', false); return; }
     const data = await api('node_id_test.php', { method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ text, voice }) });
+      body: JSON.stringify({ text, voice, speed }) });
     showMsg(msgEl, data.message || (data.success ? 'Playing test ID now' : 'Failed'), data.success);
   });
 
@@ -1027,10 +1029,11 @@
     const msgEl = document.getElementById('nodeid-msg');
     const text = document.getElementById('nodeid-text').value.trim();
     const voice = document.getElementById('nodeid-voice').value;
+    const speed = document.getElementById('nodeid-speed').value;
     if (!text) { showMsg(msgEl, 'ID text is required', false); return; }
     if (!confirm('This overwrites the real Node ID file app_rpt reads. Continue?')) return;
     const data = await api('node_id.php', { method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ text, voice }) });
+      body: JSON.stringify({ text, voice, speed }) });
     showMsg(msgEl, data.message || (data.success ? 'Node ID generated and saved - live immediately, no reload needed' : 'Failed'), data.success);
     if (data.success) loadAll();
   });

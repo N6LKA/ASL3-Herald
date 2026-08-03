@@ -47,7 +47,7 @@ Both Tail Messages and Scheduled Announcements can be edited in place (name, tex
 
 Plus:
 - **Piper neural TTS** — generate announcements from text with natural-sounding voices (6 included), with festival/espeak-ng as a fallback
-- **Adjustable TTS speech speed** — per tail message, scheduled announcement, or Time & Weather template message, a `0.5x`–`2.0x` slider in the Add/Edit form. Uses Piper's own `--length-scale` where available; the festival fallback uses sox's tempo effect instead (espeak-ng scales its own words-per-minute rate directly)
+- **Adjustable TTS speech speed** — per tail message, scheduled announcement, Time & Weather template message, or the Node ID, a `0.5x`–`2.0x` slider in the Add/Edit form. Uses Piper's own `--length-scale` where available; the festival fallback uses sox's tempo effect instead (espeak-ng scales its own words-per-minute rate directly)
 - **Web UI** — optional browser-based management linked from Allmon3 or Supermon (v7.4+ and v8+), gated behind each app's own login
 - **Instant disable/enable** — `herald toggle` / `herald enable` / `herald disable`, no config edits or restarts needed
 - **Live config reload** — `herald reload` sends SIGHUP to pick up config changes immediately

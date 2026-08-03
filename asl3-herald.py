@@ -2770,6 +2770,7 @@ def node_id_with_health(config):
     nid = dict(config.get("NodeID", {}) or {})
     nid.setdefault("Text", "")
     nid.setdefault("Voice", DEFAULT_PIPER_VOICE)
+    nid.setdefault("Speed", DEFAULT_TTS_SPEED)
     nid.setdefault("GeneratedAt", None)
     nid["_health"] = {
         "file_exists": os.path.exists(NODE_ID_FILE),
@@ -2779,12 +2780,14 @@ def node_id_with_health(config):
 
 def cmd_set_node_id(config, args):
     os.makedirs(NODE_ID_DIR, exist_ok=True)
-    if not render_piper_wav_blocking(args.text, args.voice, NODE_ID_FILE):
+    speed = clamp_tts_speed(args.speed) if args.speed is not None else DEFAULT_TTS_SPEED
+    if not render_piper_wav_blocking(args.text, args.voice, NODE_ID_FILE, speed=speed):
         print(json.dumps({"success": False, "message": "Piper TTS render failed - check Piper is installed"}))
         return
     nid = config.setdefault("NodeID", {})
     nid["Text"] = args.text
     nid["Voice"] = args.voice or DEFAULT_PIPER_VOICE
+    nid["Speed"] = speed
     nid["GeneratedAt"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     save_config(config)
     print(json.dumps({"success": True, "message": "Node ID generated and saved"}))
@@ -2792,13 +2795,14 @@ def cmd_set_node_id(config, args):
 def cmd_test_node_id(config, args):
     """Renders to a throwaway temp file and plays it immediately, without
     touching the real Node ID file or saved config - lets you audition
-    wording/voice before committing via set-node-id."""
+    wording/voice/speed before committing via set-node-id."""
     node = str(config.get("Node", "")).strip()
     if not node:
         print(json.dumps({"success": False, "message": "Node not set in config"}))
         return
     os.makedirs(os.path.dirname(NODE_ID_TEST_FILE), exist_ok=True)
-    if not render_piper_wav_blocking(args.text, args.voice, NODE_ID_TEST_FILE):
+    speed = clamp_tts_speed(args.speed) if args.speed is not None else DEFAULT_TTS_SPEED
+    if not render_piper_wav_blocking(args.text, args.voice, NODE_ID_TEST_FILE, speed=speed):
         print(json.dumps({"success": False, "message": "Piper TTS render failed - check Piper is installed"}))
         return
     play_file(node, NODE_ID_TEST_FILE)
@@ -3209,10 +3213,12 @@ def build_arg_parser():
     p_node_id_set = sub.add_parser("set-node-id", help="Generate and save the Node ID recording (Piper TTS)")
     p_node_id_set.add_argument("text")
     p_node_id_set.add_argument("--voice")
+    p_node_id_set.add_argument("--speed", type=float, default=None)
 
     p_node_id_test = sub.add_parser("test-node-id", help="Render and play a Node ID preview without saving")
     p_node_id_test.add_argument("text")
     p_node_id_test.add_argument("--voice")
+    p_node_id_test.add_argument("--speed", type=float, default=None)
 
     return parser
 

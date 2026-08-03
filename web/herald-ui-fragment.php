@@ -904,6 +904,8 @@
         <label>Voice</label>
         <select id="nodeid-voice" style="display:block;"></select>
         <p class="muted" style="font-size:0.8em; margin:4px 0 0;">More voices: Global Settings &rarr; Voices</p>
+        <label style="margin-top:8px; display:block;">Speed: <span id="nodeid-speed-display">1.0x</span></label>
+        <input type="range" id="nodeid-speed" min="0.5" max="2.0" step="0.1" value="1.0" style="width:100%;">
       </div>
       <div class="tts-text">
         <label>ID Text</label>
