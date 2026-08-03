@@ -116,6 +116,7 @@ python3 -c "import yaml" 2>/dev/null     || PKGS+=(python3-yaml)
 command -v sox &>/dev/null               || PKGS+=(sox)
 dpkg -s libsox-fmt-mp3 &>/dev/null        || PKGS+=(libsox-fmt-mp3)
 command -v unzip &>/dev/null             || PKGS+=(unzip)
+python3 -m pip --version &>/dev/null     || PKGS+=(python3-pip)
 
 if [[ ${#PKGS[@]} -gt 0 ]]; then
     info "Installing: ${PKGS[*]}"
@@ -190,6 +191,9 @@ if [[ -x "$PIPER_BIN" ]]; then
     if python3 -c "from huggingface_hub import hf_hub_download" 2>/dev/null || \
        python3 -m pip install -q --break-system-packages huggingface_hub 2>/dev/null; then
         python3 -c "from huggingface_hub import hf_hub_download" 2>/dev/null && HAVE_HF_HUB=true
+    fi
+    if ! $HAVE_HF_HUB; then
+        warn "huggingface_hub could not be installed — voice downloads will use the direct-curl fallback (may 403 on some server IPs), and installing additional voices later from the web UI will also fall back automatically."
     fi
 
     download_voice() {
@@ -376,9 +380,19 @@ WEB_DIR="/var/www/html/asl3-herald"
 SUDOERS_WEB="/etc/sudoers.d/asl3-herald-web"
 SUPERMON_FOOTER="/var/www/html/supermon/footer.inc"
 
-if [[ ! -d /etc/allmon3 && ! -d /var/www/html/supermon ]]; then
-    info "Neither Allmon3 nor Supermon detected — installing apache2 + php for the web UI"
-    apt-get install -y -qq apache2 libapache2-mod-php php php-common
+# Allmon3 is a standalone Python/aiohttp app — it does NOT run on or
+# provide Apache/PHP in any way, so its presence tells us nothing about
+# whether a PHP-capable web server exists. Only Supermon actually requires
+# Apache+PHP to run, so only Supermon's presence is a valid signal to skip
+# this install. (Previously this also skipped when Allmon3 alone was
+# detected, which left Allmon3-only nodes with no PHP at all — the web UI's
+# PHP files were served as raw, un-executed source. Reported on the AllStar
+# forum by ad8bv / confirmed by kb2faf, 2026-08.)
+if [[ -d /var/www/html/supermon ]]; then
+    info "Supermon detected — apache2 + php already required by Supermon, skipping web-stack install"
+else
+    info "Installing apache2 + php for the web UI ..."
+    apt-get install -y -qq apache2 libapache2-mod-php php php-common php-cli
     systemctl enable --now apache2
 fi
 
@@ -407,6 +421,23 @@ for f in asl3-herald-icon.svg asl3-herald-banner.svg; do
 done
 chown -R www-data:www-data "$WEB_DIR"
 find "$WEB_DIR" -type f \( -name "*.php" -o -name "*.inc" -o -name "*.js" -o -name "*.svg" \) -exec chmod 644 {} \;
+
+# Confirm PHP is actually being executed for this directory, not just
+# present on disk. Catches cases like Apache missing/not proxying this
+# vhost, mod_php disabled, or a non-Apache server (e.g. nginx without
+# php-fpm) fronting /var/www/html — all of which serve .php files as raw,
+# un-executed source instead of running them.
+info "Verifying PHP is actually executing for the web UI ..."
+HEALTH_FILE="$WEB_DIR/.health-check.php"
+echo '<?php echo "HERALD_PHP_OK"; ?>' > "$HEALTH_FILE"
+chown www-data:www-data "$HEALTH_FILE"
+HEALTH_RESPONSE="$(curl -fsS "http://127.0.0.1/asl3-herald/.health-check.php" 2>/dev/null || true)"
+rm -f "$HEALTH_FILE"
+if [[ "$HEALTH_RESPONSE" != "HERALD_PHP_OK" ]]; then
+    warn "PHP does NOT appear to be executing on this web server (got: '${HEALTH_RESPONSE:0:80}')."
+    warn "The Announcement Settings page will show raw PHP source instead of working."
+    warn "Try: sudo apt install -y apache2 libapache2-mod-php php php-cli && sudo systemctl restart apache2"
+fi
 
 info "Writing sudoers rule for www-data (herald command only) ..."
 cat > "$SUDOERS_WEB" << EOF
