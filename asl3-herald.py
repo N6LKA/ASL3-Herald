@@ -29,10 +29,18 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 try:
-    import yaml
+    from ruamel.yaml import YAML
 except ImportError:
-    print("ERROR: PyYAML not installed. Run: sudo apt install python3-yaml", flush=True)
+    print("ERROR: ruamel.yaml not installed. Run: sudo apt install python3-ruamel.yaml", flush=True)
     sys.exit(1)
+
+# Round-trip mode (ruamel's default) preserves comments and formatting across
+# load->mutate->save, unlike PyYAML's yaml.dump - so the field-explanation
+# comments in the shipped conf survive every programmatic edit (web UI or
+# `herald` CLI), not just manual edits that never touch save_config().
+_yaml_rt = YAML()
+_yaml_rt.preserve_quotes = True
+_yaml_rt.width = 4096  # don't wrap long comment/text lines
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -361,12 +369,11 @@ def load_config():
         log_error(f"Config not found: {CONF_FILE}")
         sys.exit(1)
     with open(CONF_FILE) as f:
-        return yaml.safe_load(f)
+        return _yaml_rt.load(f)
 
 def save_config(config):
-    # NOTE: round-trips through PyYAML — does not preserve comments.
     with open(CONF_FILE, "w") as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        _yaml_rt.dump(config, f)
 
 # ── State ─────────────────────────────────────────────────────────────────────
 
