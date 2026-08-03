@@ -111,6 +111,17 @@ HF_VOICES_REPO = "rhasspy/piper-voices"
 HF_VOICES_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
 TW_TEMPLATE_TAGS = ("smart_greeting", "time", "conditions", "temperature", "feels_like", "humidity",
                      "wind_speed", "wind_gust", "callsign")
+
+# Update check — same api.github.com Contents API endpoint the web UI's manual
+# "Check for Updates" button used to hit directly from PHP (see
+# web/api/version_check.php's history); now the single Python implementation
+# both the nightly automatic check and the manual button go through, so
+# there's exactly one place that does the version-compare and exactly one
+# place callers read the result from. api.github.com is used instead of
+# raw.githubusercontent.com, which is CDN-cached and known to serve stale
+# content for extended periods even with cache-busting.
+HERALD_VERSION_CHECK_URL = "https://api.github.com/repos/N6LKA/asl3-herald/contents/version.txt?ref=main"
+UPDATE_CHECK_INTERVAL_SECONDS = 86400  # once a day
 # How long past a message's target play time to keep waiting on a still-
 # in-progress Piper render before giving up on that occurrence entirely -
 # mirrors the same "never wedge forever" philosophy as MAX_BUSY_SECONDS.
@@ -778,6 +789,72 @@ def tw_http_get_json(url, timeout=10):
         return json.loads(text)
     except json.JSONDecodeError:
         return None
+
+# ── Update check ────────────────────────────────────────────────────────────────
+
+def _version_tuple(v):
+    """Best-effort dotted-integer parse for simple 'X.Y.Z' versions - a
+    non-numeric component (or 'unknown') just sorts as 0 rather than raising,
+    since this only needs to answer "is one newer than the other"."""
+    parts = []
+    for p in str(v or "").split("."):
+        try:
+            parts.append(int(p))
+        except ValueError:
+            parts.append(0)
+    return tuple(parts)
+
+def fetch_latest_version():
+    """GET the latest version.txt content from GitHub's Contents API. Returns
+    the version string, or None on any failure (network, non-200, rate
+    limit, etc.)."""
+    try:
+        req = urllib.request.Request(HERALD_VERSION_CHECK_URL, headers={
+            "Accept": "application/vnd.github.v3.raw",
+            "User-Agent": "asl3-herald-update-check",
+        })
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status != 200:
+                return None
+            return resp.read().decode("utf-8", errors="replace").strip()
+    except Exception as e:
+        log_debug(f"Update check: could not reach GitHub: {e}")
+        return None
+
+def perform_update_check(state):
+    """Checks GitHub for the latest release and records the result in state.
+    Shared by both update_check_tick() (the nightly automatic check) and
+    cmd_check_update() (the web UI's manual "Check for Updates" button) -
+    exactly one implementation of the version-compare logic, and exactly one
+    place (state["update_check"]) that both the header badge and the
+    Settings tab read the result from, so a manual click updates the header
+    immediately instead of waiting for the next automatic check."""
+    latest = fetch_latest_version()
+    result = {
+        "last_checked": time.time(),
+        "current_version": VERSION,
+        "latest_version": latest,
+        "update_available": False,
+        "ahead_of_main": False,
+        "error": None if latest else "Could not reach GitHub to check for updates",
+    }
+    if latest and VERSION != "unknown":
+        cur_t, latest_t = _version_tuple(VERSION), _version_tuple(latest)
+        result["update_available"] = cur_t < latest_t
+        result["ahead_of_main"]    = cur_t > latest_t
+    state["update_check"] = result
+    save_state(state)
+    return result
+
+def update_check_tick(state, now):
+    """Call once per main-loop iteration - internally rate-limited to only
+    actually check GitHub once every UPDATE_CHECK_INTERVAL_SECONDS (default
+    daily), regardless of PollInterval."""
+    last = (state.get("update_check") or {}).get("last_checked") or 0
+    if (now - last) < UPDATE_CHECK_INTERVAL_SECONDS:
+        return
+    log_debug("Checking for asl3-herald updates...")
+    perform_update_check(state)
 
 # ── Condition-word mapping (drives which pre-recorded audio snippet plays) ────
 
@@ -2163,6 +2240,28 @@ def cmd_catalog_voices(config):
         "voices": voices,
     }))
 
+def cmd_check_update(config, args):
+    """The web UI's manual "Check for Updates" button. Runs the same check
+    as the nightly automatic one (see perform_update_check()) and writes the
+    same state["update_check"], so the header badge reflects a manual check
+    immediately rather than waiting for the next automatic check."""
+    state = load_state()
+    result = perform_update_check(state)
+    if result["latest_version"] is None:
+        print(json.dumps({
+            "success": False,
+            "current_version": result["current_version"],
+            "message": f"Could not reach GitHub to check for updates: {result['error']}",
+        }))
+        return
+    print(json.dumps({
+        "success": True,
+        "current_version": result["current_version"],
+        "latest_version": result["latest_version"],
+        "update_available": result["update_available"],
+        "ahead_of_main": result["ahead_of_main"],
+    }))
+
 def cmd_install_voice(config, args):
     voice_id = args.voice_id
     catalog = load_voice_catalog()
@@ -2360,6 +2459,7 @@ def cmd_list_json(config):
         "scheduled": scheduled_with_health(cfg["scheduled"]),
         "timeweather": timeweather_with_health(cfg["timeweather"]),
         "node_id": node_id_with_health(config),
+        "update_check": state.get("update_check") or {},
     }
     print(json.dumps(out, indent=2))
 
@@ -2996,6 +3096,8 @@ def build_arg_parser():
 
     sub.add_parser("catalog-voices", help="List the full Piper voice catalog with installed status")
 
+    sub.add_parser("check-update", help="Check GitHub for a newer release and record the result")
+
     p_install_voice = sub.add_parser("install-voice", help="Download and install a Piper voice")
     p_install_voice.add_argument("voice_id")
 
@@ -3108,6 +3210,8 @@ def cli_main():
         cmd_update_settings(config, args)
     elif args.command == "catalog-voices":
         cmd_catalog_voices(config)
+    elif args.command == "check-update":
+        cmd_check_update(config, args)
     elif args.command == "install-voice":
         cmd_install_voice(config, args)
     elif args.command == "remove-voice":
@@ -3317,6 +3421,9 @@ def main():
 
             # ── Weather snapshot for other local programs (self-rate-limited) ─
             weather_snapshot_tick(timeweather, state, now)
+
+            # ── Update check (self-rate-limited, once daily) ───────────────
+            update_check_tick(state, now)
 
             # ── Poll AMI / CLI for keyup state ────────────────────────────
             unkey_detected = False

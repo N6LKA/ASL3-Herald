@@ -29,6 +29,7 @@ General:
   catalog-voices                          List the full Piper voice catalog with installed status
   install-voice <voice-id>                Download and install a Piper voice
   remove-voice <voice-id>                 Remove an installed Piper voice
+  check-update                            Check GitHub for a newer release and record the result
   playback-history                        Print recent playback history as JSON
   clear-history                           Clear the playback history
   export-config                           Print the full config as JSON (for backup)
@@ -380,6 +381,11 @@ cmd_voices() {
 
 cmd_catalog_voices() {
     python3 "$DAEMON_PY" catalog-voices "$@"
+}
+
+cmd_check_update() {
+    need_root "$@"
+    python3 "$DAEMON_PY" check-update
 }
 
 cmd_install_voice() {
@@ -910,6 +916,7 @@ case "$CMD" in
     toggle)               cmd_toggle             "$@" ;;
     voices)              cmd_voices             "$@" ;;
     catalog-voices)       cmd_catalog_voices     "$@" ;;
+    check-update)         cmd_check_update       "$@" ;;
     install-voice)        cmd_install_voice      "$@" ;;
     remove-voice)         cmd_remove_voice       "$@" ;;
     add)                  cmd_add                "$@" ;;

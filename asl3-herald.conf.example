@@ -54,7 +54,11 @@ TailMessage:
     #   # Optional: target a specific node number instead of this daemon's
     #   # configured Node above (for multinodes= setups where one AMI
     #   # connection serves several node numbers).
-    #   Node: "501261"
+    #   Node: "12345"
+    #   # Optional: set to false to pause this entry without deleting it -
+    #   # defaults to true. Toggle via the web UI or
+    #   # `herald toggle-rotation <name>`.
+    #   Enabled: true
 
   SkywarnPlus:
     # Play the WX tail file instead of rotation when WX alerts are active.
@@ -81,15 +85,23 @@ TailMessage:
     NGPollIntervalSec: 30
 
 # Scheduled announcements — play at specific times, regardless of tail message interval
-# Days: "daily" or a list: ["saturday", "sunday"]  (case-insensitive)
-# Week (optional): 1-5, restricts to the nth week of the month (5 = last week).
-#   Omit Week to play on every matching day.
+# Name: unique label, used to reference this entry (toggle/edit/remove).
+# Cron: standard 5-field cron expression: "minute hour day-of-month month
+#   day-of-week" (e.g. "30 7 * * 6" = 7:30 AM every Saturday). This is the
+#   primary way to schedule an entry - the web UI and `herald add-schedule`
+#   both require Cron for new entries. (Legacy Time/Days/Week fields from
+#   older versions still work on existing entries - see the commented-out
+#   example below - and are converted to an equivalent Cron expression
+#   internally, but can't be used to create new entries.)
 # PlayMode (optional): "local" (default, this node only via `rpt localplay`) or
 #   "global" (all connected/linked nodes via `rpt playback`).
 # Text/Voice (optional): stored for TTS-generated entries so they can be
 #   edited later (via `herald edit-schedule` or the web UI) without retyping.
 # Node (optional): target a specific node number instead of this daemon's
 #   configured Node above (for multinodes= setups).
+# Enabled (optional): defaults to true. Set to false to pause this entry
+#   without deleting it. Toggle via the web UI or
+#   `herald toggle-scheduled <name>`.
 # A scheduled announcement waits for the node to unkey before playing if it's
 # currently keyed (rather than interrupting live traffic), and always takes
 # precedence over a tail message due at the same moment - the tail message
@@ -98,24 +110,30 @@ TailMessage:
 # or the web UI, or uncomment/edit an example below once the file actually exists.
 Scheduled: []
   # - Name: "ARRL Audio News"
-  #   Time: "07:30"
-  #   Days: ["saturday"]
+  #   Cron: "30 7 * * 6"          # Saturdays at 7:30 AM
   #   File: /etc/asterisk/scripts/asl3-herald/announcements/arrl-news.wav
   #   PlayMode: local
+  #   Enabled: true
 
   # - Name: "Weekly Net Announcement"
-  #   Time: "19:45"
-  #   Days: ["thursday"]
+  #   Cron: "45 19 * * 4"         # Thursdays at 7:45 PM
   #   File: /etc/asterisk/scripts/asl3-herald/announcements/net-announcement.wav
   #   PlayMode: global
   #   Text: "Weekly net announcement text follows"
   #   Voice: en_US-lessac-medium
+  #   Enabled: true
 
   # - Name: "Second Saturday Breakfast Net"
+  #   Cron: "0 8 8-14 * 6"        # 2nd Saturday (DOM 8-14, DOW 6) at 8:00 AM
+  #   File: /etc/asterisk/scripts/asl3-herald/announcements/breakfast-net.wav
+  #   PlayMode: local
+  #   Enabled: true
+
+  # - Name: "Legacy-style entry (still supported, but new entries use Cron above)"
   #   Time: "08:00"
   #   Days: ["saturday"]
   #   Week: 2
-  #   File: /etc/asterisk/scripts/asl3-herald/announcements/breakfast-net.wav
+  #   File: /etc/asterisk/scripts/asl3-herald/announcements/legacy-example.wav
   #   PlayMode: local
 
 # Time & Weather Announcements — a time and/or current-conditions announcement,
@@ -219,7 +237,7 @@ TimeWeather:
     # Your callsign, inserted verbatim wherever a message uses {callsign} -
     # you write the rest of the sentence (e.g. "... the {callsign} repeater
     # ..."). If Piper mispronounces it as a run-together word, separate the
-    # letters with spaces here (e.g. "N 6 L K A" instead of "N6LKA") - it'll
+    # letters with spaces here (e.g. "W 1 A B C" instead of "W1ABC") - it'll
     # be spoken exactly as typed.
     Callsign: ""
 
@@ -231,16 +249,24 @@ TimeWeather:
     # play moment.
     LookaheadSeconds: 5
 
-    # One or more messages; a different one is picked at random each
+    # One or more messages; a different Enabled one is picked at random each
     # occurrence (never the same one twice in a row if there's more than
     # one). Available tags: {smart_greeting} {time} {conditions}
-    # {temperature} {feels_like} {humidity} {callsign}
+    # {temperature} {feels_like} {humidity} {wind_speed} {wind_gust} {callsign}
+    # A tag left blank because the current provider/reading has no data for
+    # it (e.g. no gust, or a provider with no wind at all) is silently
+    # omitted rather than failing the whole message.
+    #   Id      - auto-generated if omitted; leave as-is once set, used
+    #             internally to reference/edit/toggle this specific message.
+    #   Enabled - optional, defaults to true. Set to false to remove a
+    #             message from the random rotation without deleting it.
     Messages: []
     # Example:
     # Messages:
     #   - Id: "a1b2c3d4"
     #     Text: "{smart_greeting}, welcome to the {callsign} repeater. The time is {time}. Current conditions are {conditions}, {temperature} degrees."
     #     Voice: en_US-amy-medium
+    #     Enabled: true
 
 # Node ID — generates the audio content of a single WAV file with Piper TTS
 # (herald set-node-id / the web UI's Node ID tab). Herald never touches

@@ -50,6 +50,17 @@
     margin-bottom: 16px;
   }
   #herald-ui .status-bar span { font-size: 1em; }
+  #herald-ui .hs-update-badge {
+    margin-left: auto;
+    font-weight: bold;
+    color: #b45309;
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  #herald-ui .hs-update-badge:hover { background: #fde8a3; }
   #herald-ui .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
   #herald-ui .tab-btn {
     padding: 8px 16px;
@@ -201,6 +212,9 @@
   <span><strong id="hs-swp-label">SkywarnPlus:</strong> <span id="hs-swp">—</span></span>
   <span><strong>Herald:</strong> <span id="hs-enabled">—</span></span>
   <span><strong>Next tail:</strong> <span id="hs-countdown">—</span></span>
+  <span id="hs-update" class="hs-update-badge" style="display:none;" title="Click to open Global Settings">
+    &#8593; Update available: v<span id="hs-update-version">—</span>
+  </span>
 </div>
 
 <div class="tabs">
