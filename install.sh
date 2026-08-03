@@ -116,6 +116,7 @@ python3 -c "import yaml" 2>/dev/null     || PKGS+=(python3-yaml)
 command -v sox &>/dev/null               || PKGS+=(sox)
 dpkg -s libsox-fmt-mp3 &>/dev/null        || PKGS+=(libsox-fmt-mp3)
 command -v unzip &>/dev/null             || PKGS+=(unzip)
+python3 -m pip --version &>/dev/null     || PKGS+=(python3-pip)
 
 if [[ ${#PKGS[@]} -gt 0 ]]; then
     info "Installing: ${PKGS[*]}"
@@ -190,6 +191,9 @@ if [[ -x "$PIPER_BIN" ]]; then
     if python3 -c "from huggingface_hub import hf_hub_download" 2>/dev/null || \
        python3 -m pip install -q --break-system-packages huggingface_hub 2>/dev/null; then
         python3 -c "from huggingface_hub import hf_hub_download" 2>/dev/null && HAVE_HF_HUB=true
+    fi
+    if ! $HAVE_HF_HUB; then
+        warn "huggingface_hub could not be installed — voice downloads will use the direct-curl fallback (may 403 on some server IPs), and installing additional voices later from the web UI will also fall back automatically."
     fi
 
     download_voice() {

@@ -100,6 +100,7 @@ PIPER_VOICE_DIR = "/var/lib/piper-tts"
 DEFAULT_PIPER_VOICE = "en_US-amy-medium"
 VOICE_CATALOG_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), "piper-voices-catalog.json")
 HF_VOICES_REPO = "rhasspy/piper-voices"
+HF_VOICES_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
 TW_TEMPLATE_TAGS = ("smart_greeting", "time", "conditions", "temperature", "feels_like", "humidity",
                      "wind_speed", "wind_gust", "callsign")
 # How long past a message's target play time to keep waiting on a still-
@@ -2179,31 +2180,57 @@ def cmd_install_voice(config, args):
         return
 
     hf_path = entry.get("huggingface_path", "")
-    try:
-        from huggingface_hub import hf_hub_download
-    except ImportError:
-        print(json.dumps({
-            "success": False,
-            "message": "huggingface_hub not installed - re-run install.sh to add it",
-        }))
-        return
+    pairs = (
+        (f"{hf_path}/{voice_id}.onnx", onnx_path),
+        (f"{hf_path}/{voice_id}.onnx.json", json_path),
+    )
 
-    try:
-        for filename, dest in (
-            (f"{hf_path}/{voice_id}.onnx", onnx_path),
-            (f"{hf_path}/{voice_id}.onnx.json", json_path),
-        ):
-            tmp = hf_hub_download(repo_id=HF_VOICES_REPO, filename=filename, repo_type="model")
-            shutil.copy(tmp, dest)
-            os.chmod(dest, 0o644)
-    except Exception as e:
+    def cleanup_partial():
         # Don't leave a half-installed voice behind - both files present or neither.
         for p in (onnx_path, json_path):
             try:
                 os.remove(p)
             except OSError:
                 pass
-        print(json.dumps({"success": False, "message": f"Download failed: {e}"}))
+
+    try:
+        from huggingface_hub import hf_hub_download
+        for filename, dest in pairs:
+            tmp = hf_hub_download(repo_id=HF_VOICES_REPO, filename=filename, repo_type="model")
+            shutil.copy(tmp, dest)
+            os.chmod(dest, 0o644)
+        print(json.dumps({"success": True, "message": f"Installed {voice_id}"}))
+        return
+    except ImportError:
+        # huggingface_hub isn't installed (e.g. python3-pip wasn't present when
+        # install.sh ran) - fall through to the direct-download fallback below
+        # instead of failing outright.
+        pass
+    except Exception as e:
+        cleanup_partial()
+        log_debug(f"hf_hub_download failed for {voice_id}, falling back to direct download: {e}")
+
+    # Direct-download fallback - same approach install.sh itself uses for the
+    # default voice. Works without huggingface_hub, but Hugging Face blocks
+    # direct downloads (403) from some server/VPS IP ranges.
+    try:
+        for filename, dest in pairs:
+            url = f"{HF_VOICES_BASE}/{filename}"
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0 (compatible; asl3-herald-installer)",
+            })
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                if resp.status != 200:
+                    raise RuntimeError(f"HTTP {resp.status} for {url}")
+                with open(dest, "wb") as f:
+                    shutil.copyfileobj(resp, f)
+            os.chmod(dest, 0o644)
+    except Exception as e:
+        cleanup_partial()
+        print(json.dumps({
+            "success": False,
+            "message": f"Download failed: {e}. Try: sudo python3 -m pip install --break-system-packages huggingface_hub",
+        }))
         return
 
     print(json.dumps({"success": True, "message": f"Installed {voice_id}"}))
