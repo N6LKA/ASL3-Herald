@@ -83,6 +83,24 @@
     if (newLastPlayed !== _cdLastPlayed) {
       startCountdown(data.tail_message.min_interval, newLastPlayed);
     }
+    renderUpdateBadge(data.update_check);
+  }
+
+  // ── Update-available header badge ──────────────────────────────────────────
+  // Shared by the automatic nightly check (reflected via list.php's
+  // update_check field, picked up by the 10 s poll above and by loadAll())
+  // and the manual "Check for Updates" button (which calls this directly
+  // with its own fresh response so the badge appears immediately instead of
+  // waiting up to 10 s for the next poll).
+  function renderUpdateBadge(updateCheck) {
+    const badge = document.getElementById('hs-update');
+    if (!badge || !updateCheck) return;
+    if (updateCheck.update_available) {
+      document.getElementById('hs-update-version').textContent = updateCheck.latest_version || '?';
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
   }
 
   // ── Tabs ───────────────────────────────────────────────────────────────────────────────
@@ -104,6 +122,16 @@
       }
     });
   });
+
+  // Clicking the update-available header badge jumps to Global Settings,
+  // where the version and "Check for Updates" button live.
+  const hsUpdateBadge = document.getElementById('hs-update');
+  if (hsUpdateBadge) {
+    hsUpdateBadge.addEventListener('click', () => {
+      const settingsTab = document.querySelector('.tab-btn[data-tab="settings"]');
+      if (settingsTab) settingsTab.click();
+    });
+  }
 
   // ── Source toggles (TTS vs file upload) ────────────────────────────────────────────
   function wireSourceToggle(name, ttsFieldsId, fileFieldsId) {
@@ -261,6 +289,7 @@
     hsSwp.style.color = swpEnabled ? '#27ae60' : '#e74c3c';
     hsSwp.style.fontWeight = 'bold';
     startCountdown(data.tail_message.min_interval, data.tail_message.last_tail_played || 0);
+    renderUpdateBadge(data.update_check);
 
     const heraldEnabled = !!data.herald_enabled;
     const heraldStatusText = heraldEnabled ? 'Enabled' : 'Disabled';
@@ -831,6 +860,9 @@
       showMsg(msgEl, data.message || 'Could not check for updates', false);
       return;
     }
+    // Reflect the result in the header badge immediately - same field shape
+    // as list.php's update_check, so no waiting on the next 10 s poll.
+    renderUpdateBadge(data);
     if (data.update_available) {
       showMsg(msgEl, 'Update available: v' + data.latest_version + ' (currently running v' + data.current_version + '). See the README for update instructions.', false);
     } else if (data.ahead_of_main) {
