@@ -18,8 +18,13 @@ if ($text === '' || strlen($text) > 500) {
 }
 
 $voice = trim($input['voice'] ?? '');
+$speed = trim($input['speed'] ?? '');
+if ($speed !== '' && !is_numeric($speed)) {
+    herald_json_response(['success' => false, 'message' => 'Speed must be a number'], 400);
+}
 
 $args = ['set-node-id', $text];
 if ($voice !== '') { $args[] = '--voice'; $args[] = $voice; }
+if ($speed !== '') { $args[] = '--speed'; $args[] = $speed; }
 
 herald_respond_from_cli(herald_run_sudo($args));

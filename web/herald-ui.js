@@ -138,6 +138,24 @@
   wireSourceToggle('tail-source', 'tail-tts-fields', 'tail-file-fields');
   wireSourceToggle('sched-source', 'sched-tts-fields', 'sched-file-fields');
 
+  // ── Speed sliders (Tail Messages / Scheduled Announcements / Time & Weather
+  // Template messages) ─────────────────────────────────────────────────────
+  // 1.0x = normal. Converted to Piper's own --length-scale (the inverse)
+  // server-side only at the moment of TTS generation - see
+  // speed_to_length_scale() in asl3-herald.py.
+  function setSpeedSlider(sliderId, displayId, value) {
+    const v = (parseFloat(value) || 1.0).toFixed(1);
+    document.getElementById(sliderId).value = v;
+    document.getElementById(displayId).textContent = v + 'x';
+  }
+  ['tail', 'sched', 'tw-msg', 'nodeid'].forEach(prefix => {
+    const slider = document.getElementById(prefix + '-speed');
+    const display = document.getElementById(prefix + '-speed-display');
+    slider.addEventListener('input', () => {
+      display.textContent = parseFloat(slider.value).toFixed(1) + 'x';
+    });
+  });
+
   // "Daily" checkbox disables the individual day checkboxes (tail messages only)
   function wireDailyToggle(dailyId, containerId) {
     document.getElementById(dailyId).addEventListener('change', function () {
@@ -318,6 +336,7 @@
       const file = isObj ? (entry.File || '') : entry;
       const text = isObj ? entry.Text : null;
       const voice = isObj ? entry.Voice : null;
+      const speed = isObj ? (entry.Speed || 1.0) : 1.0;
       const days = isObj ? entry.Days : null;
       const timeStart = isObj ? entry.TimeStart : null;
       const timeEnd = isObj ? entry.TimeEnd : null;
@@ -339,7 +358,7 @@
         '<button class="btn-reorder" data-name="' + name + '" data-direction="up" title="Move up"' + (canMoveUp ? '' : ' disabled') + '>&uarr;</button>' +
         '<button class="btn-reorder" data-name="' + name + '" data-direction="down" title="Move down"' + (canMoveDown ? '' : ' disabled') + '>&darr;</button>' +
         '<button class="btn-play" data-name="' + name + '">Test (local playback)</button>' +
-        '<button class="btn-edit" data-type="tail" data-name="' + name + '" data-text="' + escapeAttr(text) + '" data-voice="' + escapeAttr(voice) + '" data-days="' + escapeAttr(daysAttr) + '" data-time-start="' + escapeAttr(timeStart) + '" data-time-end="' + escapeAttr(timeEnd) + '" data-node="' + escapeAttr(node) + '">Edit</button>' +
+        '<button class="btn-edit" data-type="tail" data-name="' + name + '" data-text="' + escapeAttr(text) + '" data-voice="' + escapeAttr(voice) + '" data-speed="' + escapeAttr(speed) + '" data-days="' + escapeAttr(daysAttr) + '" data-time-start="' + escapeAttr(timeStart) + '" data-time-end="' + escapeAttr(timeEnd) + '" data-node="' + escapeAttr(node) + '">Edit</button>' +
         '<button class="btn-danger" data-name="' + name + '">Remove</button></td>';
       tbody.appendChild(tr);
     });
@@ -370,7 +389,7 @@
         '<td><button class="' + (enabled ? 'btn-enable' : 'btn-disable') + ' btn-toggle-sched" data-name="' + escapeAttr(s.Name) + '">' + (enabled ? 'Enabled' : 'Disabled') + '</button></td>' +
         '<td>' +
         '<button class="btn-play" data-name="' + escapeAttr(s.Name) + '">Test (local playback)</button>' +
-        '<button class="btn-edit" data-type="sched" data-name="' + escapeAttr(s.Name) + '" data-cron="' + escapeAttr(cron) + '" data-playmode="' + playMode + '" data-node="' + escapeAttr(s.Node) + '" data-text="' + escapeAttr(s.Text) + '" data-voice="' + escapeAttr(s.Voice) + '">Edit</button>' +
+        '<button class="btn-edit" data-type="sched" data-name="' + escapeAttr(s.Name) + '" data-cron="' + escapeAttr(cron) + '" data-playmode="' + playMode + '" data-node="' + escapeAttr(s.Node) + '" data-text="' + escapeAttr(s.Text) + '" data-voice="' + escapeAttr(s.Voice) + '" data-speed="' + escapeAttr(s.Speed || 1.0) + '">Edit</button>' +
         '<button class="btn-danger" data-name="' + escapeAttr(s.Name) + '">Remove</button>' +
         '</td>';
       stbody.appendChild(tr);
@@ -431,7 +450,7 @@
         '<td><button class="' + (enabled ? 'btn-enable' : 'btn-disable') + ' btn-toggle-tw-msg" data-id="' + escapeAttr(m.Id) + '">' + (enabled ? 'Enabled' : 'Disabled') + '</button></td>' +
         '<td>' +
         '<button class="btn-test-tw-msg" data-id="' + escapeAttr(m.Id) + '">Test</button>' +
-        '<button class="btn-edit" data-type="tw-msg" data-id="' + escapeAttr(m.Id) + '" data-text="' + escapeAttr(m.Text) + '" data-voice="' + escapeAttr(m.Voice) + '">Edit</button>' +
+        '<button class="btn-edit" data-type="tw-msg" data-id="' + escapeAttr(m.Id) + '" data-text="' + escapeAttr(m.Text) + '" data-voice="' + escapeAttr(m.Voice) + '" data-speed="' + escapeAttr(m.Speed || 1.0) + '">Edit</button>' +
         '<button class="btn-remove-tw-msg" data-id="' + escapeAttr(m.Id) + '">Remove</button>' +
         '</td>';
       twmbody.appendChild(tr);
@@ -441,6 +460,7 @@
     const nodeIdHealth = nodeId._health || {};
     document.getElementById('nodeid-text').value = nodeId.Text || '';
     if (nodeId.Voice) document.getElementById('nodeid-voice').value = nodeId.Voice;
+    setSpeedSlider('nodeid-speed', 'nodeid-speed-display', nodeId.Speed || 1.0);
     document.getElementById('nodeid-piper-warning').style.display =
       nodeIdHealth.piper_installed === false ? 'block' : 'none';
     const nodeIdStatus = document.getElementById('nodeid-status');
@@ -690,6 +710,7 @@
     document.getElementById('tail-file-fields').style.display = hasText ? 'none' : '';
     document.getElementById('tail-text').value = hasText ? d.text : '';
     document.getElementById('tail-voice').value = hasText ? (d.voice || '') : '';
+    setSpeedSlider('tail-speed', 'tail-speed-display', hasText ? d.speed : 1.0);
     document.getElementById('tail-file').value = '';
     document.getElementById('tail-file-keep-note').style.display = hasText ? 'none' : '';
     applyDaysToPicker(d.days, 'tail-day-daily', 'tail-days');
@@ -707,6 +728,7 @@
     editingTailName = null;
     document.getElementById('tail-name').value = '';
     document.getElementById('tail-text').value = '';
+    setSpeedSlider('tail-speed', 'tail-speed-display', 1.0);
     document.getElementById('tail-file').value = '';
     document.getElementById('tail-file-keep-note').style.display = 'none';
     applyDaysToPicker('daily', 'tail-day-daily', 'tail-days');
@@ -755,6 +777,7 @@
     document.getElementById('sched-file-fields').style.display = hasText ? 'none' : '';
     document.getElementById('sched-text').value = hasText ? d.text : '';
     document.getElementById('sched-voice').value = hasText ? (d.voice || '') : '';
+    setSpeedSlider('sched-speed', 'sched-speed-display', hasText ? d.speed : 1.0);
     document.getElementById('sched-file').value = '';
     document.getElementById('sched-file-keep-note').style.display = hasText ? 'none' : '';
 
@@ -770,6 +793,7 @@
     document.getElementById('sched-name').value = '';
     applyCronToPicker('* * * * *');
     document.getElementById('sched-text').value = '';
+    setSpeedSlider('sched-speed', 'sched-speed-display', 1.0);
     document.getElementById('sched-file').value = '';
     document.getElementById('sched-file-keep-note').style.display = 'none';
     document.getElementById('sched-playmode').value = 'local';
@@ -788,6 +812,7 @@
     editingTwMsgId = d.id;
     document.getElementById('tw-msg-text').value = d.text || '';
     document.getElementById('tw-msg-voice').value = d.voice || '';
+    setSpeedSlider('tw-msg-speed', 'tw-msg-speed-display', d.speed);
     document.getElementById('tw-msg-form-heading').textContent = 'Edit Message';
     document.getElementById('btn-add-tw-msg').textContent = 'Save Changes';
     document.getElementById('tw-msg-edit-cancel').style.display = '';
@@ -798,6 +823,7 @@
   function cancelEditTwMsg() {
     editingTwMsgId = null;
     document.getElementById('tw-msg-text').value = '';
+    setSpeedSlider('tw-msg-speed', 'tw-msg-speed-display', 1.0);
     document.getElementById('tw-msg-form-heading').textContent = 'Add a Message';
     document.getElementById('btn-add-tw-msg').textContent = 'Add Message';
     document.getElementById('tw-msg-edit-cancel').style.display = 'none';
@@ -809,6 +835,7 @@
     const msgEl = document.getElementById('tw-msg-msg');
     const text = document.getElementById('tw-msg-text').value.trim();
     const voice = document.getElementById('tw-msg-voice').value;
+    const speed = document.getElementById('tw-msg-speed').value;
     if (!text) { showMsg(msgEl, 'Text is required', false); return; }
 
     // Include the currently-selected mode so it isn't lost on the loadAll()
@@ -819,9 +846,9 @@
 
     const data = editingTwMsgId
       ? await api('edit_timeweather_message.php', { method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ id: editingTwMsgId, text, voice, mode }) })
+          body: JSON.stringify({ id: editingTwMsgId, text, voice, speed, mode }) })
       : await api('add_timeweather_message.php', { method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ text, voice, mode }) });
+          body: JSON.stringify({ text, voice, speed, mode }) });
 
     showMsg(msgEl, data.message || (data.success ? 'Saved' : 'Failed'), data.success);
     if (data.success) {
@@ -991,9 +1018,10 @@
     const msgEl = document.getElementById('nodeid-msg');
     const text = document.getElementById('nodeid-text').value.trim();
     const voice = document.getElementById('nodeid-voice').value;
+    const speed = document.getElementById('nodeid-speed').value;
     if (!text) { showMsg(msgEl, 'ID text is required', false); return; }
     const data = await api('node_id_test.php', { method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ text, voice }) });
+      body: JSON.stringify({ text, voice, speed }) });
     showMsg(msgEl, data.message || (data.success ? 'Playing test ID now' : 'Failed'), data.success);
   });
 
@@ -1001,10 +1029,11 @@
     const msgEl = document.getElementById('nodeid-msg');
     const text = document.getElementById('nodeid-text').value.trim();
     const voice = document.getElementById('nodeid-voice').value;
+    const speed = document.getElementById('nodeid-speed').value;
     if (!text) { showMsg(msgEl, 'ID text is required', false); return; }
     if (!confirm('This overwrites the real Node ID file app_rpt reads. Continue?')) return;
     const data = await api('node_id.php', { method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ text, voice }) });
+      body: JSON.stringify({ text, voice, speed }) });
     showMsg(msgEl, data.message || (data.success ? 'Node ID generated and saved - live immediately, no reload needed' : 'Failed'), data.success);
     if (data.success) loadAll();
   });
@@ -1025,6 +1054,7 @@
       form.append('mode', 'tts');
       form.append('text', document.getElementById('tail-text').value);
       form.append('voice', document.getElementById('tail-voice').value);
+      form.append('speed', document.getElementById('tail-speed').value);
     } else {
       form.append('mode', 'file');
       const f = document.getElementById('tail-file').files[0];
@@ -1068,6 +1098,7 @@
       form.append('mode', 'tts');
       form.append('text', document.getElementById('sched-text').value);
       form.append('voice', document.getElementById('sched-voice').value);
+      form.append('speed', document.getElementById('sched-speed').value);
     } else {
       form.append('mode', 'file');
       const f = document.getElementById('sched-file').files[0];

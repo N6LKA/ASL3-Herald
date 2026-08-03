@@ -163,10 +163,10 @@ Time & Weather Announcements (time and/or current conditions, schedule- or DTMF-
   spawned by Apache.
 
 Node ID (replaces the audio content of app_rpt's own idrecording=):
-  set-node-id "<text>" [--voice <voice>]   Generate the ID recording with Piper and save it -
+  set-node-id "<text>" [--voice <voice>] [--speed <0.5-2.0>]   Generate the ID recording with Piper and save it -
                                            overwrites $NODE_ID_FILE
-  test-node-id "<text>" [--voice <voice>]  Render and play a preview immediately, without
-                                           saving anything - use this to audition wording/voices
+  test-node-id "<text>" [--voice <voice>] [--speed <0.5-2.0>]  Render and play a preview immediately, without
+                                           saving anything - use this to audition wording/voices/speed
 
   Herald only ever controls the *audio content* of this one file - app_rpt's
   own idtime/politeid timer decides when it plays, completely unchanged. Add
@@ -212,8 +212,26 @@ get_node() {
 # ── TTS generation (shared by add and add-schedule) ───────────────────────────
 # Writes text to $ANNOUNCE_DIR/<name>.wav using Piper (preferred), falling back
 # to festival or espeak-ng. Prints the resulting file path on success.
+#
+# speed (5th arg, optional, default 1.0) is a user-facing multiplier - 1.5
+# means 1.5x normal speed, 0.5 means half speed - clamped to 0.5-2.0 here to
+# match asl3-herald.py's clamp_tts_speed(), since this runs independently of
+# the Python-side clamp on whatever a caller happens to pass in. Each engine
+# gets its own native speed control where one exists:
+#   Piper: --length-scale, a duration multiplier - the inverse of speed, see
+#          speed_to_length_scale() in asl3-herald.py for the same conversion.
+#   espeak-ng: -s <words-per-minute>, scaled directly off its base 140 wpm.
+#   festival (text2wave): no simple CLI speed flag exists, so this one
+#          engine falls back to sox's pitch-preserving tempo effect instead.
 generate_tts_file() {
-    local text="$1" name="$2" voice="$3"
+    local text="$1" name="$2" voice="$3" speed="${4:-1.0}"
+    [[ -z "$speed" ]] && speed="1.0"
+    speed="$(awk -v s="$speed" 'BEGIN {
+        if (s !~ /^-?[0-9.]+$/) { print "1.0"; exit }
+        if (s < 0.5) s = 0.5
+        if (s > 2.0) s = 2.0
+        printf "%.4f", s
+    }')"
     mkdir -p "$ANNOUNCE_DIR"
     local outfile="$ANNOUNCE_DIR/${name}.wav"
 
@@ -228,28 +246,31 @@ generate_tts_file() {
                 echo "WARNING: voice '$voice' not found, using default (amy)" >&2
             fi
         fi
-        local tmp_wav
+        local tmp_wav length_scale
         tmp_wav="$(mktemp --suffix=.wav)"
+        length_scale="$(awk -v s="$speed" 'BEGIN { printf "%.4f", 1/s }')"
         export LD_LIBRARY_PATH="/opt/piper/bin:${LD_LIBRARY_PATH:-}"
         # Piper prints its own status (including the --output_file path) to
         # stdout, which would otherwise get captured by the "outfile=$(...)"
         # call site along with our own final echo below - corrupting the
         # returned path. Suppress it entirely; our own >&2 lines are the
         # only intended diagnostic output.
-        echo "$text" | "$PIPER_BIN" --model "$model" --output_file "$tmp_wav" >/dev/null 2>&1
+        echo "$text" | "$PIPER_BIN" --model "$model" --length-scale "$length_scale" --output_file "$tmp_wav" >/dev/null 2>&1
         sox "$tmp_wav" -r 8000 -c 1 -b 16 -t wav "$outfile" >/dev/null 2>&1
         rm -f "$tmp_wav"
-        echo "Generated with Piper TTS ($(basename "$model" .onnx)): $outfile" >&2
+        echo "Generated with Piper TTS ($(basename "$model" .onnx), speed ${speed}x): $outfile" >&2
     elif command -v text2wave &>/dev/null && command -v sox &>/dev/null; then
         local tmp_wav
         tmp_wav="$(mktemp --suffix=.wav)"
         echo "$text" | text2wave -o "$tmp_wav" >/dev/null 2>&1
-        sox "$tmp_wav" -r 8000 -c 1 -b 16 -t wav "$outfile" >/dev/null 2>&1
+        sox "$tmp_wav" -r 8000 -c 1 -b 16 -t wav "$outfile" tempo "$speed" >/dev/null 2>&1
         rm -f "$tmp_wav"
-        echo "Generated with festival TTS: $outfile" >&2
+        echo "Generated with festival TTS (speed ${speed}x): $outfile" >&2
     elif command -v espeak-ng &>/dev/null && command -v sox &>/dev/null; then
-        espeak-ng -s 140 -a 150 --stdout "$text" 2>/dev/null | sox -t wav - -r 8000 -c 1 -b 16 -t wav "$outfile" >/dev/null 2>&1
-        echo "Generated with espeak-ng TTS: $outfile" >&2
+        local wpm
+        wpm="$(awk -v s="$speed" 'BEGIN { printf "%d", 140 * s }')"
+        espeak-ng -s "$wpm" -a 150 --stdout "$text" 2>/dev/null | sox -t wav - -r 8000 -c 1 -b 16 -t wav "$outfile" >/dev/null 2>&1
+        echo "Generated with espeak-ng TTS (speed ${speed}x): $outfile" >&2
     else
         echo "ERROR: No TTS engine found. Install Piper (see install.sh), festival + sox, or espeak-ng + sox." >&2
         return 1
@@ -402,11 +423,12 @@ cmd_remove_voice() {
 
 cmd_add() {
     need_root "$@"
-    local text="" name="" voice="" days="daily" time_start="" time_end="" node=""
+    local text="" name="" voice="" speed="" days="daily" time_start="" time_end="" node=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --name)       name="$2";  shift 2 ;;
             --voice)      voice="$2"; shift 2 ;;
+            --speed)      speed="$2"; shift 2 ;;
             --days)       days="$2";  shift 2 ;;
             --time-start) time_start="$2"; shift 2 ;;
             --time-end)   time_end="$2";   shift 2 ;;
@@ -416,16 +438,17 @@ cmd_add() {
     done
 
     if [[ -z "$text" ]]; then
-        echo "Usage: herald add \"<text>\" [--name <name>] [--voice <voice>] [--days daily|d1,d2] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]"
+        echo "Usage: herald add \"<text>\" [--name <name>] [--voice <voice>] [--speed <0.5-2.0>] [--days daily|d1,d2] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]"
         exit 1
     fi
     [[ -z "$name" ]] && name="$(slugify "$text")"
 
     local outfile
-    outfile="$(generate_tts_file "$text" "$name" "$voice")" || exit 1
+    outfile="$(generate_tts_file "$text" "$name" "$voice" "$speed")" || exit 1
 
     local args=(add-rotation "$outfile" --text "$text" --days "$days")
     [[ -n "$voice" ]] && args+=(--voice "$voice")
+    [[ -n "$speed" ]] && args+=(--speed "$speed")
     [[ -n "$time_start" ]] && args+=(--time-start "$time_start")
     [[ -n "$time_end" ]] && args+=(--time-end "$time_end")
     [[ -n "$node" ]] && args+=(--node "$node")
@@ -472,7 +495,7 @@ cmd_add_file() {
 
 cmd_edit_rotation() {
     need_root "$@"
-    local old_name="" new_name="" text="" voice="" file="" has_text=false has_file=false
+    local old_name="" new_name="" text="" voice="" speed="" file="" has_text=false has_file=false
     local days="" time_start="" time_end="" node=""
     local has_days=false has_time_start=false has_time_end=false has_node=false
     while [[ $# -gt 0 ]]; do
@@ -480,6 +503,7 @@ cmd_edit_rotation() {
             --new-name)   new_name="$2"; shift 2 ;;
             --text)       text="$2"; has_text=true; shift 2 ;;
             --voice)      voice="$2"; shift 2 ;;
+            --speed)      speed="$2"; shift 2 ;;
             --file)       file="$2"; has_file=true; shift 2 ;;
             --days)       days="$2"; has_days=true; shift 2 ;;
             --time-start) time_start="$2"; has_time_start=true; shift 2 ;;
@@ -490,7 +514,7 @@ cmd_edit_rotation() {
     done
 
     if [[ -z "$old_name" ]]; then
-        echo 'Usage: herald edit-rotation <name> [--new-name <n>] [--text "<text>"] [--voice <v>] [--file <path>] [--days daily|d1,d2] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]'
+        echo 'Usage: herald edit-rotation <name> [--new-name <n>] [--text "<text>"] [--voice <v>] [--speed <0.5-2.0>] [--file <path>] [--days daily|d1,d2] [--time-start HH:MM] [--time-end HH:MM] [--node <n>]'
         exit 1
     fi
     [[ -z "$new_name" ]] && new_name="$old_name"
@@ -499,7 +523,7 @@ cmd_edit_rotation() {
     local new_wav="$ANNOUNCE_DIR/${new_name}.wav"
 
     if $has_text; then
-        generate_tts_file "$text" "$new_name" "$voice" >/dev/null || exit 1
+        generate_tts_file "$text" "$new_name" "$voice" "$speed" >/dev/null || exit 1
         [[ "$old_name" != "$new_name" && -f "$old_wav" ]] && rm -f "$old_wav"
     elif $has_file; then
         mkdir -p "$ANNOUNCE_DIR"
@@ -513,6 +537,7 @@ cmd_edit_rotation() {
     local args=(edit-rotation "$old_name" --new-name "$new_name" --file "$new_wav")
     $has_text && args+=(--text "$text")
     [[ -n "$voice" ]] && args+=(--voice "$voice")
+    [[ -n "$speed" ]] && args+=(--speed "$speed")
     $has_days       && args+=(--days "$days")
     $has_time_start && args+=(--time-start "$time_start")
     $has_time_end   && args+=(--time-end "$time_end")
@@ -771,6 +796,7 @@ parse_schedule_opts() {
             --name)      name="$2";      shift 2 ;;
             --cron)      cron="$2";      shift 2 ;;
             --voice)     voice="$2";     shift 2 ;;
+            --speed)     speed="$2";     shift 2 ;;
             --play-mode) play_mode="$2"; shift 2 ;;
             --node)      node="$2";      shift 2 ;;
             *) REMAINDER+=("$1"); shift ;;
@@ -780,20 +806,21 @@ parse_schedule_opts() {
 
 cmd_add_schedule() {
     need_root "$@"
-    local name cron voice play_mode node
+    local name cron voice speed play_mode node
     parse_schedule_opts "$@"
     local text="${REMAINDER[*]}"
 
     if [[ -z "$text" || -z "$name" || -z "$cron" ]]; then
-        echo 'Usage: herald add-schedule "<text>" --name <name> --cron "MIN HOUR DOM MON DOW" [--voice <voice>] [--play-mode local|global] [--node <n>]'
+        echo 'Usage: herald add-schedule "<text>" --name <name> --cron "MIN HOUR DOM MON DOW" [--voice <voice>] [--speed <0.5-2.0>] [--play-mode local|global] [--node <n>]'
         exit 1
     fi
 
     local outfile
-    outfile="$(generate_tts_file "$text" "$name" "$voice")" || exit 1
+    outfile="$(generate_tts_file "$text" "$name" "$voice" "$speed")" || exit 1
 
     local args=(add-scheduled --name "$name" --cron "$cron" --file "$outfile" --text "$text")
     [[ -n "$voice" ]] && args+=(--voice "$voice")
+    [[ -n "$speed" ]] && args+=(--speed "$speed")
     [[ -n "$play_mode" ]] && args+=(--play-mode "$play_mode")
     [[ -n "$node" ]] && args+=(--node "$node")
     python3 "$DAEMON_PY" "${args[@]}"
@@ -829,7 +856,7 @@ cmd_add_schedule_file() {
 
 cmd_edit_schedule() {
     need_root "$@"
-    local old_name="" new_name="" cron="" play_mode="" text="" voice="" file="" node=""
+    local old_name="" new_name="" cron="" play_mode="" text="" voice="" speed="" file="" node=""
     local has_cron=false has_text=false has_file=false has_playmode=false has_node=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -838,6 +865,7 @@ cmd_edit_schedule() {
             --play-mode) play_mode="$2"; has_playmode=true; shift 2 ;;
             --text)      text="$2"; has_text=true; shift 2 ;;
             --voice)     voice="$2"; shift 2 ;;
+            --speed)     speed="$2"; shift 2 ;;
             --file)      file="$2"; has_file=true; shift 2 ;;
             --node)      node="$2"; has_node=true; shift 2 ;;
             *) old_name="$1"; shift ;;
@@ -845,7 +873,7 @@ cmd_edit_schedule() {
     done
 
     if [[ -z "$old_name" ]]; then
-        echo 'Usage: herald edit-schedule <name> [--new-name <n>] [--cron "MIN HOUR DOM MON DOW"] [--play-mode local|global] [--text "<text>"] [--voice <v>] [--file <path>] [--node <n>]'
+        echo 'Usage: herald edit-schedule <name> [--new-name <n>] [--cron "MIN HOUR DOM MON DOW"] [--play-mode local|global] [--text "<text>"] [--voice <v>] [--speed <0.5-2.0>] [--file <path>] [--node <n>]'
         exit 1
     fi
     [[ -z "$new_name" ]] && new_name="$old_name"
@@ -855,7 +883,7 @@ cmd_edit_schedule() {
     local final_file=""
 
     if $has_text; then
-        generate_tts_file "$text" "$new_name" "$voice" >/dev/null || exit 1
+        generate_tts_file "$text" "$new_name" "$voice" "$speed" >/dev/null || exit 1
         final_file="$new_wav"
         [[ "$old_name" != "$new_name" && -f "$old_wav" ]] && rm -f "$old_wav"
     elif $has_file; then
@@ -873,6 +901,7 @@ cmd_edit_schedule() {
     $has_playmode && args+=(--play-mode "$play_mode")
     $has_text     && args+=(--text "$text")
     [[ -n "$voice" ]] && args+=(--voice "$voice")
+    [[ -n "$speed" ]] && args+=(--speed "$speed")
     [[ -n "$final_file" ]] && args+=(--file "$final_file")
     $has_node     && args+=(--node "$node")
 

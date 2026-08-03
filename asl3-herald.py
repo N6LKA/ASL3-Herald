@@ -106,6 +106,14 @@ PIPER_BIN = "/opt/piper/bin/piper/piper"
 # voice installed by any of the three shows up as installed for all of them.
 PIPER_VOICE_DIR = "/var/lib/piper-tts"
 DEFAULT_PIPER_VOICE = "en_US-amy-medium"
+# User-facing speech-speed multiplier (1.0 = normal, >1 = faster, <1 =
+# slower). Converted to Piper's own --length-scale (a duration multiplier,
+# the inverse of speed) only at the point Piper is actually invoked - see
+# speed_to_length_scale(). Kept in human units everywhere else (config,
+# UI, CLI) for the same reason Voice is stored as a name, not a file path.
+DEFAULT_TTS_SPEED = 1.0
+TTS_SPEED_MIN = 0.5
+TTS_SPEED_MAX = 2.0
 VOICE_CATALOG_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), "piper-voices-catalog.json")
 HF_VOICES_REPO = "rhasspy/piper-voices"
 HF_VOICES_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
@@ -1669,6 +1677,7 @@ def normalize_timeweather_messages(messages):
             "Id": m.get("Id") or uuid.uuid4().hex[:8],
             "Text": m.get("Text", ""),
             "Voice": m.get("Voice") or DEFAULT_PIPER_VOICE,
+            "Speed": m.get("Speed") or DEFAULT_TTS_SPEED,
             "Enabled": m.get("Enabled", True),
         })
     return out
@@ -1693,7 +1702,21 @@ def pick_template_message(tw_cfg, state, message_id=None):
     candidates = [m for m in messages if m["Id"] != last_id] or messages
     return random.choice(candidates)
 
-def start_piper_render_async(text, voice, out_wav_path):
+def clamp_tts_speed(speed):
+    try:
+        speed = float(speed)
+    except (TypeError, ValueError):
+        return DEFAULT_TTS_SPEED
+    return max(TTS_SPEED_MIN, min(TTS_SPEED_MAX, speed))
+
+def speed_to_length_scale(speed):
+    """Piper's --length-scale is a duration multiplier - the inverse of the
+    user-facing Speed (Speed 1.5x -> length-scale ~0.667, Speed 0.5x ->
+    length-scale 2.0). speed is clamped first so a bad/zero config value
+    can't produce a division error or a nonsensical length-scale."""
+    return round(1 / clamp_tts_speed(speed), 4)
+
+def start_piper_render_async(text, voice, out_wav_path, speed=DEFAULT_TTS_SPEED):
     """Launches Piper as a background process and returns immediately - the
     caller polls the returned record's proc.poll() and calls
     finish_piper_render_async() once it exits. This is what lets the
@@ -1712,9 +1735,10 @@ def start_piper_render_async(text, voice, out_wav_path):
     tmp_wav = out_wav_path + ".raw.wav"
     env = dict(os.environ)
     env["LD_LIBRARY_PATH"] = "/opt/piper/bin:" + env.get("LD_LIBRARY_PATH", "")
+    length_scale = speed_to_length_scale(speed)
     try:
         proc = subprocess.Popen(
-            [PIPER_BIN, "--model", model, "--output_file", tmp_wav],
+            [PIPER_BIN, "--model", model, "--length-scale", str(length_scale), "--output_file", tmp_wav],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env,
         )
         proc.stdin.write(text.encode())
@@ -1752,13 +1776,13 @@ def finish_piper_render_async(record):
             log_debug(f"Time & Weather: could not chmod {record['out_wav_path']}: {e}")
     return ok
 
-def render_piper_wav_blocking(text, voice, out_wav_path, timeout=30):
+def render_piper_wav_blocking(text, voice, out_wav_path, timeout=30, speed=DEFAULT_TTS_SPEED):
     """Synchronous render for the DTMF/Test paths (herald play-timeweather /
     test-timeweather / the web UI's Test button) - these are already one-off
     invocations outside the daemon's shared poll loop, so blocking here is
     fine (see timeweather_template_tick() for why the *scheduled* path
     avoids this)."""
-    record = start_piper_render_async(text, voice, out_wav_path)
+    record = start_piper_render_async(text, voice, out_wav_path, speed=speed)
     if record is None:
         return False
     try:
@@ -1894,7 +1918,7 @@ def play_timeweather(tw_cfg, state, node, now, now_dt, mode="scheduled", warning
                 return False
             resolved_text, tag_warnings = substitute_template_tags(message["Text"], tw_cfg, weather, now_dt)
             warnings.extend(tag_warnings)
-            if not render_piper_wav_blocking(resolved_text, message["Voice"], out_path):
+            if not render_piper_wav_blocking(resolved_text, message["Voice"], out_path, speed=message["Speed"]):
                 warnings.append("Piper TTS render failed - check Piper is installed")
                 return False
             state["timeweather_template_last_id"] = message["Id"]
@@ -2063,7 +2087,7 @@ def timeweather_template_tick(tw_cfg, state, node, now, now_dt):
         resolved_text, tag_warnings = substitute_template_tags(message["Text"], tw_cfg, weather, target_occ)
         warnings.extend(tag_warnings)
 
-        record = start_piper_render_async(resolved_text, message["Voice"], out_path)
+        record = start_piper_render_async(resolved_text, message["Voice"], out_path, speed=message["Speed"])
         if record is None:
             _tw_template_render = {
                 "polled_done": True, "ok": False, "target_minute_key": minute_key,
@@ -2369,7 +2393,7 @@ def normalize_rotation(rotation):
     out = []
     for e in rotation:
         if isinstance(e, str):
-            entry = {"File": e, "Text": None, "Voice": None,
+            entry = {"File": e, "Text": None, "Voice": None, "Speed": DEFAULT_TTS_SPEED,
                       "Days": "daily", "TimeStart": None, "TimeEnd": None, "Node": None,
                       "Enabled": True}
         else:
@@ -2377,6 +2401,7 @@ def normalize_rotation(rotation):
                 "File": e.get("File", ""),
                 "Text": e.get("Text"),
                 "Voice": e.get("Voice"),
+                "Speed": e.get("Speed") or DEFAULT_TTS_SPEED,
                 "Days": e.get("Days", "daily"),
                 "TimeStart": e.get("TimeStart"),
                 "TimeEnd": e.get("TimeEnd"),
@@ -2396,6 +2421,7 @@ def scheduled_with_health(scheduled):
         if not s2.get("Cron"):
             s2["Cron"] = legacy_to_cron(s)
         s2["Enabled"] = s.get("Enabled", True)
+        s2["Speed"] = s.get("Speed") or DEFAULT_TTS_SPEED
         out.append(s2)
     return out
 
@@ -2471,6 +2497,8 @@ def cmd_add_rotation(config, args):
         print(json.dumps({"success": False, "message": f"Already in rotation: {filepath}"}))
         return
     entry = {"File": filepath, "Text": args.text, "Voice": args.voice}
+    if args.speed is not None:
+        entry["Speed"] = clamp_tts_speed(args.speed)
     if args.days and args.days != "daily":
         entry["Days"] = [d.strip().lower() for d in args.days.split(",")]
     if args.time_start:
@@ -2510,6 +2538,8 @@ def cmd_edit_rotation(config, args):
         entry["Text"] = args.text
     if args.voice is not None:
         entry["Voice"] = args.voice
+    if args.speed is not None:
+        entry["Speed"] = clamp_tts_speed(args.speed)
     if args.days is not None:
         if args.days == "daily" or args.days == "":
             entry.pop("Days", None)
@@ -2551,6 +2581,8 @@ def cmd_add_scheduled(config, args):
         entry["Text"] = args.text
     if args.voice:
         entry["Voice"] = args.voice
+    if args.speed is not None:
+        entry["Speed"] = clamp_tts_speed(args.speed)
     if args.node:
         entry["Node"] = args.node
 
@@ -2590,6 +2622,8 @@ def cmd_edit_scheduled(config, args):
         entry["Text"] = args.text
     if args.voice is not None:
         entry["Voice"] = args.voice
+    if args.speed is not None:
+        entry["Speed"] = clamp_tts_speed(args.speed)
     if args.file is not None:
         entry["File"] = args.file
     if args.node is not None:
@@ -2736,6 +2770,7 @@ def node_id_with_health(config):
     nid = dict(config.get("NodeID", {}) or {})
     nid.setdefault("Text", "")
     nid.setdefault("Voice", DEFAULT_PIPER_VOICE)
+    nid.setdefault("Speed", DEFAULT_TTS_SPEED)
     nid.setdefault("GeneratedAt", None)
     nid["_health"] = {
         "file_exists": os.path.exists(NODE_ID_FILE),
@@ -2745,12 +2780,14 @@ def node_id_with_health(config):
 
 def cmd_set_node_id(config, args):
     os.makedirs(NODE_ID_DIR, exist_ok=True)
-    if not render_piper_wav_blocking(args.text, args.voice, NODE_ID_FILE):
+    speed = clamp_tts_speed(args.speed) if args.speed is not None else DEFAULT_TTS_SPEED
+    if not render_piper_wav_blocking(args.text, args.voice, NODE_ID_FILE, speed=speed):
         print(json.dumps({"success": False, "message": "Piper TTS render failed - check Piper is installed"}))
         return
     nid = config.setdefault("NodeID", {})
     nid["Text"] = args.text
     nid["Voice"] = args.voice or DEFAULT_PIPER_VOICE
+    nid["Speed"] = speed
     nid["GeneratedAt"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     save_config(config)
     print(json.dumps({"success": True, "message": "Node ID generated and saved"}))
@@ -2758,13 +2795,14 @@ def cmd_set_node_id(config, args):
 def cmd_test_node_id(config, args):
     """Renders to a throwaway temp file and plays it immediately, without
     touching the real Node ID file or saved config - lets you audition
-    wording/voice before committing via set-node-id."""
+    wording/voice/speed before committing via set-node-id."""
     node = str(config.get("Node", "")).strip()
     if not node:
         print(json.dumps({"success": False, "message": "Node not set in config"}))
         return
     os.makedirs(os.path.dirname(NODE_ID_TEST_FILE), exist_ok=True)
-    if not render_piper_wav_blocking(args.text, args.voice, NODE_ID_TEST_FILE):
+    speed = clamp_tts_speed(args.speed) if args.speed is not None else DEFAULT_TTS_SPEED
+    if not render_piper_wav_blocking(args.text, args.voice, NODE_ID_TEST_FILE, speed=speed):
         print(json.dumps({"success": False, "message": "Piper TTS render failed - check Piper is installed"}))
         return
     play_file(node, NODE_ID_TEST_FILE)
@@ -2875,7 +2913,13 @@ def cmd_add_timeweather_message(config, args):
     tpl = tw.setdefault("Templates", {})
     messages = tpl.setdefault("Messages", [])
     new_id = uuid.uuid4().hex[:8]
-    messages.append({"Id": new_id, "Text": args.text, "Voice": args.voice or DEFAULT_PIPER_VOICE, "Enabled": True})
+    messages.append({
+        "Id": new_id,
+        "Text": args.text,
+        "Voice": args.voice or DEFAULT_PIPER_VOICE,
+        "Speed": clamp_tts_speed(args.speed) if args.speed is not None else DEFAULT_TTS_SPEED,
+        "Enabled": True,
+    })
     save_config(config)
     print(json.dumps({"success": True, "message": "Message added", "id": new_id}))
 
@@ -2891,6 +2935,8 @@ def cmd_edit_timeweather_message(config, args):
                 m["Text"] = args.text
             if args.voice is not None:
                 m["Voice"] = args.voice or DEFAULT_PIPER_VOICE
+            if args.speed is not None:
+                m["Speed"] = clamp_tts_speed(args.speed)
             save_config(config)
             print(json.dumps({"success": True, "message": "Message updated"}))
             return
@@ -3020,6 +3066,7 @@ def build_arg_parser():
     p_add_rot.add_argument("filepath")
     p_add_rot.add_argument("--text", default=None)
     p_add_rot.add_argument("--voice", default=None)
+    p_add_rot.add_argument("--speed", type=float, default=None)
     p_add_rot.add_argument("--days", default="daily")
     p_add_rot.add_argument("--time-start", dest="time_start", default=None)
     p_add_rot.add_argument("--time-end", dest="time_end", default=None)
@@ -3030,6 +3077,7 @@ def build_arg_parser():
     p_edit_rot.add_argument("--new-name", dest="new_name", default=None)
     p_edit_rot.add_argument("--text", default=None)
     p_edit_rot.add_argument("--voice", default=None)
+    p_edit_rot.add_argument("--speed", type=float, default=None)
     p_edit_rot.add_argument("--file", default=None)
     p_edit_rot.add_argument("--days", default=None)
     p_edit_rot.add_argument("--time-start", dest="time_start", default=None)
@@ -3043,6 +3091,7 @@ def build_arg_parser():
     p_add_sched.add_argument("--play-mode", dest="play_mode", choices=["local", "global"], default="local")
     p_add_sched.add_argument("--text", default=None)
     p_add_sched.add_argument("--voice", default=None)
+    p_add_sched.add_argument("--speed", type=float, default=None)
     p_add_sched.add_argument("--node", default=None)
 
     p_edit_sched = sub.add_parser("edit-scheduled", help="Edit an existing scheduled announcement")
@@ -3052,6 +3101,7 @@ def build_arg_parser():
     p_edit_sched.add_argument("--play-mode", dest="play_mode", choices=["local", "global"], default=None)
     p_edit_sched.add_argument("--text", default=None)
     p_edit_sched.add_argument("--voice", default=None)
+    p_edit_sched.add_argument("--speed", type=float, default=None)
     p_edit_sched.add_argument("--file", default=None)
     p_edit_sched.add_argument("--node", default=None)
 
@@ -3144,12 +3194,14 @@ def build_arg_parser():
     p_tw_add_msg = sub.add_parser("add-timeweather-message", help="Add a Time & Weather Template mode message")
     p_tw_add_msg.add_argument("text")
     p_tw_add_msg.add_argument("--voice")
+    p_tw_add_msg.add_argument("--speed", type=float)
     p_tw_add_msg.add_argument("--mode", choices=["recordings", "template"])
 
     p_tw_edit_msg = sub.add_parser("edit-timeweather-message", help="Edit a Time & Weather Template mode message")
     p_tw_edit_msg.add_argument("id")
     p_tw_edit_msg.add_argument("--text")
     p_tw_edit_msg.add_argument("--voice")
+    p_tw_edit_msg.add_argument("--speed", type=float)
     p_tw_edit_msg.add_argument("--mode", choices=["recordings", "template"])
 
     p_tw_rm_msg = sub.add_parser("remove-timeweather-message", help="Remove a Time & Weather Template mode message")
@@ -3161,10 +3213,12 @@ def build_arg_parser():
     p_node_id_set = sub.add_parser("set-node-id", help="Generate and save the Node ID recording (Piper TTS)")
     p_node_id_set.add_argument("text")
     p_node_id_set.add_argument("--voice")
+    p_node_id_set.add_argument("--speed", type=float, default=None)
 
     p_node_id_test = sub.add_parser("test-node-id", help="Render and play a Node ID preview without saving")
     p_node_id_test.add_argument("text")
     p_node_id_test.add_argument("--voice")
+    p_node_id_test.add_argument("--speed", type=float, default=None)
 
     return parser
 

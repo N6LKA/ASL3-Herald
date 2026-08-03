@@ -34,7 +34,7 @@
   - Runs on the same cron-style schedule as Scheduled Announcements (top of every hour by default, but any pattern works) and **takes priority over Scheduled Announcements** if both are due at the same moment
   - Also triggerable **on demand over DTMF** (map a function in `rpt.conf` to `herald play-timeweather`), independent of the schedule
   - Weather can come from NOAA METAR, Open-Meteo, your own WeatherFlow Tempest station, or any Personal Weather Station uploading to Weather Underground (including a Tempest station also configured to feed WU) — Tempest, Open-Meteo, and METAR all include wind speed/direction/gust in addition to temperature, feels-like, humidity, and condition
-  - **Two modes**: **Recordings** (default) builds the announcement from a pre-recorded sound pack — fast, fixed wording. **Custom Templates** lets you write your own message(s) with tags (`{smart_greeting}` `{time}` `{conditions}` `{temperature}` `{feels_like}` `{humidity}` `{wind_speed}` `{wind_gust}` `{callsign}`), rendered fresh with Piper TTS each time; with more than one message configured, a different one is picked at random each occurrence (never the same one twice in a row). Rendering happens a few seconds ahead of the scheduled moment (configurable) so playback is still instant when it's due. A tag left blank because the current provider/reading has no data for it (e.g. no gust, or a provider with no wind at all) is silently omitted rather than failing the whole message.
+  - **Two modes**: **Recordings** (default) builds the announcement from a pre-recorded sound pack — fast, fixed wording. **Custom Templates** lets you write your own message(s) with tags (`{smart_greeting}` `{time}` `{conditions}` `{temperature}` `{feels_like}` `{humidity}` `{wind_speed}` `{wind_gust}` `{callsign}`), rendered fresh with Piper TTS each time at an adjustable speech speed (0.5x–2.0x, per message); with more than one message configured, a different one is picked at random each occurrence (never the same one twice in a row). Rendering happens a few seconds ahead of the scheduled moment (configurable) so playback is still instant when it's due. A tag left blank because the current provider/reading has no data for it (e.g. no gust, or a provider with no wind at all) is silently omitted rather than failing the whole message.
   - **Top-of-the-hour phrasing** — in 12-hour format, choose whether an exact-hour time (e.g. 3:00) says "Three PM" (default) or "Three O'Clock PM"; no effect any other minute. 24-hour format always says "hundred hours" at the top of the hour (e.g. "Sixteen Hundred Hours"), matching the original Time-Weather-Announce script's convention.
   - **Minute pronunciation** (Custom Templates mode) — choose "Oh" or "Zero" for single-digit minutes, e.g. "Four Oh Six" vs "Four Zero Six" (12-hour) or "Sixteen Oh Six" vs "Sixteen Zero Six" (24-hour).
   - **Test with any time, not just right now** — the Test button (and `herald test-timeweather --at HH:MM`) can preview as if it were any time of day, so checking things like the o'clock phrasing above or the smart-greeting boundaries doesn't mean waiting for the real clock to get there.
@@ -47,6 +47,7 @@ Both Tail Messages and Scheduled Announcements can be edited in place (name, tex
 
 Plus:
 - **Piper neural TTS** — generate announcements from text with natural-sounding voices (6 included), with festival/espeak-ng as a fallback
+- **Adjustable TTS speech speed** — per tail message, scheduled announcement, Time & Weather template message, or the Node ID, a `0.5x`–`2.0x` slider in the Add/Edit form. Uses Piper's own `--length-scale` where available; the festival fallback uses sox's tempo effect instead (espeak-ng scales its own words-per-minute rate directly)
 - **Web UI** — optional browser-based management linked from Allmon3 or Supermon (v7.4+ and v8+), gated behind each app's own login
 - **Instant disable/enable** — `herald toggle` / `herald enable` / `herald disable`, no config edits or restarts needed
 - **Live config reload** — `herald reload` sends SIGHUP to pick up config changes immediately
@@ -146,6 +147,7 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 | `TailMessage.Rotation[].TimeStart` / `TimeEnd` | _(none)_ | Optional: `HH:MM` window this entry is eligible in; omit either side for open-ended |
 | `TailMessage.Rotation[].Node` | _(daemon's `Node`)_ | Optional: target a specific node number for this entry (multinodes= setups) |
 | `TailMessage.Rotation[].Enabled` | `true` | Set to `false` to disable an entry without removing it; re-enable with `herald toggle-rotation <name>` or the web UI |
+| `TailMessage.Rotation[].Speed` | `1.0` | TTS speech-speed multiplier, `0.5`-`2.0` (ignored on file-uploaded entries; takes effect the next time the entry's audio is (re)generated) |
 | `TailMessage.SkywarnPlus.Enable` | `true` | Enable SkywarnPlus WX tail integration |
 | `TailMessage.SkywarnPlus.WxTailFile` | `/var/lib/skywarnplus-ng/data/wx-tail.wav` | Path to the WX tail WAV — matches SkywarnPlus-NG's own default; set to `/tmp/SkywarnPlus/wx-tail.wav` for the classic fork |
 | `TailMessage.SkywarnPlus.SilenceThreshold` | `5000` | File size (bytes) to distinguish active alerts from silence |
@@ -158,6 +160,7 @@ Config file: `/etc/asterisk/scripts/asl3-herald/asl3-herald.conf`
 | `Scheduled[].PlayMode` | `local` | `local` (this node only) or `global` (all connected/linked nodes) |
 | `Scheduled[].Node` | _(daemon's `Node`)_ | Optional: target a specific node number for this entry (multinodes= setups) |
 | `Scheduled[].Enabled` | `true` | Set to `false` to disable an entry without removing it; re-enable with `herald toggle-schedule <name>` or the web UI |
+| `Scheduled[].Speed` | `1.0` | TTS speech-speed multiplier, `0.5`-`2.0` (ignored on file-uploaded entries) |
 
 **AMI credentials** are never stored in `asl3-herald.conf`. The daemon reads them automatically at startup and on every config reload from `/etc/allmon3/allmon3.ini` (Allmon3 users) or `/etc/asterisk/manager.conf` (Supermon and other frontends). If neither file yields usable credentials, herald falls back to the legacy CLI kerchunk counter (local RF unkeys only).
 
