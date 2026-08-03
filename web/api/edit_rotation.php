@@ -33,11 +33,16 @@ $gating_args = ['--days', $days, '--time-start', $time_start, '--time-end', $tim
 if ($mode === 'tts') {
     $text  = trim($_POST['text'] ?? '');
     $voice = trim($_POST['voice'] ?? '');
+    $speed = trim($_POST['speed'] ?? '');
     if ($text === '') {
         herald_json_response(['success' => false, 'message' => 'Text is required'], 400);
     }
+    if ($speed !== '' && !is_numeric($speed)) {
+        herald_json_response(['success' => false, 'message' => 'Speed must be a number'], 400);
+    }
     $args = array_merge(['edit-rotation', $old_name, '--new-name', $name, '--text', $text], $gating_args);
     if ($voice !== '') { $args[] = '--voice'; $args[] = $voice; }
+    if ($speed !== '') { $args[] = '--speed'; $args[] = $speed; }
     herald_respond_from_cli(herald_run_sudo($args));
 
 } elseif ($mode === 'file') {

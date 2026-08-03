@@ -330,6 +330,8 @@
             <label>Voice</label>
             <select id="tail-voice" style="display: block;"></select>
             <p class="muted" style="font-size:0.8em; margin:4px 0 0;">More voices: Global Settings &rarr; Voices</p>
+            <label style="margin-top:8px; display:block;">Speed: <span id="tail-speed-display">1.0x</span></label>
+            <input type="range" id="tail-speed" min="0.5" max="2.0" step="0.1" value="1.0" style="width:100%;">
           </div>
           <div class="tts-text">
             <label>Text</label>
@@ -504,6 +506,8 @@
             <label>Voice</label>
             <select id="sched-voice" style="display: block;"></select>
             <p class="muted" style="font-size:0.8em; margin:4px 0 0;">More voices: Global Settings &rarr; Voices</p>
+            <label style="margin-top:8px; display:block;">Speed: <span id="sched-speed-display">1.0x</span></label>
+            <input type="range" id="sched-speed" min="0.5" max="2.0" step="0.1" value="1.0" style="width:100%;">
           </div>
           <div class="tts-text">
             <label>Text</label>
@@ -630,6 +634,8 @@
           <label>Voice</label>
           <select id="tw-msg-voice" style="display:block;"></select>
           <p class="muted" style="font-size:0.8em; margin:4px 0 0;">More voices: Global Settings &rarr; Voices</p>
+          <label style="margin-top:8px; display:block;">Speed: <span id="tw-msg-speed-display">1.0x</span></label>
+          <input type="range" id="tw-msg-speed" min="0.5" max="2.0" step="0.1" value="1.0" style="width:100%;">
         </div>
         <div class="tts-text">
           <label>Text</label>

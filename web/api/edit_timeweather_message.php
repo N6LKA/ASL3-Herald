@@ -24,6 +24,16 @@ if (array_key_exists('voice', $input)) {
     $args[] = trim($input['voice'] ?? '');
 }
 
+// Speed is clamped server-side too (asl3-herald.py's clamp_tts_speed()) -
+// this is just an early, friendlier rejection of garbage input.
+if (array_key_exists('speed', $input) && $input['speed'] !== '' && $input['speed'] !== null) {
+    if (!is_numeric($input['speed'])) {
+        herald_json_response(['success' => false, 'message' => 'Speed must be a number'], 400);
+    }
+    $args[] = '--speed';
+    $args[] = (string) $input['speed'];
+}
+
 // See add_timeweather_message.php - carries the currently-selected Mode
 // radio along so it isn't lost on the next reload if unsaved.
 if (array_key_exists('mode', $input)) {

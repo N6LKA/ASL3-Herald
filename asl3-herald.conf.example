@@ -42,6 +42,11 @@ TailMessage:
     # - File: /etc/asterisk/scripts/asl3-herald/announcements/tail1.wav
     #   Text: "This station is running asl3-herald"
     #   Voice: en_US-lessac-medium
+    #   # Optional: TTS speech-speed multiplier, 0.5-2.0, default 1.0
+    #   # (1.5 = 1.5x normal speed, 0.5 = half speed). Ignored on
+    #   # file-uploaded entries. Only takes effect the next time this
+    #   # entry's audio is (re)generated.
+    #   Speed: 1.0
     # - File: /etc/asterisk/scripts/asl3-herald/announcements/tail2.wav
     #   Text: null
     #   Voice: null
@@ -97,6 +102,8 @@ TailMessage:
 #   "global" (all connected/linked nodes via `rpt playback`).
 # Text/Voice (optional): stored for TTS-generated entries so they can be
 #   edited later (via `herald edit-schedule` or the web UI) without retyping.
+# Speed (optional): TTS speech-speed multiplier, 0.5-2.0, default 1.0.
+#   Ignored on file-uploaded entries.
 # Node (optional): target a specific node number instead of this daemon's
 #   configured Node above (for multinodes= setups).
 # Enabled (optional): defaults to true. Set to false to pause this entry
@@ -113,6 +120,7 @@ Scheduled: []
   #   Cron: "30 7 * * 6"          # Saturdays at 7:30 AM
   #   File: /etc/asterisk/scripts/asl3-herald/announcements/arrl-news.wav
   #   PlayMode: local
+  #   Speed: 1.0
   #   Enabled: true
 
   # - Name: "Weekly Net Announcement"
@@ -258,6 +266,8 @@ TimeWeather:
     # omitted rather than failing the whole message.
     #   Id      - auto-generated if omitted; leave as-is once set, used
     #             internally to reference/edit/toggle this specific message.
+    #   Speed   - optional, defaults to 1.0. TTS speech-speed multiplier,
+    #             0.5-2.0 (1.5 = 1.5x normal speed, 0.5 = half speed).
     #   Enabled - optional, defaults to true. Set to false to remove a
     #             message from the random rotation without deleting it.
     Messages: []
@@ -266,6 +276,7 @@ TimeWeather:
     #   - Id: "a1b2c3d4"
     #     Text: "{smart_greeting}, welcome to the {callsign} repeater. The time is {time}. Current conditions are {conditions}, {temperature} degrees."
     #     Voice: en_US-amy-medium
+    #     Speed: 1.0
     #     Enabled: true
 
 # Node ID — generates the audio content of a single WAV file with Piper TTS

@@ -23,11 +23,16 @@ if ($node !== '' && !preg_match('/^[0-9]+$/', $node)) {
 if ($mode === 'tts') {
     $text  = trim($_POST['text'] ?? '');
     $voice = trim($_POST['voice'] ?? '');
+    $speed = trim($_POST['speed'] ?? '');
     if ($text === '') {
         herald_json_response(['success' => false, 'message' => 'Text is required'], 400);
     }
+    if ($speed !== '' && !is_numeric($speed)) {
+        herald_json_response(['success' => false, 'message' => 'Speed must be a number'], 400);
+    }
     $args = ['add-schedule', $text, '--name', $name, '--cron', $cron, '--play-mode', $play_mode];
     if ($voice !== '') { $args[] = '--voice'; $args[] = $voice; }
+    if ($speed !== '') { $args[] = '--speed'; $args[] = $speed; }
     if ($node !== '') { $args[] = '--node'; $args[] = $node; }
     herald_respond_from_cli(herald_run_sudo($args));
 

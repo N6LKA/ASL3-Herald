@@ -34,13 +34,21 @@ if ($node       !== '') { $gating_args[] = '--node';       $gating_args[] = $nod
 if ($mode === 'tts') {
     $text  = trim($_POST['text'] ?? '');
     $voice = trim($_POST['voice'] ?? '');
+    $speed = trim($_POST['speed'] ?? '');
     if ($text === '') {
         herald_json_response(['success' => false, 'message' => 'Text is required'], 400);
+    }
+    if ($speed !== '' && !is_numeric($speed)) {
+        herald_json_response(['success' => false, 'message' => 'Speed must be a number'], 400);
     }
     $args = array_merge(['add', $text, '--name', $name], $gating_args);
     if ($voice !== '') {
         $args[] = '--voice';
         $args[] = $voice;
+    }
+    if ($speed !== '') {
+        $args[] = '--speed';
+        $args[] = $speed;
     }
     herald_respond_from_cli(herald_run_sudo($args));
 
