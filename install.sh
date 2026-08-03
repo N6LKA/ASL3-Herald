@@ -112,7 +112,7 @@ apt-get update -qq
 
 PKGS=()
 command -v python3 &>/dev/null || PKGS+=(python3)
-python3 -c "import yaml" 2>/dev/null     || PKGS+=(python3-yaml)
+python3 -c "import ruamel.yaml" 2>/dev/null || PKGS+=(python3-ruamel.yaml)
 command -v sox &>/dev/null               || PKGS+=(sox)
 dpkg -s libsox-fmt-mp3 &>/dev/null        || PKGS+=(libsox-fmt-mp3)
 command -v unzip &>/dev/null             || PKGS+=(unzip)
