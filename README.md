@@ -182,10 +182,12 @@ Scheduled:
   - Name: "ARRL Audio News"
     Cron: "30 7 * * 6"           # Saturdays at 7:30 AM
     File: /etc/asterisk/scripts/asl3-herald/announcements/arrl-news.wav
+    Enabled: true
 
   - Name: "Second Saturday Breakfast Net"
     Cron: "0 8 8-14 * 6"         # 2nd Saturday (DOM 8-14, DOW 6) at 8:00 AM
     File: /etc/asterisk/scripts/asl3-herald/announcements/breakfast-net.wav
+    Enabled: true
 ```
 
 ---
