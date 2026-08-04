@@ -315,7 +315,7 @@
     <h3>Tail Message Rotation</h3>
     <p class="muted">Plays on the next transmission unkey, gated by MinInterval. A SkywarnPlus WX alert always takes priority over the rotation.</p>
     <table id="tail-table">
-      <thead><tr><th>#</th><th>File</th><th>Days</th><th>Window</th><th>Node</th><th>Status</th><th>Actions</th></tr></thead>
+      <thead><tr><th>#</th><th>File</th><th>Voice</th><th>Speed</th><th>Days</th><th>Window</th><th>Node</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody></tbody>
     </table>
 
@@ -465,7 +465,7 @@
     <h3>Scheduled Announcements</h3>
     <p class="muted">Plays on a cron schedule, independent of node activity or MinInterval.</p>
     <table id="sched-table">
-      <thead><tr><th>Name</th><th>Minute</th><th>Hour</th><th>Day of Month</th><th>Month</th><th>Day of Week</th><th>Play Mode</th><th>Node</th><th>File</th><th>Status</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Minute</th><th>Hour</th><th>Day of Month</th><th>Month</th><th>Day of Week</th><th>Play Mode</th><th>Node</th><th>Voice</th><th>Speed</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody></tbody>
     </table>
 
@@ -654,7 +654,7 @@
     <p class="muted" style="margin-top:4px;">Inserted wherever a message uses <code>{callsign}</code> - you write the rest (e.g. "... the {callsign} repeater ..."). If Piper runs the letters together as one word, separate them with spaces here (e.g. "N 6 L K A" instead of "N6LKA") to have it spoken letter-by-letter.</p>
 
     <table id="tw-messages-table" style="margin-top:16px;">
-      <thead><tr><th>Text</th><th>Voice</th><th>Status</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Text</th><th>Voice</th><th>Speed</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody></tbody>
     </table>
 
