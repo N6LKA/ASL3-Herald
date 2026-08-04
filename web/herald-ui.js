@@ -880,7 +880,7 @@
     // as list.php's update_check, so no waiting on the next 10 s poll.
     renderUpdateBadge(data);
     if (data.update_available) {
-      showMsg(msgEl, 'Update available: v' + data.latest_version + ' (currently running v' + data.current_version + '). Use the Update Herald button below, or see the README to update manually.', false);
+      showMsg(msgEl, 'Update available: v' + data.latest_version + ' (currently running v' + data.current_version + '). Use the Update Herald button, or see the README to update manually.', false);
     } else if (data.ahead_of_main) {
       showMsg(msgEl, 'Running v' + data.current_version + ', ahead of the latest release on main (v' + data.latest_version + ') - expected if installed from the develop branch for testing.', true);
     } else {

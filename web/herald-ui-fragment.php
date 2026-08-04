@@ -138,6 +138,18 @@
   #herald-ui .field-row > div { flex: 0 0 auto; }
   #herald-ui .card-row { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
   #herald-ui .card-row > .card { flex: 1 1 360px; margin-bottom: 0; }
+  /* Link buttons (GitHub repo / Release Notes / Report a Bug) are <a> tags,
+     not <button> - the "#herald-ui button" base rule below doesn't apply to
+     them, so they need the same padding/cursor/no-underline treatment given
+     explicitly here. */
+  #herald-ui a.btn-secondary {
+    display: inline-block;
+    cursor: pointer;
+    padding: 4px 10px;
+    text-decoration: none;
+  }
+  #herald-ui .daemon-links { display: flex; flex-direction: column; gap: 8px; flex: 0 0 220px; }
+  #herald-ui .daemon-links a { text-align: center; }
   #herald-ui .days-picker label { display: inline-block; margin-right: 10px; font-weight: normal; }
   #herald-ui .days-picker input[type=checkbox] { margin-right: 10px; }
   #herald-ui .source-toggle { margin: 8px 0; }
@@ -928,23 +940,32 @@
   <div class="card-row">
     <div class="card">
       <h3>Herald Daemon</h3>
-      <p class="muted">Status: <span id="set-herald-status">—</span></p>
-      <p>
-        <button class="btn-toggle" id="btn-toggle-enable">Enable/Disable Herald</button>
-      </p>
-      <div class="msg" id="herald-daemon-msg"></div>
+      <div style="display:flex; flex-wrap:wrap; gap:16px;">
+        <div style="flex:1 1 260px;">
+          <p class="muted">Status: <span id="set-herald-status">—</span></p>
+          <p>
+            <button class="btn-toggle" id="btn-toggle-enable">Enable/Disable Herald</button>
+          </p>
+          <div class="msg" id="herald-daemon-msg"></div>
 
-      <p class="muted" style="margin-top:16px;">Version: <span id="set-herald-version">—</span></p>
-      <p>
-        <button class="btn-secondary" id="btn-check-update">Check for Updates</button>
-        <button class="btn-primary" id="btn-run-update">Update Herald</button>
-      </p>
-      <div class="msg" id="update-check-msg"></div>
-      <div id="update-progress-box" style="display:none; margin: 8px 0; padding: 10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px;">
-        <strong>Update in progress: <span id="update-progress-stage">—</span></strong>
-        <p class="muted" id="update-progress-message" style="margin:4px 0 0;"></p>
+          <p class="muted" style="margin-top:16px;">Version: <span id="set-herald-version">—</span></p>
+          <p>
+            <button class="btn-secondary" id="btn-check-update">Check for Updates</button>
+            <button class="btn-primary" id="btn-run-update">Update Herald</button>
+          </p>
+          <div class="msg" id="update-check-msg"></div>
+          <div id="update-progress-box" style="display:none; margin: 8px 0; padding: 10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px;">
+            <strong>Update in progress: <span id="update-progress-stage">—</span></strong>
+            <p class="muted" id="update-progress-message" style="margin:4px 0 0;"></p>
+          </div>
+          <div class="msg" id="update-run-msg"></div>
+        </div>
+        <div class="daemon-links">
+          <a class="btn-secondary" href="https://github.com/N6LKA/ASL3-Herald" target="_blank" rel="noopener noreferrer">GitHub Repo</a>
+          <a class="btn-secondary" href="https://github.com/N6LKA/ASL3-Herald/releases" target="_blank" rel="noopener noreferrer">Release Notes</a>
+          <a class="btn-secondary" href="https://github.com/N6LKA/ASL3-Herald/issues/new" target="_blank" rel="noopener noreferrer">Report a Bug / Request a Feature</a>
+        </div>
       </div>
-      <div class="msg" id="update-run-msg"></div>
     </div>
 
     <div class="card">
@@ -1000,5 +1021,13 @@
       <div class="msg" id="backup-msg"></div>
     </div>
   </div>
+
+  <hr style="margin:20px 0; border:none; border-top:1px solid #444;">
+  <p class="muted" style="text-align:center;">If you enjoy this program and find it useful, please consider donating to support the project.</p>
+  <p style="text-align:center;">
+    <a href="https://www.paypal.me/LarryAycock" target="_blank" rel="noopener noreferrer">
+      <img src="https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png" width="150" alt="Donate with PayPal">
+    </a>
+  </p>
 </div>
 </div>
