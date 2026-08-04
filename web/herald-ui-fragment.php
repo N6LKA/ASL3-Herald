@@ -92,6 +92,16 @@
     margin-right: 4px;
     display: inline-block !important;
     width: auto !important;
+    transition: filter 0.1s ease;
+  }
+  /* One shared hover rule for every button color (.btn-primary, .btn-danger,
+     etc.) instead of a hand-tuned hover shade per class - brightness()
+     adapts automatically to whatever color a button already has. Excludes
+     :disabled (e.g. the reorder arrows at a list boundary) since those
+     aren't actionable and shouldn't look interactive. */
+  #herald-ui button:not(:disabled):hover,
+  #herald-ui a.btn-secondary:hover {
+    filter: brightness(1.15);
   }
   /* Higher specificity than "#herald-ui button" above (extra class), so JS
      can still hide a button (e.g. Time & Weather's Test button when there's
@@ -138,6 +148,25 @@
   #herald-ui .field-row > div { flex: 0 0 auto; }
   #herald-ui .card-row { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
   #herald-ui .card-row > .card { flex: 1 1 360px; margin-bottom: 0; }
+  /* Link buttons (GitHub repo / Release Notes / Report a Bug) are <a> tags,
+     not <button> - the "#herald-ui button" base rule below doesn't apply to
+     them, so they need the same padding/cursor/no-underline treatment given
+     explicitly here. */
+  #herald-ui a.btn-secondary {
+    display: inline-block;
+    cursor: pointer;
+    padding: 4px 10px;
+    text-decoration: none;
+  }
+  #herald-ui .daemon-links { display: flex; flex-direction: column; gap: 8px; flex: 0 0 220px; }
+  /* Deliberately more muted than .btn-secondary elsewhere (Refresh, Download
+     Config Backup, etc.) - these are informational/outbound links, not
+     primary actions, so a plainer neutral gray keeps them from competing
+     visually with the real controls. */
+  #herald-ui .daemon-links a {
+    text-align: center;
+    background: #64748b;
+  }
   #herald-ui .days-picker label { display: inline-block; margin-right: 10px; font-weight: normal; }
   #herald-ui .days-picker input[type=checkbox] { margin-right: 10px; }
   #herald-ui .source-toggle { margin: 8px 0; }
@@ -145,6 +174,7 @@
   #herald-ui .msg.ok { color: #27ae60; }
   #herald-ui .msg.err { color: #e74c3c; }
   #herald-ui .muted { color: #777; font-size: 0.95em; }
+  #herald-ui #set-herald-version { color: #27ae60; font-weight: bold; }
   #herald-ui .btn-reorder { padding: 4px 8px; }
   #herald-ui .btn-reorder:disabled { opacity: 0.3; cursor: default; }
   #herald-ui .btn-enable  { background: #27ae60; color: #fff; border: none; border-radius: 4px; }
@@ -218,7 +248,7 @@
   <span><strong id="hs-swp-label">SkywarnPlus:</strong> <span id="hs-swp">—</span></span>
   <span><strong>Herald:</strong> <span id="hs-enabled">—</span></span>
   <span><strong>Next tail:</strong> <span id="hs-countdown">—</span></span>
-  <a id="hs-update" class="hs-update-badge" style="display:none;" href="#" target="_blank" rel="noopener noreferrer" title="Open this release on GitHub">
+  <a id="hs-update" class="hs-update-badge" style="display:none;" href="#" title="Open Global Settings to update">
     &#8593; Update available: v<span id="hs-update-version">—</span>
   </a>
 </div>
@@ -349,7 +379,7 @@
 
       <br>
       <button class="btn-primary" id="btn-add-tail">Add to Rotation</button>
-      <button id="tail-edit-cancel" style="display:none;">Cancel Edit</button>
+      <button class="btn-secondary" id="tail-edit-cancel" style="display:none;">Cancel Edit</button>
       <div class="msg" id="tail-msg"></div>
     </div>
   </div>
@@ -525,7 +555,7 @@
 
       <br>
       <button class="btn-primary" id="btn-add-sched">Add Scheduled Announcement</button>
-      <button id="sched-edit-cancel" style="display:none;">Cancel Edit</button>
+      <button class="btn-secondary" id="sched-edit-cancel" style="display:none;">Cancel Edit</button>
       <div class="msg" id="sched-msg"></div>
 
       <div style="margin-top:16px; padding:10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px; font-size:0.88em; line-height:1.6;">
@@ -661,7 +691,7 @@
 
       <br>
       <button class="btn-primary" id="btn-add-tw-msg">Add Message</button>
-      <button id="tw-msg-edit-cancel" style="display:none;">Cancel Edit</button>
+      <button class="btn-secondary" id="tw-msg-edit-cancel" style="display:none;">Cancel Edit</button>
       <div class="msg" id="tw-msg-msg"></div>
     </div>
 
@@ -817,7 +847,7 @@
   <div class="card" id="tw-schedule-card">
     <h3>Schedule</h3>
     <p class="muted">Same cron format as Scheduled Announcements.</p>
-    <button id="tw-cron-hourly" style="margin-bottom:10px;">Every Hour (default)</button>
+    <button class="btn-secondary" id="tw-cron-hourly" style="margin-bottom:10px;">Every Hour (default)</button>
     <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-top:6px;">
       <div style="text-align:center;">
         <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Minute</div>
@@ -928,23 +958,32 @@
   <div class="card-row">
     <div class="card">
       <h3>Herald Daemon</h3>
-      <p class="muted">Status: <span id="set-herald-status">—</span></p>
-      <p>
-        <button class="btn-toggle" id="btn-toggle-enable">Enable/Disable Herald</button>
-      </p>
-      <div class="msg" id="herald-daemon-msg"></div>
+      <div style="display:flex; flex-wrap:wrap; gap:16px;">
+        <div style="flex:1 1 260px;">
+          <p class="muted" style="font-size:1.15em;">Status: <span id="set-herald-status">—</span></p>
+          <p>
+            <button class="btn-toggle" id="btn-toggle-enable">Enable/Disable Herald</button>
+          </p>
+          <div class="msg" id="herald-daemon-msg"></div>
 
-      <p class="muted" style="margin-top:16px;">Version: <span id="set-herald-version">—</span></p>
-      <p>
-        <button class="btn-secondary" id="btn-check-update">Check for Updates</button>
-        <button class="btn-primary" id="btn-run-update">Update Herald</button>
-      </p>
-      <div class="msg" id="update-check-msg"></div>
-      <div id="update-progress-box" style="display:none; margin: 8px 0; padding: 10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px;">
-        <strong>Update in progress: <span id="update-progress-stage">—</span></strong>
-        <p class="muted" id="update-progress-message" style="margin:4px 0 0;"></p>
+          <p class="muted" style="margin-top:16px; font-size:1.15em;">Version: <span id="set-herald-version">—</span></p>
+          <p>
+            <button class="btn-secondary" id="btn-check-update">Check for Updates</button>
+            <button class="btn-primary" id="btn-run-update">Update Herald</button>
+          </p>
+          <div class="msg" id="update-check-msg"></div>
+          <div id="update-progress-box" style="display:none; margin: 8px 0; padding: 10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px;">
+            <strong>Update in progress: <span id="update-progress-stage">—</span></strong>
+            <p class="muted" id="update-progress-message" style="margin:4px 0 0;"></p>
+          </div>
+          <div class="msg" id="update-run-msg"></div>
+        </div>
+        <div class="daemon-links">
+          <a class="btn-secondary" href="https://github.com/N6LKA/ASL3-Herald" target="_blank" rel="noopener noreferrer">GitHub Repo</a>
+          <a class="btn-secondary" href="https://github.com/N6LKA/ASL3-Herald/releases" target="_blank" rel="noopener noreferrer">Release Notes</a>
+          <a class="btn-secondary" href="https://github.com/N6LKA/ASL3-Herald/issues/new/choose" target="_blank" rel="noopener noreferrer">Report a Bug / Request a Feature</a>
+        </div>
       </div>
-      <div class="msg" id="update-run-msg"></div>
     </div>
 
     <div class="card">
@@ -1000,5 +1039,13 @@
       <div class="msg" id="backup-msg"></div>
     </div>
   </div>
+
+  <hr style="margin:20px 0; border:none; border-top:1px solid #444;">
+  <p style="text-align:center;">If you enjoy this program and find it useful, please consider donating to support the project.</p>
+  <p style="text-align:center;">
+    <a href="https://www.paypal.me/LarryAycock" target="_blank" rel="noopener noreferrer">
+      <img src="https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png" width="200" alt="Donate with PayPal">
+    </a>
+  </p>
 </div>
 </div>
