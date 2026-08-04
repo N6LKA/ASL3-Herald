@@ -30,6 +30,8 @@ General:
   install-voice <voice-id>                Download and install a Piper voice
   remove-voice <voice-id>                 Remove an installed Piper voice
   check-update                            Check GitHub for a newer release and record the result
+  update-status                           Print the current/last one-click update status
+  update                                  Start a one-click update from main in the background
   playback-history                        Print recent playback history as JSON
   clear-history                           Clear the playback history
   export-config                           Print the full config as JSON (for backup)
@@ -407,6 +409,17 @@ cmd_catalog_voices() {
 cmd_check_update() {
     need_root "$@"
     python3 "$DAEMON_PY" check-update
+}
+
+cmd_update_status() {
+    # Read-only - no root required, so the web UI's polling endpoint doesn't
+    # need to go through sudo (matches list-json's own reasoning).
+    python3 "$DAEMON_PY" update-status
+}
+
+cmd_update() {
+    need_root "$@"
+    python3 "$DAEMON_PY" update
 }
 
 cmd_install_voice() {
@@ -946,6 +959,8 @@ case "$CMD" in
     voices)              cmd_voices             "$@" ;;
     catalog-voices)       cmd_catalog_voices     "$@" ;;
     check-update)         cmd_check_update       "$@" ;;
+    update-status)        cmd_update_status      "$@" ;;
+    update)               cmd_update             "$@" ;;
     install-voice)        cmd_install_voice      "$@" ;;
     remove-voice)         cmd_remove_voice       "$@" ;;
     add)                  cmd_add                "$@" ;;

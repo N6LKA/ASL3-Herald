@@ -928,6 +928,14 @@
     <p class="muted">Status: <span id="set-herald-status">—</span></p>
     <p class="muted">Version: <span id="set-herald-version">—</span> <button id="btn-check-update">Check for Updates</button></p>
     <div class="msg" id="update-check-msg"></div>
+    <p style="margin-top:10px;">
+      <button class="btn-primary" id="btn-run-update">Update Herald (from main)</button>
+    </p>
+    <div id="update-progress-box" style="display:none; margin: 8px 0; padding: 10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px;">
+      <strong>Update in progress: <span id="update-progress-stage">—</span></strong>
+      <p class="muted" id="update-progress-message" style="margin:4px 0 0;"></p>
+    </div>
+    <div class="msg" id="update-run-msg"></div>
     <button class="btn-toggle" id="btn-toggle-enable">Enable/Disable Herald</button>
     <button id="btn-reload">Reload Config</button>
     <div class="msg" id="herald-daemon-msg"></div>
