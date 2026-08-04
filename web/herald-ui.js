@@ -98,7 +98,6 @@
     if (updateCheck.update_available) {
       const version = updateCheck.latest_version || '?';
       document.getElementById('hs-update-version').textContent = version;
-      badge.href = 'https://github.com/N6LKA/ASL3-Herald/releases/tag/v' + version;
       badge.style.display = '';
     } else {
       badge.style.display = 'none';
@@ -124,6 +123,18 @@
       }
     });
   });
+
+  // Clicking the update-available header badge jumps to Global Settings,
+  // where the version, Update Herald button, and Release Notes link all
+  // live now.
+  const hsUpdateBadge = document.getElementById('hs-update');
+  if (hsUpdateBadge) {
+    hsUpdateBadge.addEventListener('click', (e) => {
+      e.preventDefault();
+      const settingsTab = document.querySelector('.tab-btn[data-tab="settings"]');
+      if (settingsTab) settingsTab.click();
+    });
+  }
 
   // ── Source toggles (TTS vs file upload) ────────────────────────────────────────────
   function wireSourceToggle(name, ttsFieldsId, fileFieldsId) {

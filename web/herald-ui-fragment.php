@@ -230,7 +230,7 @@
   <span><strong id="hs-swp-label">SkywarnPlus:</strong> <span id="hs-swp">—</span></span>
   <span><strong>Herald:</strong> <span id="hs-enabled">—</span></span>
   <span><strong>Next tail:</strong> <span id="hs-countdown">—</span></span>
-  <a id="hs-update" class="hs-update-badge" style="display:none;" href="#" target="_blank" rel="noopener noreferrer" title="Open this release on GitHub">
+  <a id="hs-update" class="hs-update-badge" style="display:none;" href="#" title="Open Global Settings to update">
     &#8593; Update available: v<span id="hs-update-version">—</span>
   </a>
 </div>
