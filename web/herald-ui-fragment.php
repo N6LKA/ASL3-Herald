@@ -92,6 +92,16 @@
     margin-right: 4px;
     display: inline-block !important;
     width: auto !important;
+    transition: filter 0.1s ease;
+  }
+  /* One shared hover rule for every button color (.btn-primary, .btn-danger,
+     etc.) instead of a hand-tuned hover shade per class - brightness()
+     adapts automatically to whatever color a button already has. Excludes
+     :disabled (e.g. the reorder arrows at a list boundary) since those
+     aren't actionable and shouldn't look interactive. */
+  #herald-ui button:not(:disabled):hover,
+  #herald-ui a.btn-secondary:hover {
+    filter: brightness(1.15);
   }
   /* Higher specificity than "#herald-ui button" above (extra class), so JS
      can still hide a button (e.g. Time & Weather's Test button when there's
