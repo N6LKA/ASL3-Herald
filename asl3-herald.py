@@ -139,7 +139,7 @@ UPDATE_CHECK_INTERVAL_SECONDS = 86400  # once a day
 # install command, not raw.githubusercontent.com (CDN staleness - see
 # HERALD_VERSION_CHECK_URL's comment above for the same reasoning).
 UPDATE_INSTALL_CMD = (
-    'curl -fsSL "https://github.com/N6LKA/ASL3-Herald/archive/refs/heads/main.tar.gz" '
+    'curl -fsSL --retry 3 --retry-delay 5 "https://github.com/N6LKA/ASL3-Herald/archive/refs/heads/main.tar.gz" '
     '| tar -xzO ASL3-Herald-main/install.sh | bash'
 )
 UPDATE_TIMEOUT_SECONDS = 600  # ceiling for the whole install.sh run
@@ -149,6 +149,12 @@ UPDATE_RESTART_HEALTH_TIMEOUT = 30  # seconds to wait for the service to report 
 # the update it's reporting on, including the moment the daemon itself
 # restarts.
 UPDATE_STATUS_FILE = os.path.join(INSTALL_DIR, "update-status.json")
+# A safety-net snapshot of the config, written right before every update
+# attempt - restorable with `herald import-config` if an update ever goes
+# wrong. Root-only (0o600), unlike UPDATE_STATUS_FILE: this can contain
+# real secrets (Tempest.Token, Wunderground.ApiKey), so it's never meant to
+# be read by the web UI/www-data, just sitting there as an escape hatch.
+UPDATE_PRE_BACKUP_FILE = os.path.join(INSTALL_DIR, "pre-update-backup.json")
 # How long past a message's target play time to keep waiting on a still-
 # in-progress Piper render before giving up on that occurrence entirely -
 # mirrors the same "never wedge forever" philosophy as MAX_BUSY_SECONDS.
@@ -2404,10 +2410,21 @@ def cmd_run_update(config, args):
         s.update(fields)
         save_update_status(s)
 
-    update_status(status="in_progress", stage="downloading", pid=pid,
+    update_status(status="in_progress", stage="backing_up", pid=pid,
                   from_version=from_version, to_version=None,
-                  message="Downloading the latest release from main...",
+                  message="Backing up current configuration...",
                   started_at=started, finished_at=None, log="")
+
+    try:
+        with open(UPDATE_PRE_BACKUP_FILE, "w") as f:
+            json.dump(config, f, indent=2)
+        os.chmod(UPDATE_PRE_BACKUP_FILE, 0o600)
+    except Exception as e:
+        # Non-fatal - a failed backup shouldn't block a legitimate update,
+        # just log it so it's visible in journalctl if anyone goes looking.
+        log_warn(f"Could not write pre-update config backup: {e}")
+
+    update_status(stage="downloading", message="Downloading the latest release from main...")
 
     try:
         update_status(stage="installing", message="Running the installer...")
