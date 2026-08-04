@@ -159,7 +159,14 @@
     text-decoration: none;
   }
   #herald-ui .daemon-links { display: flex; flex-direction: column; gap: 8px; flex: 0 0 220px; }
-  #herald-ui .daemon-links a { text-align: center; }
+  /* Deliberately more muted than .btn-secondary elsewhere (Refresh, Download
+     Config Backup, etc.) - these are informational/outbound links, not
+     primary actions, so a plainer neutral gray keeps them from competing
+     visually with the real controls. */
+  #herald-ui .daemon-links a {
+    text-align: center;
+    background: #6c757d;
+  }
   #herald-ui .days-picker label { display: inline-block; margin-right: 10px; font-weight: normal; }
   #herald-ui .days-picker input[type=checkbox] { margin-right: 10px; }
   #herald-ui .source-toggle { margin: 8px 0; }
