@@ -1,0 +1,57 @@
+name: "\U0001F41B Bug Report"
+description: Report something that isn't working correctly
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the form below.
+
+        **Please report only one bug per issue.** If you've run into multiple unrelated problems, open a separate report for each — it makes them much easier to track and close independently.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected to happen instead.
+      placeholder: Tell us what you saw, and what you expected to happen instead...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce this?
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. See error
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Herald version
+      description: Shown on the Global Settings tab, under "Version"
+      placeholder: e.g. 1.20.0
+    validations:
+      required: true
+  - type: dropdown
+    id: integration
+    attributes:
+      label: Which frontend are you using?
+      options:
+        - Allmon3
+        - Supermon
+        - Both
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs (optional)
+      description: If applicable, paste output from `sudo journalctl -u asl3-herald -n 50`, or any errors from your browser's developer console.
+      render: shell
+    validations:
+      required: false
