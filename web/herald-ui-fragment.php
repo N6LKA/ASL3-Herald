@@ -165,7 +165,7 @@
      visually with the real controls. */
   #herald-ui .daemon-links a {
     text-align: center;
-    background: #6c757d;
+    background: #64748b;
   }
   #herald-ui .days-picker label { display: inline-block; margin-right: 10px; font-weight: normal; }
   #herald-ui .days-picker input[type=checkbox] { margin-right: 10px; }
