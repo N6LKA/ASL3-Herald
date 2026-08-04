@@ -360,9 +360,12 @@
       const name = basename(file).replace(/\.wav$/, '');
       const canMoveUp = i > 0;
       const canMoveDown = i < rotationList.length - 1;
+      const voiceDisplay = voice ? escapeAttr(voiceLabel(voice)) : '—';
+      const speedDisplay = voice ? (parseFloat(speed).toFixed(1) + 'x') : '—';
       const tr = document.createElement('tr');
       if (!enabled) tr.classList.add('sched-disabled');
-      tr.innerHTML = '<td>' + (i + 1) + '</td><td class="col-wrap">' + basename(file) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td><td>' + daysDisplay + '</td>' +
+      tr.innerHTML = '<td>' + (i + 1) + '</td><td class="col-wrap">' + basename(file) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td>' +
+        '<td>' + voiceDisplay + '</td><td>' + speedDisplay + '</td><td>' + daysDisplay + '</td>' +
         '<td>' + windowDisplay + '</td><td>' + (node || defaultNode) + '</td>' +
         '<td><button class="' + (enabled ? 'btn-enable' : 'btn-disable') + ' btn-toggle-rot" data-name="' + escapeAttr(name) + '">' + (enabled ? 'Enabled' : 'Disabled') + '</button></td>' +
         '<td>' +
@@ -385,10 +388,12 @@
         cronParts[0] || '*', cronParts[1] || '*', cronParts[2] || '*',
         cronParts[3] || '*', cronParts[4] || '*',
       ];
+      const schedVoiceDisplay = s.Voice ? escapeAttr(voiceLabel(s.Voice)) : '—';
+      const schedSpeedDisplay = s.Voice ? (parseFloat(s.Speed || 1.0).toFixed(1) + 'x') : '—';
       const tr = document.createElement('tr');
       if (!enabled) tr.classList.add('sched-disabled');
       tr.innerHTML =
-        '<td class="col-wrap">' + escapeAttr(s.Name) + '</td>' +
+        '<td class="col-wrap">' + escapeAttr(s.Name) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td>' +
         '<td><code>' + escapeAttr(cMin)  + '</code></td>' +
         '<td><code>' + escapeAttr(cHour) + '</code></td>' +
         '<td><code>' + escapeAttr(cDom)  + '</code></td>' +
@@ -396,7 +401,7 @@
         '<td><code>' + escapeAttr(cDow)  + '</code></td>' +
         '<td>' + (playMode === 'global' ? 'Global' : 'Local') + '</td>' +
         '<td>' + escapeAttr(s.Node || defaultNode) + '</td>' +
-        '<td class="col-wrap">' + basename(s.File) + (fileMissing ? ' <span class="badge-missing">MISSING FILE</span>' : '') + '</td>' +
+        '<td>' + schedVoiceDisplay + '</td><td>' + schedSpeedDisplay + '</td>' +
         '<td><button class="' + (enabled ? 'btn-enable' : 'btn-disable') + ' btn-toggle-sched" data-name="' + escapeAttr(s.Name) + '">' + (enabled ? 'Enabled' : 'Disabled') + '</button></td>' +
         '<td>' +
         '<button class="btn-play" data-name="' + escapeAttr(s.Name) + '">Test (local playback)</button>' +
@@ -449,7 +454,7 @@
     twmbody.innerHTML = '';
     const twMessages = twTemplates.Messages || [];
     if (twMessages.length === 0) {
-      twmbody.innerHTML = '<tr><td colspan="4" class="muted">(no messages yet - add one below)</td></tr>';
+      twmbody.innerHTML = '<tr><td colspan="5" class="muted">(no messages yet - add one below)</td></tr>';
     }
     twMessages.forEach(m => {
       const enabled = m.Enabled !== false;
@@ -458,6 +463,7 @@
       tr.innerHTML =
         '<td class="col-wrap">' + escapeAttr(m.Text) + '</td>' +
         '<td>' + escapeAttr(voiceLabel(m.Voice)) + '</td>' +
+        '<td>' + parseFloat(m.Speed || 1.0).toFixed(1) + 'x</td>' +
         '<td><button class="' + (enabled ? 'btn-enable' : 'btn-disable') + ' btn-toggle-tw-msg" data-id="' + escapeAttr(m.Id) + '">' + (enabled ? 'Enabled' : 'Disabled') + '</button></td>' +
         '<td>' +
         '<button class="btn-test-tw-msg" data-id="' + escapeAttr(m.Id) + '">Test</button>' +
@@ -479,7 +485,7 @@
       nodeIdStatus.textContent = 'No Node ID has been generated yet.';
     } else {
       nodeIdStatus.textContent = 'Currently deployed: "' + (nodeId.Text || '') + '" (' +
-        voiceLabel(nodeId.Voice) + ')' +
+        voiceLabel(nodeId.Voice) + ', ' + parseFloat(nodeId.Speed || 1.0).toFixed(1) + 'x)' +
         (nodeId.GeneratedAt ? ' - generated ' + nodeId.GeneratedAt : '');
     }
 
@@ -619,14 +625,24 @@
   }
 
   function wireRowButtons() {
-    document.querySelectorAll('.btn-play').forEach(btn => {
+    // Scoped to "table .btn-X" (descendants of an actual <table>), not just
+    // ".btn-X" globally - several of these class names (.btn-play,
+    // .btn-danger) are also reused for styling on standalone buttons
+    // elsewhere on the page (Node ID's Test Playback, Voices' Remove Voice,
+    // Backup & Restore's Restore Config, Time & Weather's own Test button,
+    // Playback History's Clear History) that already have their own correct
+    // dedicated handlers. An unscoped selector here was silently attaching
+    // a SECOND, wrong handler on top of each of those (wrong endpoint,
+    // wrong/undefined data, and for .btn-danger a bogus second confirm()
+    // dialog reading "Remove undefined?") every time this ran.
+    document.querySelectorAll('table .btn-play').forEach(btn => {
       btn.onclick = async () => {
         await api('play.php', { method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ name: btn.dataset.name }) });
         loadHistory();
       };
     });
-    document.querySelectorAll('.btn-reorder').forEach(btn => {
+    document.querySelectorAll('table .btn-reorder').forEach(btn => {
       btn.onclick = async () => {
         if (btn.disabled) return;
         const data = await api('reorder_rotation.php', { method: 'POST', headers: {'Content-Type':'application/json'},
@@ -637,7 +653,7 @@
         loadAll();
       };
     });
-    document.querySelectorAll('.btn-danger').forEach(btn => {
+    document.querySelectorAll('table .btn-danger').forEach(btn => {
       btn.onclick = async () => {
         if (!confirm('Remove "' + btn.dataset.name + '"?')) return;
         await api('remove.php', { method: 'POST', headers: {'Content-Type':'application/json'},
@@ -645,14 +661,14 @@
         loadAll();
       };
     });
-    document.querySelectorAll('.btn-edit').forEach(btn => {
+    document.querySelectorAll('table .btn-edit').forEach(btn => {
       btn.onclick = () => {
         if (btn.dataset.type === 'tail') startEditTail(btn.dataset);
         else if (btn.dataset.type === 'tw-msg') startEditTwMsg(btn.dataset);
         else startEditSched(btn.dataset);
       };
     });
-    document.querySelectorAll('.btn-remove-tw-msg').forEach(btn => {
+    document.querySelectorAll('table .btn-remove-tw-msg').forEach(btn => {
       btn.onclick = async () => {
         if (!confirm('Remove this message?')) return;
         await api('remove_timeweather_message.php', { method: 'POST', headers: {'Content-Type':'application/json'},
@@ -660,7 +676,7 @@
         loadAll();
       };
     });
-    document.querySelectorAll('.btn-test-tw-msg').forEach(btn => {
+    document.querySelectorAll('table .btn-test-tw-msg').forEach(btn => {
       btn.onclick = async () => {
         const msgEl = document.getElementById('timeweather-msg');
         btn.disabled = true;
@@ -674,7 +690,7 @@
         }
       };
     });
-    document.querySelectorAll('.btn-toggle-tw-msg').forEach(btn => {
+    document.querySelectorAll('table .btn-toggle-tw-msg').forEach(btn => {
       btn.onclick = async () => {
         const data = await api('toggle_timeweather_message.php', { method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ id: btn.dataset.id }) });
@@ -685,7 +701,7 @@
         loadAll();
       };
     });
-    document.querySelectorAll('.btn-toggle-sched').forEach(btn => {
+    document.querySelectorAll('table .btn-toggle-sched').forEach(btn => {
       btn.onclick = async () => {
         const data = await api('toggle_scheduled.php', { method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ name: btn.dataset.name }) });
@@ -696,7 +712,7 @@
         loadAll();
       };
     });
-    document.querySelectorAll('.btn-toggle-rot').forEach(btn => {
+    document.querySelectorAll('table .btn-toggle-rot').forEach(btn => {
       btn.onclick = async () => {
         const data = await api('toggle_rotation.php', { method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ name: btn.dataset.name }) });
