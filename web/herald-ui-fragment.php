@@ -157,6 +157,7 @@
   #herald-ui .msg.ok { color: #27ae60; }
   #herald-ui .msg.err { color: #e74c3c; }
   #herald-ui .muted { color: #777; font-size: 0.95em; }
+  #herald-ui #set-herald-version { color: #27ae60; font-weight: bold; }
   #herald-ui .btn-reorder { padding: 4px 8px; }
   #herald-ui .btn-reorder:disabled { opacity: 0.3; cursor: default; }
   #herald-ui .btn-enable  { background: #27ae60; color: #fff; border: none; border-radius: 4px; }
@@ -942,13 +943,13 @@
       <h3>Herald Daemon</h3>
       <div style="display:flex; flex-wrap:wrap; gap:16px;">
         <div style="flex:1 1 260px;">
-          <p class="muted">Status: <span id="set-herald-status">—</span></p>
+          <p class="muted" style="font-size:1.15em;">Status: <span id="set-herald-status">—</span></p>
           <p>
             <button class="btn-toggle" id="btn-toggle-enable">Enable/Disable Herald</button>
           </p>
           <div class="msg" id="herald-daemon-msg"></div>
 
-          <p class="muted" style="margin-top:16px;">Version: <span id="set-herald-version">—</span></p>
+          <p class="muted" style="margin-top:16px; font-size:1.15em;">Version: <span id="set-herald-version">—</span></p>
           <p>
             <button class="btn-secondary" id="btn-check-update">Check for Updates</button>
             <button class="btn-primary" id="btn-run-update">Update Herald</button>
