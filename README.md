@@ -27,20 +27,50 @@
 
 ## Screenshots
 
+<table>
+<tr>
+<td width="50%">
+
 **How It Works** — a plain-language overview of Tail Messages, Scheduled Announcements, and Time & Weather Announcements, shown before you touch any settings.
-![How It Works](screenshots/how-it-works.png)
+
+<img src="screenshots/how-it-works.png" width="100%">
+
+</td>
+<td width="50%">
 
 **Tail Messages** — General Settings, SkywarnPlus integration, the rotation table, and the add-message form.
-![Tail Messages](screenshots/tail-messages.png)
+
+<img src="screenshots/tail-messages.png" width="100%">
+
+</td>
+</tr>
+<tr>
+<td width="50%">
 
 **Scheduled Announcements** — cron-driven announcements with a live schedule picker and reference table.
-![Scheduled Announcements](screenshots/scheduled-announcements.png)
+
+<img src="screenshots/scheduled-announcements.png" width="100%">
+
+</td>
+<td width="50%">
 
 **Time & Weather Announcements** — Custom Templates mode, with tag-based messages rendered fresh by Piper TTS each time.
-![Time & Weather Announcements](screenshots/time-weather-announcements.png)
+
+<img src="screenshots/time-weather-announcements.png" width="100%">
+
+</td>
+</tr>
+<tr>
+<td width="50%">
 
 **Node ID Generator** — generate a station ID recording with Piper TTS, test it locally, and see exactly what to add to `rpt.conf`.
-![Node ID Generator](screenshots/node-id-generator.png)
+
+<img src="screenshots/node-id-generator.png" width="100%">
+
+</td>
+<td width="50%"></td>
+</tr>
+</table>
 
 ---
 
