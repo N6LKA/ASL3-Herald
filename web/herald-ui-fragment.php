@@ -103,7 +103,7 @@
   #herald-ui .btn-danger   { background: #e74c3c; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-play     { background: #2980b9; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-secondary{ background: #576574; color: #fff; border: none; border-radius: 4px; }
-  #herald-ui .btn-primary{ background: #27ae60; color: #fff; border: none; border-radius: 4px; padding: 8px 16px; }
+  #herald-ui .btn-primary{ background: #27ae60; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .secret-wrap { position: relative; }
   #herald-ui .secret-wrap input { padding-right: 30px !important; }
   #herald-ui .btn-eye {
