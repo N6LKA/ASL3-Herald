@@ -857,17 +857,14 @@
     }
   });
 
-  // ── Enable/disable + reload ───────────────────────────────────────────────────────────────────
+  // ── Enable/disable ────────────────────────────────────────────────────────────────────────────
+  // No separate "Reload Config" button - General Settings' own "Save &
+  // Reload" button already reloads, so a standalone reload button was
+  // redundant.
   document.getElementById('btn-toggle-enable').addEventListener('click', async () => {
     const msgEl = document.getElementById('herald-daemon-msg');
     const data = await api('toggle.php', { method: 'POST' });
     showMsg(msgEl, data.message || 'Toggled', data.success !== false);
-    loadAll();
-  });
-  document.getElementById('btn-reload').addEventListener('click', async () => {
-    const msgEl = document.getElementById('herald-daemon-msg');
-    const data = await api('reload.php', { method: 'POST' });
-    showMsg(msgEl, data.message || 'Config reloaded', data.success !== false);
     loadAll();
   });
 
@@ -883,13 +880,69 @@
     // as list.php's update_check, so no waiting on the next 10 s poll.
     renderUpdateBadge(data);
     if (data.update_available) {
-      showMsg(msgEl, 'Update available: v' + data.latest_version + ' (currently running v' + data.current_version + '). See the README for update instructions.', false);
+      showMsg(msgEl, 'Update available: v' + data.latest_version + ' (currently running v' + data.current_version + '). Use the Update Herald button below, or see the README to update manually.', false);
     } else if (data.ahead_of_main) {
       showMsg(msgEl, 'Running v' + data.current_version + ', ahead of the latest release on main (v' + data.latest_version + ') - expected if installed from the develop branch for testing.', true);
     } else {
       showMsg(msgEl, 'Up to date (v' + data.current_version + ').', true);
     }
   });
+
+  // ── One-click update (from main) ─────────────────────────────────────────────────────────
+  let updatePoller = null;
+
+  function renderUpdateProgress(status) {
+    const box = document.getElementById('update-progress-box');
+    const stageEl = document.getElementById('update-progress-stage');
+    const msgEl = document.getElementById('update-progress-message');
+    const btn = document.getElementById('btn-run-update');
+    const runMsgEl = document.getElementById('update-run-msg');
+
+    if (status.status === 'in_progress') {
+      box.style.display = '';
+      stageEl.textContent = titleCase(status.stage || 'starting');
+      msgEl.textContent = status.message || '';
+      btn.disabled = true;
+      if (!updatePoller) updatePoller = setInterval(pollUpdateStatus, 3000);
+      return;
+    }
+
+    box.style.display = 'none';
+    btn.disabled = false;
+    clearInterval(updatePoller);
+    updatePoller = null;
+
+    if (status.status === 'success') {
+      showMsg(runMsgEl, status.message || ('Updated to v' + status.to_version), true);
+      loadAll(); // picks up the new version number and clears the header badge
+    } else if (status.status === 'failed') {
+      showMsg(runMsgEl, status.message || 'Update failed', false);
+    }
+  }
+
+  async function pollUpdateStatus() {
+    const status = await api('update_status.php');
+    if (!status) return;
+    renderUpdateProgress(status);
+  }
+
+  document.getElementById('btn-run-update').addEventListener('click', async () => {
+    if (!confirm('This will update Herald to the latest version on the main branch. The service will briefly restart during the update, pausing tail messages and announcements for a few seconds. Continue?')) {
+      return;
+    }
+    const runMsgEl = document.getElementById('update-run-msg');
+    const data = await api('update.php', { method: 'POST' });
+    if (!data.success) {
+      showMsg(runMsgEl, data.message || 'Could not start update', false);
+      return;
+    }
+    showMsg(runMsgEl, 'Update started...', true);
+    pollUpdateStatus();
+  });
+
+  // Resume showing progress if an update was already running when the page
+  // loaded (e.g. it was started earlier and the page got reloaded).
+  pollUpdateStatus();
 
   // ── Backup / restore ─────────────────────────────────────────────────────────────────────
   document.getElementById('btn-export-config').addEventListener('click', () => {

@@ -130,6 +130,25 @@ TW_TEMPLATE_TAGS = ("smart_greeting", "time", "conditions", "temperature", "feel
 # content for extended periods even with cache-busting.
 HERALD_VERSION_CHECK_URL = "https://api.github.com/repos/N6LKA/asl3-herald/contents/version.txt?ref=main"
 UPDATE_CHECK_INTERVAL_SECONDS = 86400  # once a day
+
+# One-click self-update ("Update Herald" button, Global Settings) - runs the
+# same install.sh a user would otherwise fetch and run by hand over SSH, but
+# triggered from the web UI and always pinned to main (never develop - see
+# README's own warning about develop being untested). Reuses the codeload
+# tarball fetch pattern already used for the documented develop-branch
+# install command, not raw.githubusercontent.com (CDN staleness - see
+# HERALD_VERSION_CHECK_URL's comment above for the same reasoning).
+UPDATE_INSTALL_CMD = (
+    'curl -fsSL "https://github.com/N6LKA/ASL3-Herald/archive/refs/heads/main.tar.gz" '
+    '| tar -xzO ASL3-Herald-main/install.sh | bash'
+)
+UPDATE_TIMEOUT_SECONDS = 600  # ceiling for the whole install.sh run
+UPDATE_RESTART_HEALTH_TIMEOUT = 30  # seconds to wait for the service to report active again
+# Lives in the config directory (never touched by install.sh's own file
+# fetches, which only write into /usr/local/bin/asl3-herald) so it survives
+# the update it's reporting on, including the moment the daemon itself
+# restarts.
+UPDATE_STATUS_FILE = os.path.join(INSTALL_DIR, "update-status.json")
 # How long past a message's target play time to keep waiting on a still-
 # in-progress Piper render before giving up on that occurrence entirely -
 # mirrors the same "never wedge forever" philosophy as MAX_BUSY_SECONDS.
@@ -2286,6 +2305,154 @@ def cmd_check_update(config, args):
         "ahead_of_main": result["ahead_of_main"],
     }))
 
+# ── One-click self-update ──────────────────────────────────────────────────
+
+def _pid_alive(pid):
+    """True if pid refers to a live process. A PermissionError means the
+    process exists but is owned by someone else - since only this same
+    root-run update flow ever writes a pid into the status file, that case
+    shouldn't occur in practice, but is treated as "alive" (the safer
+    assumption) rather than risking a second update starting concurrently."""
+    if not pid:
+        return False
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except (PermissionError, ValueError, TypeError):
+        return True
+
+def load_update_status():
+    default = {
+        "status": "idle", "stage": None, "pid": None,
+        "from_version": None, "to_version": None, "message": "",
+        "started_at": None, "finished_at": None, "log": "",
+    }
+    if not os.path.exists(UPDATE_STATUS_FILE):
+        return default
+    try:
+        with open(UPDATE_STATUS_FILE) as f:
+            data = json.load(f)
+        default.update(data)
+        return default
+    except (OSError, json.JSONDecodeError):
+        return default
+
+def save_update_status(status):
+    with open(UPDATE_STATUS_FILE, "w") as f:
+        json.dump(status, f, indent=2)
+    # World-writable/readable for the same reason asl3-herald.state is - a
+    # www-data-triggered `herald update` runs as root (via sudo), but the
+    # read-only status-polling endpoint (`herald update-status`) intentionally
+    # does NOT run as root, so it needs to be able to read this file itself.
+    try:
+        os.chmod(UPDATE_STATUS_FILE, 0o666)
+    except OSError as e:
+        log_debug(f"Could not chmod {UPDATE_STATUS_FILE}: {e}")
+
+def cmd_update_status(config, args):
+    """Read-only - no root required. Polled by the web UI every few seconds
+    while an update is in progress, and once on page load to resume showing
+    progress if one was already running (e.g. the page was reloaded)."""
+    print(json.dumps(load_update_status()))
+
+def cmd_update(config, args):
+    """The web UI's "Update Herald" button. Refuses to start a second update
+    if one is already genuinely running (checked via the recorded pid, not
+    just the status field, since a status file stuck on "in_progress" from a
+    process that died without cleaning up shouldn't block updates forever).
+    Otherwise launches run-update as a fully detached background process and
+    returns immediately - the actual work can take minutes and must not be
+    tied to this request's lifetime (or PHP's execution time limit)."""
+    status = load_update_status()
+    if status.get("status") == "in_progress" and _pid_alive(status.get("pid")):
+        started = status.get("started_at")
+        when = datetime.fromtimestamp(started).strftime("%H:%M:%S") if started else "earlier"
+        print(json.dumps({
+            "success": False,
+            "message": f"An update is already in progress (started {when}) - please wait for it to finish.",
+        }))
+        return
+
+    proc = subprocess.Popen(
+        [sys.executable, os.path.realpath(__file__), "run-update"],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    print(json.dumps({"success": True, "message": "Update started", "pid": proc.pid}))
+
+def cmd_run_update(config, args):
+    """Not meant to be called directly - launched detached by cmd_update().
+    Downloads and runs install.sh from main (non-interactively; every
+    install.sh prompt is already gated behind "is a real terminal attached",
+    which this process never has), then verifies the daemon actually comes
+    back up on the new version before declaring success, rather than trusting
+    that the restart command not erroring means it worked.
+
+    This process keeps running on its own old in-memory code even after
+    install.sh overwrites this very file on disk - normal, safe Linux
+    behavior (the running process holds the old file's inode open) - and
+    exits normally once done; only the separate `asl3-herald` systemd
+    service actually restarts onto the new code."""
+    pid = os.getpid()
+    started = time.time()
+    from_version = VERSION
+
+    def update_status(**fields):
+        s = load_update_status()
+        s.update(fields)
+        save_update_status(s)
+
+    update_status(status="in_progress", stage="downloading", pid=pid,
+                  from_version=from_version, to_version=None,
+                  message="Downloading the latest release from main...",
+                  started_at=started, finished_at=None, log="")
+
+    try:
+        update_status(stage="installing", message="Running the installer...")
+        result = subprocess.run(["bash", "-c", UPDATE_INSTALL_CMD], capture_output=True, text=True,
+                                 timeout=UPDATE_TIMEOUT_SECONDS)
+        combined_log = ((result.stdout or "") + "\n" + (result.stderr or ""))[-6000:]
+
+        if result.returncode != 0:
+            update_status(status="failed", stage="installing",
+                          message=f"Installer exited with code {result.returncode}",
+                          finished_at=time.time(), log=combined_log)
+            return
+
+        update_status(stage="restarting", message="Waiting for the service to come back up...")
+        healthy = False
+        for _ in range(UPDATE_RESTART_HEALTH_TIMEOUT):
+            check = subprocess.run(["systemctl", "is-active", "--quiet", "asl3-herald"])
+            if check.returncode == 0:
+                healthy = True
+                break
+            time.sleep(1)
+
+        if not healthy:
+            update_status(status="failed", stage="restarting",
+                          message="Service did not come back up after restart - check: sudo journalctl -u asl3-herald -n 50",
+                          finished_at=time.time(), log=combined_log)
+            return
+
+        try:
+            version_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "version.txt")
+            with open(version_path) as vf:
+                new_version = vf.read().strip()
+        except OSError:
+            new_version = "unknown"
+
+        update_status(status="success", stage="done", to_version=new_version,
+                      message=f"Updated to v{new_version}",
+                      finished_at=time.time(), log=combined_log)
+    except subprocess.TimeoutExpired:
+        update_status(status="failed", stage="installing",
+                      message=f"Installer did not finish within {UPDATE_TIMEOUT_SECONDS // 60} minutes",
+                      finished_at=time.time())
+    except Exception as e:
+        update_status(status="failed", message=f"Unexpected error: {e}", finished_at=time.time())
+
 def cmd_install_voice(config, args):
     voice_id = args.voice_id
     catalog = load_voice_catalog()
@@ -3147,6 +3314,9 @@ def build_arg_parser():
     sub.add_parser("catalog-voices", help="List the full Piper voice catalog with installed status")
 
     sub.add_parser("check-update", help="Check GitHub for a newer release and record the result")
+    sub.add_parser("update-status", help="Print the current/last one-click update status")
+    sub.add_parser("update", help="Start a one-click update from main in the background, if none is already running")
+    sub.add_parser("run-update", help="[internal] Perform the actual update - launched detached by `update`")
 
     p_install_voice = sub.add_parser("install-voice", help="Download and install a Piper voice")
     p_install_voice.add_argument("voice_id")
@@ -3266,6 +3436,12 @@ def cli_main():
         cmd_catalog_voices(config)
     elif args.command == "check-update":
         cmd_check_update(config, args)
+    elif args.command == "update-status":
+        cmd_update_status(config, args)
+    elif args.command == "update":
+        cmd_update(config, args)
+    elif args.command == "run-update":
+        cmd_run_update(config, args)
     elif args.command == "install-voice":
         cmd_install_voice(config, args)
     elif args.command == "remove-voice":

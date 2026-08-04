@@ -103,7 +103,7 @@
   #herald-ui .btn-danger   { background: #e74c3c; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-play     { background: #2980b9; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .btn-secondary{ background: #576574; color: #fff; border: none; border-radius: 4px; }
-  #herald-ui .btn-primary{ background: #27ae60; color: #fff; border: none; border-radius: 4px; padding: 8px 16px; }
+  #herald-ui .btn-primary{ background: #27ae60; color: #fff; border: none; border-radius: 4px; }
   #herald-ui .secret-wrap { position: relative; }
   #herald-ui .secret-wrap input { padding-right: 30px !important; }
   #herald-ui .btn-eye {
@@ -136,6 +136,8 @@
   #herald-ui label { display: block; font-size: 0.95em; margin-top: 8px; }
   #herald-ui .field-row { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
   #herald-ui .field-row > div { flex: 0 0 auto; }
+  #herald-ui .card-row { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
+  #herald-ui .card-row > .card { flex: 1 1 360px; margin-bottom: 0; }
   #herald-ui .days-picker label { display: inline-block; margin-right: 10px; font-weight: normal; }
   #herald-ui .days-picker input[type=checkbox] { margin-right: 10px; }
   #herald-ui .source-toggle { margin: 8px 0; }
@@ -923,65 +925,80 @@
 
 <!-- ══════════════════ SETTINGS ══════════════════ -->
 <div class="tab-panel" id="tab-settings">
-  <div class="card">
-    <h3>Herald Daemon</h3>
-    <p class="muted">Status: <span id="set-herald-status">—</span></p>
-    <p class="muted">Version: <span id="set-herald-version">—</span> <button id="btn-check-update">Check for Updates</button></p>
-    <div class="msg" id="update-check-msg"></div>
-    <button class="btn-toggle" id="btn-toggle-enable">Enable/Disable Herald</button>
-    <button id="btn-reload">Reload Config</button>
-    <div class="msg" id="herald-daemon-msg"></div>
-  </div>
+  <div class="card-row">
+    <div class="card">
+      <h3>Herald Daemon</h3>
+      <p class="muted">Status: <span id="set-herald-status">—</span></p>
+      <p>
+        <button class="btn-toggle" id="btn-toggle-enable">Enable/Disable Herald</button>
+      </p>
+      <div class="msg" id="herald-daemon-msg"></div>
 
-  <div class="card">
-    <h3 style="margin-top:0;">General Settings</h3>
-    <label>Node</label>
-    <input type="text" id="set-node" style="width: 200px;">
-
-    <div class="toggle-row" style="margin-top: 16px;">
-      <label class="toggle-switch">
-        <input type="checkbox" id="set-debug">
-        <span class="toggle-slider"></span>
-      </label>
-      <span class="toggle-label">Enable debug logging</span>
-    </div>
-
-    <br>
-    <button class="btn-primary" id="btn-save-settings">Save &amp; Reload</button>
-    <div class="msg" id="settings-msg"></div>
-  </div>
-
-  <div class="card">
-    <h3 style="margin-top:0;">Voices</h3>
-    <p class="muted">Browse and install additional Piper TTS voices (shared with SkywarnPlus-NG / ASL3's own asl-tts — install once, usable everywhere). Installed voices automatically appear in the voice dropdowns on Tail Messages, Scheduled Announcements, and Time &amp; Weather Templates.</p>
-    <div class="field-row">
-      <div>
-        <label>Region</label>
-        <select id="voices-region" style="width:220px;"></select>
+      <p class="muted" style="margin-top:16px;">Version: <span id="set-herald-version">—</span></p>
+      <p>
+        <button class="btn-secondary" id="btn-check-update">Check for Updates</button>
+        <button class="btn-primary" id="btn-run-update">Update Herald</button>
+      </p>
+      <div class="msg" id="update-check-msg"></div>
+      <div id="update-progress-box" style="display:none; margin: 8px 0; padding: 10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px;">
+        <strong>Update in progress: <span id="update-progress-stage">—</span></strong>
+        <p class="muted" id="update-progress-message" style="margin:4px 0 0;"></p>
       </div>
-      <div style="flex:1 1 auto; min-width:0;">
-        <label>Voice</label>
-        <select id="voices-select" style="width:100%; box-sizing:border-box;"></select>
+      <div class="msg" id="update-run-msg"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">General Settings</h3>
+      <label>Node</label>
+      <input type="text" id="set-node" style="width: 200px;">
+
+      <div class="toggle-row" style="margin-top: 16px;">
+        <label class="toggle-switch">
+          <input type="checkbox" id="set-debug">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Enable debug logging</span>
       </div>
+
+      <br>
+      <button class="btn-primary" id="btn-save-settings">Save &amp; Reload</button>
+      <div class="msg" id="settings-msg"></div>
     </div>
-    <div style="margin-top:10px;">
-      <button class="btn-primary" id="btn-install-voice">Install Voice</button>
-      <button class="btn-danger btn-hidden" id="btn-remove-voice">Remove Voice</button>
-      <button class="btn-secondary" id="btn-refresh-voices">Refresh</button>
-      <span class="muted" id="voices-count"></span>
-    </div>
-    <div class="msg" id="voices-msg"></div>
   </div>
 
-  <div class="card">
-    <h3>Backup &amp; Restore</h3>
-    <p class="muted">Export the full configuration (rotation, scheduled announcements, and settings) as a JSON file, or restore from a previously exported file. Restoring replaces the entire configuration.</p>
-    <button class="btn-secondary" id="btn-export-config">Download Config Backup</button>
-    <br><br>
-    <label>Restore from backup file</label>
-    <input type="file" id="config-import-file" accept=".json">
-    <button class="btn-danger" id="btn-import-config">Restore Config</button>
-    <div class="msg" id="backup-msg"></div>
+  <div class="card-row">
+    <div class="card">
+      <h3 style="margin-top:0;">Voices</h3>
+      <p class="muted">Browse and install additional Piper TTS voices (shared with SkywarnPlus-NG / ASL3's own asl-tts — install once, usable everywhere). Installed voices automatically appear in the voice dropdowns on Tail Messages, Scheduled Announcements, and Time &amp; Weather Templates.</p>
+      <div class="field-row">
+        <div>
+          <label>Region</label>
+          <select id="voices-region" style="width:220px;"></select>
+        </div>
+        <div style="flex:1 1 auto; min-width:0;">
+          <label>Voice</label>
+          <select id="voices-select" style="width:100%; box-sizing:border-box;"></select>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <button class="btn-primary" id="btn-install-voice">Install Voice</button>
+        <button class="btn-danger btn-hidden" id="btn-remove-voice">Remove Voice</button>
+        <button class="btn-secondary" id="btn-refresh-voices">Refresh</button>
+        <span class="muted" id="voices-count"></span>
+      </div>
+      <div class="msg" id="voices-msg"></div>
+    </div>
+
+    <div class="card">
+      <h3>Backup &amp; Restore</h3>
+      <p class="muted">Export the full configuration (rotation, scheduled announcements, and settings) as a JSON file, or restore from a previously exported file. Restoring replaces the entire configuration.</p>
+      <button class="btn-secondary" id="btn-export-config">Download Config Backup</button>
+      <br><br>
+      <label>Restore from backup file</label>
+      <input type="file" id="config-import-file" accept=".json">
+      <button class="btn-danger" id="btn-import-config">Restore Config</button>
+      <div class="msg" id="backup-msg"></div>
+    </div>
   </div>
 </div>
 </div>
