@@ -974,7 +974,7 @@
         <div class="daemon-links">
           <a class="btn-secondary" href="https://github.com/N6LKA/ASL3-Herald" target="_blank" rel="noopener noreferrer">GitHub Repo</a>
           <a class="btn-secondary" href="https://github.com/N6LKA/ASL3-Herald/releases" target="_blank" rel="noopener noreferrer">Release Notes</a>
-          <a class="btn-secondary" href="https://github.com/N6LKA/ASL3-Herald/issues/new" target="_blank" rel="noopener noreferrer">Report a Bug / Request a Feature</a>
+          <a class="btn-secondary" href="https://github.com/N6LKA/ASL3-Herald/issues/new/choose" target="_blank" rel="noopener noreferrer">Report a Bug / Request a Feature</a>
         </div>
       </div>
     </div>
