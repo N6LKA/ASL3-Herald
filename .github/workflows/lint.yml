@@ -1,0 +1,28 @@
+name: Lint
+
+on:
+  pull_request:
+
+jobs:
+  syntax-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bash syntax check
+        run: |
+          bash -n herald
+          bash -n install.sh
+          bash -n uninstall.sh
+
+      - name: Python syntax check
+        run: python3 -m py_compile asl3-herald.py
+
+      - name: PHP syntax check
+        run: |
+          for f in $(find web -name '*.php'); do
+            php -l "$f"
+          done
+
+      - name: JS syntax check
+        run: node --check web/herald-ui.js
