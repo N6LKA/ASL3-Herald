@@ -361,7 +361,7 @@
 
       <br>
       <button class="btn-primary" id="btn-add-tail">Add to Rotation</button>
-      <button id="tail-edit-cancel" style="display:none;">Cancel Edit</button>
+      <button class="btn-secondary" id="tail-edit-cancel" style="display:none;">Cancel Edit</button>
       <div class="msg" id="tail-msg"></div>
     </div>
   </div>
@@ -537,7 +537,7 @@
 
       <br>
       <button class="btn-primary" id="btn-add-sched">Add Scheduled Announcement</button>
-      <button id="sched-edit-cancel" style="display:none;">Cancel Edit</button>
+      <button class="btn-secondary" id="sched-edit-cancel" style="display:none;">Cancel Edit</button>
       <div class="msg" id="sched-msg"></div>
 
       <div style="margin-top:16px; padding:10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px; font-size:0.88em; line-height:1.6;">
@@ -673,7 +673,7 @@
 
       <br>
       <button class="btn-primary" id="btn-add-tw-msg">Add Message</button>
-      <button id="tw-msg-edit-cancel" style="display:none;">Cancel Edit</button>
+      <button class="btn-secondary" id="tw-msg-edit-cancel" style="display:none;">Cancel Edit</button>
       <div class="msg" id="tw-msg-msg"></div>
     </div>
 
@@ -829,7 +829,7 @@
   <div class="card" id="tw-schedule-card">
     <h3>Schedule</h3>
     <p class="muted">Same cron format as Scheduled Announcements.</p>
-    <button id="tw-cron-hourly" style="margin-bottom:10px;">Every Hour (default)</button>
+    <button class="btn-secondary" id="tw-cron-hourly" style="margin-bottom:10px;">Every Hour (default)</button>
     <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-top:6px;">
       <div style="text-align:center;">
         <div style="font-size:0.9em; font-weight:bold; color:#444; margin-bottom:4px;">Minute</div>
@@ -1023,7 +1023,7 @@
   </div>
 
   <hr style="margin:20px 0; border:none; border-top:1px solid #444;">
-  <p class="muted" style="text-align:center;">If you enjoy this program and find it useful, please consider donating to support the project.</p>
+  <p style="text-align:center;">If you enjoy this program and find it useful, please consider donating to support the project.</p>
   <p style="text-align:center;">
     <a href="https://www.paypal.me/LarryAycock" target="_blank" rel="noopener noreferrer">
       <img src="https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png" width="150" alt="Donate with PayPal">
