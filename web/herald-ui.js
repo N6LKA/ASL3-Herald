@@ -857,17 +857,14 @@
     }
   });
 
-  // ── Enable/disable + reload ───────────────────────────────────────────────────────────────────
+  // ── Enable/disable ────────────────────────────────────────────────────────────────────────────
+  // No separate "Reload Config" button - General Settings' own "Save &
+  // Reload" button already reloads, so a standalone reload button was
+  // redundant.
   document.getElementById('btn-toggle-enable').addEventListener('click', async () => {
     const msgEl = document.getElementById('herald-daemon-msg');
     const data = await api('toggle.php', { method: 'POST' });
     showMsg(msgEl, data.message || 'Toggled', data.success !== false);
-    loadAll();
-  });
-  document.getElementById('btn-reload').addEventListener('click', async () => {
-    const msgEl = document.getElementById('herald-daemon-msg');
-    const data = await api('reload.php', { method: 'POST' });
-    showMsg(msgEl, data.message || 'Config reloaded', data.success !== false);
     loadAll();
   });
 
