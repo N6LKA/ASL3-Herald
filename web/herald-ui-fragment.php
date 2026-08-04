@@ -136,7 +136,7 @@
   #herald-ui label { display: block; font-size: 0.95em; margin-top: 8px; }
   #herald-ui .field-row { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
   #herald-ui .field-row > div { flex: 0 0 auto; }
-  #herald-ui .card-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  #herald-ui .card-row { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
   #herald-ui .card-row > .card { flex: 1 1 360px; margin-bottom: 0; }
   #herald-ui .days-picker label { display: inline-block; margin-right: 10px; font-weight: normal; }
   #herald-ui .days-picker input[type=checkbox] { margin-right: 10px; }
