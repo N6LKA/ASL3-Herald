@@ -1044,7 +1044,7 @@
   <p style="text-align:center;">If you enjoy this program and find it useful, please consider donating to support the project.</p>
   <p style="text-align:center;">
     <a href="https://www.paypal.me/LarryAycock" target="_blank" rel="noopener noreferrer">
-      <img src="https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png" width="150" alt="Donate with PayPal">
+      <img src="https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png" width="200" alt="Donate with PayPal">
     </a>
   </p>
 </div>
