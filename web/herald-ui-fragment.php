@@ -925,28 +925,28 @@
 
 <!-- ══════════════════ SETTINGS ══════════════════ -->
 <div class="tab-panel" id="tab-settings">
-  <div class="card">
-    <h3>Herald Daemon</h3>
-    <p class="muted">Status: <span id="set-herald-status">—</span></p>
-    <p>
-      <button class="btn-toggle" id="btn-toggle-enable">Enable/Disable Herald</button>
-    </p>
-    <div class="msg" id="herald-daemon-msg"></div>
-
-    <p class="muted" style="margin-top:16px;">Version: <span id="set-herald-version">—</span></p>
-    <p>
-      <button class="btn-secondary" id="btn-check-update">Check for Updates</button>
-      <button class="btn-primary" id="btn-run-update">Update Herald</button>
-    </p>
-    <div class="msg" id="update-check-msg"></div>
-    <div id="update-progress-box" style="display:none; margin: 8px 0; padding: 10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px;">
-      <strong>Update in progress: <span id="update-progress-stage">—</span></strong>
-      <p class="muted" id="update-progress-message" style="margin:4px 0 0;"></p>
-    </div>
-    <div class="msg" id="update-run-msg"></div>
-  </div>
-
   <div class="card-row">
+    <div class="card">
+      <h3>Herald Daemon</h3>
+      <p class="muted">Status: <span id="set-herald-status">—</span></p>
+      <p>
+        <button class="btn-toggle" id="btn-toggle-enable">Enable/Disable Herald</button>
+      </p>
+      <div class="msg" id="herald-daemon-msg"></div>
+
+      <p class="muted" style="margin-top:16px;">Version: <span id="set-herald-version">—</span></p>
+      <p>
+        <button class="btn-secondary" id="btn-check-update">Check for Updates</button>
+        <button class="btn-primary" id="btn-run-update">Update Herald</button>
+      </p>
+      <div class="msg" id="update-check-msg"></div>
+      <div id="update-progress-box" style="display:none; margin: 8px 0; padding: 10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px;">
+        <strong>Update in progress: <span id="update-progress-stage">—</span></strong>
+        <p class="muted" id="update-progress-message" style="margin:4px 0 0;"></p>
+      </div>
+      <div class="msg" id="update-run-msg"></div>
+    </div>
+
     <div class="card">
       <h3 style="margin-top:0;">General Settings</h3>
       <label>Node</label>
@@ -964,6 +964,30 @@
       <button class="btn-primary" id="btn-save-settings">Save &amp; Reload</button>
       <div class="msg" id="settings-msg"></div>
     </div>
+  </div>
+
+  <div class="card-row">
+    <div class="card">
+      <h3 style="margin-top:0;">Voices</h3>
+      <p class="muted">Browse and install additional Piper TTS voices (shared with SkywarnPlus-NG / ASL3's own asl-tts — install once, usable everywhere). Installed voices automatically appear in the voice dropdowns on Tail Messages, Scheduled Announcements, and Time &amp; Weather Templates.</p>
+      <div class="field-row">
+        <div>
+          <label>Region</label>
+          <select id="voices-region" style="width:220px;"></select>
+        </div>
+        <div style="flex:1 1 auto; min-width:0;">
+          <label>Voice</label>
+          <select id="voices-select" style="width:100%; box-sizing:border-box;"></select>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <button class="btn-primary" id="btn-install-voice">Install Voice</button>
+        <button class="btn-danger btn-hidden" id="btn-remove-voice">Remove Voice</button>
+        <button class="btn-secondary" id="btn-refresh-voices">Refresh</button>
+        <span class="muted" id="voices-count"></span>
+      </div>
+      <div class="msg" id="voices-msg"></div>
+    </div>
 
     <div class="card">
       <h3>Backup &amp; Restore</h3>
@@ -975,28 +999,6 @@
       <button class="btn-danger" id="btn-import-config">Restore Config</button>
       <div class="msg" id="backup-msg"></div>
     </div>
-  </div>
-
-  <div class="card">
-    <h3 style="margin-top:0;">Voices</h3>
-    <p class="muted">Browse and install additional Piper TTS voices (shared with SkywarnPlus-NG / ASL3's own asl-tts — install once, usable everywhere). Installed voices automatically appear in the voice dropdowns on Tail Messages, Scheduled Announcements, and Time &amp; Weather Templates.</p>
-    <div class="field-row">
-      <div>
-        <label>Region</label>
-        <select id="voices-region" style="width:220px;"></select>
-      </div>
-      <div style="flex:1 1 auto; min-width:0;">
-        <label>Voice</label>
-        <select id="voices-select" style="width:100%; box-sizing:border-box;"></select>
-      </div>
-    </div>
-    <div style="margin-top:10px;">
-      <button class="btn-primary" id="btn-install-voice">Install Voice</button>
-      <button class="btn-danger btn-hidden" id="btn-remove-voice">Remove Voice</button>
-      <button class="btn-secondary" id="btn-refresh-voices">Refresh</button>
-      <span class="muted" id="voices-count"></span>
-    </div>
-    <div class="msg" id="voices-msg"></div>
   </div>
 </div>
 </div>
