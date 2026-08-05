@@ -268,8 +268,8 @@
 <div class="tab-panel active" id="tab-about">
   <div class="card">
     <p style="text-align:center;">
-      <img src="/asl3-herald/img/herald-logo.png" height="260" alt="Herald logo" style="vertical-align:middle;">
-      <img src="/asl3-herald/img/herald-title-banner.png" height="260" alt="AllStarLink Herald - Announcement Manager Suite" style="vertical-align:middle;">
+      <img src="/asl3-herald/img/herald-logo.png" height="220" alt="Herald logo" style="vertical-align:middle;">
+      <img src="/asl3-herald/img/herald-title-banner.png" height="220" alt="AllStarLink Herald - Announcement Manager Suite" style="vertical-align:middle;">
     </p>
 
     <h3>Where Herald came from</h3>
