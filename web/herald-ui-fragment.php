@@ -281,6 +281,18 @@
     <h3>Why "Herald"?</h3>
     <p>Back in medieval times, a herald was the person who rode into town to announce news, proclamations, and important events — the original real-time announcement system. That's exactly what this software does for your repeater or AllStarLink node. The logo's town-crier-with-trumpet, planted at the base of an antenna tower, is a nod to that — old-world herald, modern radio antenna.</p>
 
+    <h3>What's Inside</h3>
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px 32px; margin-top:8px;">
+      <p style="margin:0;"><strong>Tail Messages</strong><br><span class="muted">Plays automatically after someone unkeys, rotating through your configured list.</span></p>
+      <p style="margin:0;"><strong>Scheduled Announcements</strong><br><span class="muted">Fires on a cron schedule, independent of node activity — local or global.</span></p>
+      <p style="margin:0;"><strong>Time &amp; Weather Announcements</strong><br><span class="muted">Current time and conditions, generated fresh every time it plays.</span></p>
+      <p style="margin:0;"><strong>Node ID Generator</strong><br><span class="muted">Build a station ID recording with the same TTS voices.</span></p>
+      <p style="margin:0;"><strong>Voices</strong><br><span class="muted">Natural-sounding neural TTS throughout, with more voices installable right from Settings.</span></p>
+    </div>
+
+    <h3 style="margin-top:20px;">Works Well With</h3>
+    <p><strong>SkywarnPlus-NG</strong> for weather alert integration, and runs right inside both <strong>Allmon3</strong> and <strong>Supermon</strong> — Herald isn't a standalone island, it plugs into the tools you're probably already running.</p>
+
     <hr style="margin:20px 0; border:none; border-top:1px solid #444;">
     <p style="text-align:center;">If you enjoy this program and find it useful, please consider donating to support the project.</p>
     <p style="text-align:center;">
