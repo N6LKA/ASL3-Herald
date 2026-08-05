@@ -291,7 +291,7 @@
     </div>
 
     <h3 style="margin-top:20px;">Works Well With</h3>
-    <p><strong>SkywarnPlus-NG</strong> for weather alert integration, and runs right inside both <strong>Allmon3</strong> and <strong>Supermon</strong> — Herald isn't a standalone island, it plugs into the tools you're probably already running.</p>
+    <p><a href="https://github.com/hardenedpenguin/SkywarnPlus-NG" target="_blank" rel="noopener noreferrer"><strong>SkywarnPlus-NG</strong></a> for weather alert integration, and runs right inside both <a href="https://github.com/AllStarLink/Allmon3" target="_blank" rel="noopener noreferrer"><strong>Allmon3</strong></a> and <strong>Supermon</strong> — Herald isn't a standalone island, it plugs into the tools you're probably already running.</p>
 
     <hr style="margin:20px 0; border:none; border-top:1px solid #444;">
     <p style="text-align:center;">If you enjoy this program and find it useful, please consider donating to support the project.</p>

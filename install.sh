@@ -474,7 +474,7 @@ if [[ -d /etc/allmon3 ]]; then
         info "Allmon3 menu.ini already has a [Herald] entry — skipping"
     else
         MENU_INI_CHANGED=true
-        info "Adding ASL3 Herald sidebar link to $MENU_INI ..."
+        info "Adding AllStarLink Herald sidebar link to $MENU_INI ..."
         if [[ -f "$MENU_INI" ]]; then
             cp "$MENU_INI" "$MENU_INI.bak.$(date +%Y%m%d-%H%M%S)"
         else
@@ -556,7 +556,7 @@ if [[ -f "$SUPERMON_FOOTER" ]]; then
         /if \(\$_SESSION\['"'"'sm61loggedin'"'"'\] === true\) \{/ { print; inblock = 1; next }
         inblock && /^\s*\?>\s*$/ {
             print
-            print "<a href=\"/supermon/asl3-herald.php\">ASL3 Herald</a><br><br>"
+            print "<a href=\"/supermon/asl3-herald.php\">AllStarLink Herald - Announcement Manager Suite</a><br><br>"
             inblock = 0
             next
         }
@@ -604,7 +604,7 @@ if [[ -d /etc/allmon3 ]]; then
     echo "            if the link was just added)"
 fi
 if [[ -f "$SUPERMON_FOOTER" ]]; then
-    echo "           Supermon — look for the \"ASL3 Herald\" link at the bottom after logging in"
+    echo "           Supermon — look for the \"AllStarLink Herald\" link at the bottom after logging in"
 fi
 echo ""
 if $TW_DETECTED; then
