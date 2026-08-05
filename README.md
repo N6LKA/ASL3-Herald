@@ -1,14 +1,4 @@
-<table width="100%">
-<tr>
-<td width="260"><img src="web/img/herald-logo.png" width="240" alt="Herald logo"></td>
-<td>
-
-# AllStarLink Herald
-## ASL3 Announcement & Audio Suite
-
-</td>
-</tr>
-</table>
+<img src="web/img/herald-logo.png" height="240" alt="Herald logo"><img src="web/img/herald-title-banner.png" height="240" alt="AllStarLink Herald - ASL3 Announcement & Audio Suite">
 
 ![Release Version](https://img.shields.io/github/v/release/N6LKA/ASL3-Herald?label=Version&color=f15d24)
 ![Release Date](https://img.shields.io/github/release-date/N6LKA/ASL3-Herald?label=released&color=green)
