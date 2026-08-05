@@ -879,6 +879,23 @@ def perform_update_check(state):
     save_state(state)
     return result
 
+def live_update_check(state):
+    """Returns state["update_check"] with update_available/ahead_of_main
+    re-derived against the live, currently-running VERSION rather than
+    whatever current_version was cached at the last check. That cache goes
+    stale the instant the daemon is updated by any means - the one-click
+    button, a manual install.sh re-run, anything - not just the button's own
+    flow. Re-deriving here is free (no GitHub call): latest_version doesn't
+    change until a new release actually ships, only our own version does."""
+    check = dict(state.get("update_check") or {})
+    latest = check.get("latest_version")
+    if latest and VERSION != "unknown":
+        cur_t, latest_t = _version_tuple(VERSION), _version_tuple(latest)
+        check["update_available"] = cur_t < latest_t
+        check["ahead_of_main"] = cur_t > latest_t
+    check["current_version"] = VERSION
+    return check
+
 def update_check_tick(state, now):
     """Call once per main-loop iteration - internally rate-limited to only
     actually check GitHub once every UPDATE_CHECK_INTERVAL_SECONDS (default
@@ -2683,7 +2700,7 @@ def cmd_list_json(config):
         "scheduled": scheduled_with_health(cfg["scheduled"]),
         "timeweather": timeweather_with_health(cfg["timeweather"]),
         "node_id": node_id_with_health(config),
-        "update_check": state.get("update_check") or {},
+        "update_check": live_update_check(state),
     }
     print(json.dumps(out, indent=2))
 
