@@ -546,17 +546,36 @@ fi
 
 # Supermon footer link — added inside Supermon's own login-conditional
 # block, so it's already hidden until logged in, natively.
+SUPERMON_FOOTER_LINK='<a href="/supermon/asl3-herald.php">AllStarLink Herald - Announcement Manager Suite</a><br><br>'
 if [[ -f "$SUPERMON_FOOTER" ]]; then
-    if grep -q "asl3-herald.php" "$SUPERMON_FOOTER"; then
-        info "Supermon footer link already present — skipping"
+    if grep -qF "$SUPERMON_FOOTER_LINK" "$SUPERMON_FOOTER"; then
+        info "Supermon footer link already present and up to date — skipping"
+    elif grep -q "asl3-herald.php" "$SUPERMON_FOOTER"; then
+        # An older install added the link with older text (e.g. "ASL3 Herald")
+        # - rewrite that whole line in place rather than leaving stale text
+        # behind that nobody would think to go fix by hand.
+        info "Updating Supermon footer link text ..."
+        cp "$SUPERMON_FOOTER" "$SUPERMON_FOOTER.bak.$(date +%Y%m%d-%H%M%S)"
+        SUPERMON_FOOTER_LINK="$SUPERMON_FOOTER_LINK" SF="$SUPERMON_FOOTER" python3 -c "
+import os, re
+path = os.environ['SF']
+link = os.environ['SUPERMON_FOOTER_LINK']
+with open(path) as f:
+    content = f.read()
+content = re.sub(r'<a href=\"/supermon/asl3-herald\.php\">.*?</a><br><br>', link, content)
+with open(path, 'w') as f:
+    f.write(content)
+"
+        chown www-data:www-data "$SUPERMON_FOOTER" 2>/dev/null || true
+        info "Supermon footer link text updated."
     else
         info "Adding asl3-herald link to Supermon footer ..."
         cp "$SUPERMON_FOOTER" "$SUPERMON_FOOTER.bak.$(date +%Y%m%d-%H%M%S)"
-        awk '
+        SUPERMON_FOOTER_LINK="$SUPERMON_FOOTER_LINK" awk '
         /if \(\$_SESSION\['"'"'sm61loggedin'"'"'\] === true\) \{/ { print; inblock = 1; next }
         inblock && /^\s*\?>\s*$/ {
             print
-            print "<a href=\"/supermon/asl3-herald.php\">AllStarLink Herald - Announcement Manager Suite</a><br><br>"
+            print ENVIRON["SUPERMON_FOOTER_LINK"]
             inblock = 0
             next
         }
