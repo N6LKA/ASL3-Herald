@@ -2401,6 +2401,7 @@ def cmd_run_update(config, args):
     behavior (the running process holds the old file's inode open) - and
     exits normally once done; only the separate `asl3-herald` systemd
     service actually restarts onto the new code."""
+    global VERSION
     pid = os.getpid()
     started = time.time()
     from_version = VERSION
@@ -2459,6 +2460,19 @@ def cmd_run_update(config, args):
                 new_version = vf.read().strip()
         except OSError:
             new_version = "unknown"
+
+        # This process's own VERSION global was frozen at import time, before
+        # the update - still the *old* version. Without this, the header
+        # badge's cached "update available" state would stay stale (still
+        # comparing against the old version) until the next automatic daily
+        # check or manual "Check for Updates" click. Overriding it here lets
+        # perform_update_check() record an accurate comparison immediately.
+        VERSION = new_version
+        try:
+            state = load_state()
+            perform_update_check(state)
+        except Exception as e:
+            log_warn(f"Could not refresh update-check state after update: {e}")
 
         update_status(status="success", stage="done", to_version=new_version,
                       message=f"Updated to v{new_version}",

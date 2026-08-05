@@ -975,6 +975,7 @@
           <div id="update-progress-box" style="display:none; margin: 8px 0; padding: 10px 14px; background:#f8f8f8; border:1px solid #ddd; border-radius:6px;">
             <strong>Update in progress: <span id="update-progress-stage">—</span></strong>
             <p class="muted" id="update-progress-message" style="margin:4px 0 0;"></p>
+            <button class="btn-secondary" id="btn-refresh-page" style="display:none; margin-top:8px;">Refresh Page</button>
           </div>
           <div class="msg" id="update-run-msg"></div>
         </div>

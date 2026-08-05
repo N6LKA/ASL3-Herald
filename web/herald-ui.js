@@ -919,33 +919,55 @@
 
   // ── One-click update (from main) ─────────────────────────────────────────────────────────
   let updatePoller = null;
+  // update_status.php reflects whatever the last update run left behind,
+  // with no expiry - a page loaded long after a past update would otherwise
+  // immediately see status:"success" again and show the refresh prompt for
+  // an update the user already refreshed for. Only show it when this page's
+  // own polling actually witnessed the in_progress -> success transition.
+  let sawInProgress = false;
 
   function renderUpdateProgress(status) {
     const box = document.getElementById('update-progress-box');
     const stageEl = document.getElementById('update-progress-stage');
     const msgEl = document.getElementById('update-progress-message');
+    const refreshBtn = document.getElementById('btn-refresh-page');
     const btn = document.getElementById('btn-run-update');
     const runMsgEl = document.getElementById('update-run-msg');
 
     if (status.status === 'in_progress') {
+      sawInProgress = true;
       box.style.display = '';
       stageEl.textContent = titleCase(status.stage || 'starting');
       msgEl.textContent = status.message || '';
+      refreshBtn.style.display = 'none';
       btn.disabled = true;
       if (!updatePoller) updatePoller = setInterval(pollUpdateStatus, 3000);
       return;
     }
 
-    box.style.display = 'none';
     btn.disabled = false;
     clearInterval(updatePoller);
     updatePoller = null;
 
-    if (status.status === 'success') {
+    if (status.status === 'success' && sawInProgress) {
+      // Left visible (not hidden like the failure case) - loadAll() below
+      // refreshes data (version number, header badge) but can't reload this
+      // page's own JS/HTML, so anything the update changed in the interface
+      // itself won't show up without an actual page refresh.
+      box.style.display = '';
+      stageEl.textContent = 'Complete';
+      msgEl.textContent = (status.message || ('Updated to v' + status.to_version)) + ' - refresh this page to load the latest interface.';
+      refreshBtn.style.display = '';
+      refreshBtn.onclick = () => location.reload();
       showMsg(runMsgEl, status.message || ('Updated to v' + status.to_version), true);
       loadAll(); // picks up the new version number and clears the header badge
-    } else if (status.status === 'failed') {
+    } else if (status.status === 'failed' && sawInProgress) {
+      box.style.display = 'none';
       showMsg(runMsgEl, status.message || 'Update failed', false);
+    } else {
+      // Stale status left over from a past update this page never watched
+      // happen (e.g. loaded well after it finished) - nothing to show.
+      box.style.display = 'none';
     }
   }
 
