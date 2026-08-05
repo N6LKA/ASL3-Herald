@@ -254,7 +254,8 @@
 </div>
 
 <div class="tabs">
-  <button class="tab-btn active" data-tab="info">How It Works</button>
+  <button class="tab-btn active" data-tab="about">About</button>
+  <button class="tab-btn" data-tab="info">How It Works</button>
   <button class="tab-btn" data-tab="tail">Tail Messages</button>
   <button class="tab-btn" data-tab="scheduled">Scheduled Announcements</button>
   <button class="tab-btn" data-tab="timeweather">Time & Weather Announcements</button>
@@ -263,8 +264,55 @@
   <button class="tab-btn" data-tab="settings">Global Settings</button>
 </div>
 
+<!-- ══════════════════ ABOUT ══════════════════ -->
+<div class="tab-panel active" id="tab-about">
+  <div class="card">
+    <p style="text-align:center;">
+      <img src="/asl3-herald/img/herald-logo.png" height="220" alt="Herald logo" style="vertical-align:middle;">
+      <img src="/asl3-herald/img/herald-title-banner.png" height="220" alt="AllStarLink Herald - Announcement Manager Suite" style="vertical-align:middle;">
+    </p>
+
+    <h3>Where Herald came from</h3>
+    <p>Herald started as a drop-in replacement for <code>app_rpt</code>'s native tail message function — the built-in one is limited and, on some setups, unreliable. What began as a more dependable tail message replacement grew into a full announcement suite as more needs came up: scheduled announcements, time and weather, a station ID generator, and a web UI to manage it all without touching a config file by hand.</p>
+
+    <h3>What Herald is (and isn't)</h3>
+    <p>Herald is an <strong>announcement manager</strong> — it decides what plays, when, and how, and generates the audio to play (via neural TTS) when you don't want to record it yourself. It's not a general-purpose audio editor or production tool. Herald's whole job is getting the right announcement to play at the right time, reliably, without you having to babysit it.</p>
+
+    <h3>Why "Herald"?</h3>
+    <p>Back in medieval times, a herald was the person who rode into town to announce news, proclamations, and important events — the original real-time announcement system. That's exactly what this software does for your repeater or AllStarLink node. The logo's town-crier-with-trumpet, planted at the base of an antenna tower, is a nod to that — old-world herald, modern radio antenna.</p>
+
+    <h3>What's Inside</h3>
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px 32px; margin-top:8px;">
+      <p style="margin:0;"><strong>Tail Messages</strong><br><span class="muted">Plays automatically after someone unkeys, rotating through your configured list.</span></p>
+      <p style="margin:0;"><strong>Scheduled Announcements</strong><br><span class="muted">Fires on a cron schedule, independent of node activity — local or global.</span></p>
+      <p style="margin:0;"><strong>Time &amp; Weather Announcements</strong><br><span class="muted">Current time and conditions, generated fresh every time it plays.</span></p>
+      <p style="margin:0;"><strong>Node ID Generator</strong><br><span class="muted">Build a station ID recording with the same TTS voices.</span></p>
+      <p style="margin:0;"><strong>Voices</strong><br><span class="muted">Natural-sounding neural TTS throughout, with more voices installable right from Settings.</span></p>
+    </div>
+
+    <h3 style="margin-top:20px;">Works Well With</h3>
+    <p><a href="https://github.com/hardenedpenguin/SkywarnPlus-NG" target="_blank" rel="noopener noreferrer"><strong>SkywarnPlus-NG</strong></a> for weather alert integration, and runs right inside both <a href="https://github.com/AllStarLink/Allmon3" target="_blank" rel="noopener noreferrer"><strong>Allmon3</strong></a> and <strong>Supermon</strong> — Herald isn't a standalone island, it plugs into the tools you're probably already running.</p>
+
+    <hr style="margin:20px 0; border:none; border-top:1px solid #444;">
+    <p style="text-align:center;">If you enjoy this program and find it useful, please consider donating to support the project.</p>
+    <p style="text-align:center;">
+      <a href="https://www.paypal.me/LarryAycock" target="_blank" rel="noopener noreferrer">
+        <img src="https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png" width="200" alt="Donate with PayPal">
+      </a>
+    </p>
+
+    <hr style="margin:20px 0; border:none; border-top:1px solid #444;">
+    <p style="text-align:center;">
+      <a class="btn-secondary" href="https://github.com/N6LKA/ASL3-Herald/wiki" target="_blank" rel="noopener noreferrer">Documentation</a>
+      <a class="btn-secondary" href="https://github.com/N6LKA/ASL3-Herald" target="_blank" rel="noopener noreferrer">GitHub Repo</a>
+      <a class="btn-secondary" href="https://github.com/N6LKA/ASL3-Herald/releases" target="_blank" rel="noopener noreferrer">Release Notes</a>
+      <a class="btn-secondary" href="https://github.com/N6LKA/ASL3-Herald/issues/new/choose" target="_blank" rel="noopener noreferrer">Report a Bug / Request a Feature</a>
+    </p>
+  </div>
+</div>
+
 <!-- ══════════════════ HOW IT WORKS ══════════════════ -->
-<div class="tab-panel active" id="tab-info">
+<div class="tab-panel" id="tab-info">
   <div class="card">
     <h3>Tail Messages <span class="muted" style="font-weight:normal; font-size:0.85em;">(Unkey-Triggered)</span></h3>
     <p>A <strong>Tail Message</strong> plays automatically after someone unkeys on the node — timed so it plays after the courtesy tone, just like a native tail message. They rotate through your configured list in order, gated by the <strong>MinInterval</strong> so they don't play too frequently.</p>
@@ -1041,13 +1089,5 @@
       <div class="msg" id="backup-msg"></div>
     </div>
   </div>
-
-  <hr style="margin:20px 0; border:none; border-top:1px solid #444;">
-  <p style="text-align:center;">If you enjoy this program and find it useful, please consider donating to support the project.</p>
-  <p style="text-align:center;">
-    <a href="https://www.paypal.me/LarryAycock" target="_blank" rel="noopener noreferrer">
-      <img src="https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png" width="200" alt="Donate with PayPal">
-    </a>
-  </p>
 </div>
 </div>

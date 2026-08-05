@@ -416,7 +416,7 @@ done
 for f in list.php voices.php catalog_voices.php install_voice.php remove_voice.php play.php reload.php toggle.php toggle_scheduled.php toggle_rotation.php remove.php add_rotation.php add_scheduled.php edit_rotation.php edit_scheduled.php settings.php reorder_rotation.php playback_history.php clear_history.php config_export.php config_import.php version_check.php update.php update_status.php timeweather.php timeweather_test.php add_timeweather_message.php edit_timeweather_message.php remove_timeweather_message.php toggle_timeweather_message.php node_id.php node_id_test.php; do
     fetch_repo_file "web/api/$f" "$WEB_DIR/api/$f"
 done
-for f in herald-icon.png; do
+for f in herald-icon.png herald-logo.png herald-title-banner.png; do
     fetch_repo_file "web/img/$f" "$WEB_DIR/img/$f"
 done
 chown -R www-data:www-data "$WEB_DIR"
@@ -474,7 +474,7 @@ if [[ -d /etc/allmon3 ]]; then
         info "Allmon3 menu.ini already has a [Herald] entry — skipping"
     else
         MENU_INI_CHANGED=true
-        info "Adding ASL3 Herald sidebar link to $MENU_INI ..."
+        info "Adding AllStarLink Herald sidebar link to $MENU_INI ..."
         if [[ -f "$MENU_INI" ]]; then
             cp "$MENU_INI" "$MENU_INI.bak.$(date +%Y%m%d-%H%M%S)"
         else
@@ -546,17 +546,36 @@ fi
 
 # Supermon footer link — added inside Supermon's own login-conditional
 # block, so it's already hidden until logged in, natively.
+SUPERMON_FOOTER_LINK='<a href="/supermon/asl3-herald.php">AllStarLink Herald - Announcement Manager Suite</a><br><br>'
 if [[ -f "$SUPERMON_FOOTER" ]]; then
-    if grep -q "asl3-herald.php" "$SUPERMON_FOOTER"; then
-        info "Supermon footer link already present — skipping"
+    if grep -qF "$SUPERMON_FOOTER_LINK" "$SUPERMON_FOOTER"; then
+        info "Supermon footer link already present and up to date — skipping"
+    elif grep -q "asl3-herald.php" "$SUPERMON_FOOTER"; then
+        # An older install added the link with older text (e.g. "ASL3 Herald")
+        # - rewrite that whole line in place rather than leaving stale text
+        # behind that nobody would think to go fix by hand.
+        info "Updating Supermon footer link text ..."
+        cp "$SUPERMON_FOOTER" "$SUPERMON_FOOTER.bak.$(date +%Y%m%d-%H%M%S)"
+        SUPERMON_FOOTER_LINK="$SUPERMON_FOOTER_LINK" SF="$SUPERMON_FOOTER" python3 -c "
+import os, re
+path = os.environ['SF']
+link = os.environ['SUPERMON_FOOTER_LINK']
+with open(path) as f:
+    content = f.read()
+content = re.sub(r'<a href=\"/supermon/asl3-herald\.php\">.*?</a><br><br>', link, content)
+with open(path, 'w') as f:
+    f.write(content)
+"
+        chown www-data:www-data "$SUPERMON_FOOTER" 2>/dev/null || true
+        info "Supermon footer link text updated."
     else
         info "Adding asl3-herald link to Supermon footer ..."
         cp "$SUPERMON_FOOTER" "$SUPERMON_FOOTER.bak.$(date +%Y%m%d-%H%M%S)"
-        awk '
+        SUPERMON_FOOTER_LINK="$SUPERMON_FOOTER_LINK" awk '
         /if \(\$_SESSION\['"'"'sm61loggedin'"'"'\] === true\) \{/ { print; inblock = 1; next }
         inblock && /^\s*\?>\s*$/ {
             print
-            print "<a href=\"/supermon/asl3-herald.php\">ASL3 Herald</a><br><br>"
+            print ENVIRON["SUPERMON_FOOTER_LINK"]
             inblock = 0
             next
         }
@@ -604,7 +623,7 @@ if [[ -d /etc/allmon3 ]]; then
     echo "            if the link was just added)"
 fi
 if [[ -f "$SUPERMON_FOOTER" ]]; then
-    echo "           Supermon — look for the \"ASL3 Herald\" link at the bottom after logging in"
+    echo "           Supermon — look for the \"AllStarLink Herald\" link at the bottom after logging in"
 fi
 echo ""
 if $TW_DETECTED; then

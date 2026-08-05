@@ -15,6 +15,19 @@
 
 ---
 
+## About
+
+**Where Herald came from**
+Herald started as a drop-in replacement for `app_rpt`'s native tail message function — the built-in one is limited and, on some setups, unreliable. What began as a more dependable tail message replacement grew into a full announcement suite as more needs came up: scheduled announcements, time and weather, a station ID generator, and a web UI to manage it all without touching a config file by hand.
+
+**What Herald is (and isn't)**
+Herald is an **announcement manager** — it decides what plays, when, and how, and generates the audio to play (via neural TTS) when you don't want to record it yourself. It's not a general-purpose audio editor or production tool. Herald's whole job is getting the right announcement to play at the right time, reliably, without you having to babysit it.
+
+**Why "Herald"?**
+Back in medieval times, a herald was the person who rode into town to announce news, proclamations, and important events — the original real-time announcement system. That's exactly what this software does for your repeater or AllStarLink node. The logo's town-crier-with-trumpet, planted at the base of an antenna tower, is a nod to that — old-world herald, modern radio antenna.
+
+---
+
 ## Key Features
 
 - **Tail Messages** — reliable, unkey-triggered rotating announcements with SkywarnPlus WX priority and optional day/time-window gating
