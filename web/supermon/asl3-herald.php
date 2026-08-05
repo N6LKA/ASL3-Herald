@@ -17,7 +17,7 @@ include("header.inc");
 ?>
 
 <h2 style="margin: 12px 16px 0; display: flex; align-items: center; gap: 8px;">
-    <img src="/asl3-herald/img/asl3-herald-icon.svg" alt="" width="32" height="32">
+    <img src="/asl3-herald/img/herald-icon.png" alt="" width="32" height="32">
     ASL3 Herald &mdash; Announcement Settings
 </h2>
 
