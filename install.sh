@@ -416,7 +416,7 @@ done
 for f in list.php voices.php catalog_voices.php install_voice.php remove_voice.php play.php reload.php toggle.php toggle_scheduled.php toggle_rotation.php remove.php add_rotation.php add_scheduled.php edit_rotation.php edit_scheduled.php settings.php reorder_rotation.php playback_history.php clear_history.php config_export.php config_import.php version_check.php update.php update_status.php timeweather.php timeweather_test.php add_timeweather_message.php edit_timeweather_message.php remove_timeweather_message.php toggle_timeweather_message.php node_id.php node_id_test.php; do
     fetch_repo_file "web/api/$f" "$WEB_DIR/api/$f"
 done
-for f in herald-icon.png; do
+for f in herald-icon.png herald-logo.png herald-title-banner.png; do
     fetch_repo_file "web/img/$f" "$WEB_DIR/img/$f"
 done
 chown -R www-data:www-data "$WEB_DIR"
