@@ -2850,7 +2850,12 @@ def cmd_toggle_rotation(config, args):
             return
     print(json.dumps({"success": False, "message": f"No rotation entry found for: {target}"}))
 
-def cmd_remove(config, identifier):
+def cmd_remove(config, identifier, entry_type=None):
+    # entry_type ("rotation"/"scheduled") restricts the search to just that
+    # table, so a name that happens to exist in both (previously a silent
+    # dual-delete) only removes the one the caller actually meant. Left as
+    # None, both tables are searched - kept for backward-compatible bare CLI
+    # use; the web UI always passes entry_type now.
     tm = config.setdefault("TailMessage", {})
     rotation = tm.setdefault("Rotation", [])
     scheduled = config.setdefault("Scheduled", [])
@@ -2858,18 +2863,23 @@ def cmd_remove(config, identifier):
     target = os.path.basename(identifier)
     target_noext = os.path.splitext(target)[0]
 
-    new_rotation = []
+    new_rotation = rotation
     removed_rotation = False
-    for e in rotation:
-        base = os.path.basename(rotation_entry_file(e))
-        base_noext = os.path.splitext(base)[0]
-        if base == target or base_noext == target_noext:
-            removed_rotation = True
-        else:
-            new_rotation.append(e)
+    if entry_type in (None, "rotation"):
+        new_rotation = []
+        for e in rotation:
+            base = os.path.basename(rotation_entry_file(e))
+            base_noext = os.path.splitext(base)[0]
+            if base == target or base_noext == target_noext:
+                removed_rotation = True
+            else:
+                new_rotation.append(e)
 
-    new_scheduled = [s for s in scheduled if s.get("Name") != identifier]
-    removed_scheduled = len(new_scheduled) < len(scheduled)
+    new_scheduled = scheduled
+    removed_scheduled = False
+    if entry_type in (None, "scheduled"):
+        new_scheduled = [s for s in scheduled if s.get("Name") != identifier]
+        removed_scheduled = len(new_scheduled) < len(scheduled)
 
     if not removed_rotation and not removed_scheduled:
         print(json.dumps({"success": False, "message": f"Not found: {identifier}"}))
@@ -3297,6 +3307,8 @@ def build_arg_parser():
 
     p_remove = sub.add_parser("remove", help="Remove a rotation file or scheduled announcement by name")
     p_remove.add_argument("identifier")
+    p_remove.add_argument("--type", choices=["rotation", "scheduled"], default=None,
+                           help="Restrict removal to just this type, avoiding ambiguity when a name matches both")
 
     p_reorder = sub.add_parser("reorder-rotation", help="Move a rotation entry up or down in the list")
     p_reorder.add_argument("name")
@@ -3434,7 +3446,7 @@ def cli_main():
     elif args.command == "edit-scheduled":
         cmd_edit_scheduled(config, args)
     elif args.command == "remove":
-        cmd_remove(config, args.identifier)
+        cmd_remove(config, args.identifier, args.type)
     elif args.command == "reorder-rotation":
         cmd_reorder_rotation(config, args)
     elif args.command == "log-playback":

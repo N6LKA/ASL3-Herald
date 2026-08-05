@@ -5,6 +5,13 @@ INSTALL_DIR="/etc/asterisk/scripts/asl3-herald"
 CONF_FILE="$INSTALL_DIR/asl3-herald.conf"
 SERVICE="asl3-herald"
 ANNOUNCE_DIR="$INSTALL_DIR/announcements"
+# Tail Messages and Scheduled Announcements each get their own subdirectory
+# so a rotation entry and a scheduled entry can never collide on the same
+# filename just because a user reused a name (e.g. their own callsign) in
+# both places. Entries created before this existed still live directly in
+# ANNOUNCE_DIR - see find_existing_wav() below, which checks both.
+ROTATION_DIR="$ANNOUNCE_DIR/tail-messages"
+SCHEDULED_DIR="$ANNOUNCE_DIR/scheduled"
 DISABLE_FLAG="$INSTALL_DIR/asl3-herald-disabled"
 DAEMON_PY="/usr/local/bin/asl3-herald/asl3-herald.py"
 PIPER_BIN="/opt/piper/bin/piper/piper"
@@ -226,7 +233,7 @@ get_node() {
 #   festival (text2wave): no simple CLI speed flag exists, so this one
 #          engine falls back to sox's pitch-preserving tempo effect instead.
 generate_tts_file() {
-    local text="$1" name="$2" voice="$3" speed="${4:-1.0}"
+    local text="$1" name="$2" voice="$3" speed="${4:-1.0}" outdir="${5:-$ANNOUNCE_DIR}"
     [[ -z "$speed" ]] && speed="1.0"
     speed="$(awk -v s="$speed" 'BEGIN {
         if (s !~ /^-?[0-9.]+$/) { print "1.0"; exit }
@@ -234,8 +241,8 @@ generate_tts_file() {
         if (s > 2.0) s = 2.0
         printf "%.4f", s
     }')"
-    mkdir -p "$ANNOUNCE_DIR"
-    local outfile="$ANNOUNCE_DIR/${name}.wav"
+    mkdir -p "$outdir"
+    local outfile="$outdir/${name}.wav"
 
     if [[ -x "$PIPER_BIN" ]]; then
         local model="$PIPER_VOICE_DIR/en_US-amy-medium.onnx"
@@ -284,6 +291,19 @@ generate_tts_file() {
     fi
 
     echo "$outfile"
+}
+
+# Locates an existing wav for $name, preferring the type-specific $dir but
+# falling back to the old flat ANNOUNCE_DIR - entries created before the
+# per-type directories existed still live there (forward-only fix, never
+# migrated in bulk). Echoes the found path, or nothing if neither exists.
+find_existing_wav() {
+    local name="$1" dir="$2"
+    if [[ -f "$dir/${name}.wav" ]]; then
+        echo "$dir/${name}.wav"
+    elif [[ -f "$ANNOUNCE_DIR/${name}.wav" ]]; then
+        echo "$ANNOUNCE_DIR/${name}.wav"
+    fi
 }
 
 slugify() {
@@ -457,7 +477,7 @@ cmd_add() {
     [[ -z "$name" ]] && name="$(slugify "$text")"
 
     local outfile
-    outfile="$(generate_tts_file "$text" "$name" "$voice" "$speed")" || exit 1
+    outfile="$(generate_tts_file "$text" "$name" "$voice" "$speed" "$ROTATION_DIR")" || exit 1
 
     local args=(add-rotation "$outfile" --text "$text" --days "$days")
     [[ -n "$voice" ]] && args+=(--voice "$voice")
@@ -493,8 +513,8 @@ cmd_add_file() {
     fi
     [[ -z "$name" ]] && name="$(basename "$src" .wav)"
 
-    mkdir -p "$ANNOUNCE_DIR"
-    local dest="$ANNOUNCE_DIR/${name}.wav"
+    mkdir -p "$ROTATION_DIR"
+    local dest="$ROTATION_DIR/${name}.wav"
     cp "$src" "$dest"
     echo "Copied to: $dest"
 
@@ -532,18 +552,28 @@ cmd_edit_rotation() {
     fi
     [[ -z "$new_name" ]] && new_name="$old_name"
 
-    local old_wav="$ANNOUNCE_DIR/${old_name}.wav"
-    local new_wav="$ANNOUNCE_DIR/${new_name}.wav"
+    local old_wav
+    old_wav="$(find_existing_wav "$old_name" "$ROTATION_DIR")"
+    local new_wav="$ROTATION_DIR/${new_name}.wav"
 
+    # Compares old_wav to new_wav by path, not old_name to new_name - a
+    # same-named edit of a pre-fix entry still needs its stale copy in the
+    # legacy flat ANNOUNCE_DIR cleaned up once the new one lands in
+    # ROTATION_DIR, even though the name itself didn't change.
     if $has_text; then
-        generate_tts_file "$text" "$new_name" "$voice" "$speed" >/dev/null || exit 1
-        [[ "$old_name" != "$new_name" && -f "$old_wav" ]] && rm -f "$old_wav"
+        generate_tts_file "$text" "$new_name" "$voice" "$speed" "$ROTATION_DIR" >/dev/null || exit 1
+        [[ -n "$old_wav" && "$old_wav" != "$new_wav" && -f "$old_wav" ]] && rm -f "$old_wav"
     elif $has_file; then
-        mkdir -p "$ANNOUNCE_DIR"
+        mkdir -p "$ROTATION_DIR"
         cp "$file" "$new_wav"
-        [[ "$old_name" != "$new_name" && -f "$old_wav" ]] && rm -f "$old_wav"
-    elif [[ "$old_name" != "$new_name" && -f "$old_wav" ]]; then
-        # Rename only - no new text/audio, keep the existing file content.
+        [[ -n "$old_wav" && "$old_wav" != "$new_wav" && -f "$old_wav" ]] && rm -f "$old_wav"
+    elif [[ -n "$old_wav" && "$old_wav" != "$new_wav" && -f "$old_wav" ]]; then
+        # No new text/audio - keep the existing file content, just move it.
+        # Fires on an actual rename, or on any edit at all to a pre-fix
+        # entry still sitting in the legacy flat ANNOUNCE_DIR (old_wav !=
+        # new_wav even with the name unchanged) - either way it ends up
+        # migrated into ROTATION_DIR instead of left behind.
+        mkdir -p "$ROTATION_DIR"
         mv "$old_wav" "$new_wav"
     fi
 
@@ -611,17 +641,34 @@ for s in sched:
 
 cmd_remove() {
     need_root "$@"
-    local name="$1"
+    local name="" type=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --type) type="$2"; shift 2 ;;
+            *) name="$1"; shift ;;
+        esac
+    done
     if [[ -z "$name" ]]; then
-        echo "Usage: herald remove <name>"
+        echo "Usage: herald remove <name> [--type rotation|scheduled]"
         exit 1
     fi
 
-    python3 "$DAEMON_PY" remove "$name"
+    local py_args=(remove "$name")
+    [[ -n "$type" ]] && py_args+=(--type "$type")
+    python3 "$DAEMON_PY" "${py_args[@]}"
     cmd_reload 2>/dev/null || true
 
-    local wavfile="$ANNOUNCE_DIR/${name}.wav"
-    if [[ -f "$wavfile" ]]; then
+    # Without --type (bare CLI use, pre-dating the type-aware fix) this only
+    # looks in the flat ANNOUNCE_DIR, matching the old behavior - the web UI
+    # always passes --type now, so it always cleans up the right directory.
+    local dir="$ANNOUNCE_DIR"
+    case "$type" in
+        rotation)  dir="$ROTATION_DIR" ;;
+        scheduled) dir="$SCHEDULED_DIR" ;;
+    esac
+    local wavfile
+    wavfile="$(find_existing_wav "$name" "$dir")"
+    if [[ -n "$wavfile" && -f "$wavfile" ]]; then
         rm -f "$wavfile"
         echo "Deleted: $wavfile"
     fi
@@ -755,15 +802,31 @@ cmd_import_config() {
 
 cmd_play() {
     need_root "$@"
-    local name="$1"
+    local name="" type=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --type) type="$2"; shift 2 ;;
+            *) name="$1"; shift ;;
+        esac
+    done
     if [[ -z "$name" ]]; then
-        echo "Usage: herald play <name>"
+        echo "Usage: herald play <name> [--type rotation|scheduled]"
         exit 1
     fi
 
-    local wavfile="$ANNOUNCE_DIR/${name}.wav"
-    if [[ ! -f "$wavfile" ]]; then
-        echo "ERROR: File not found: $wavfile"
+    # Without --type (bare CLI use, pre-dating the type-aware fix) this only
+    # looks in the flat ANNOUNCE_DIR, matching the old behavior - the web UI
+    # always passes --type now, so it always finds the right file even when
+    # a rotation entry and a scheduled entry share a name.
+    local dir="$ANNOUNCE_DIR"
+    case "$type" in
+        rotation)  dir="$ROTATION_DIR" ;;
+        scheduled) dir="$SCHEDULED_DIR" ;;
+    esac
+    local wavfile
+    wavfile="$(find_existing_wav "$name" "$dir")"
+    if [[ -z "$wavfile" ]]; then
+        echo "ERROR: File not found for '$name'"
         exit 1
     fi
 
@@ -781,15 +844,26 @@ cmd_play() {
     # playback (unkey or scheduled time), so it must never actually go out
     # over the network. A Node override (multinodes= setups) is still
     # honored, since that's a targeting concern, not a broadcast-scope one.
+    # When --type is known, look up the exact matching entry directly instead
+    # of guessing - a rotation entry and a scheduled entry can share a name.
     local entry_node
-    entry_node="$(echo "$info" | json_get "next((s.get('Node') for s in d['scheduled'] if s.get('Name')=='$name' and s.get('Node')), next((r.get('Node') for r in d['tail_message']['rotation'] if isinstance(r, dict) and r.get('File')=='$wavfile' and r.get('Node')), ''))")"
+    if [[ "$type" == "scheduled" ]]; then
+        entry_node="$(echo "$info" | json_get "next((s.get('Node') for s in d['scheduled'] if s.get('Name')=='$name' and s.get('Node')), '')")"
+    elif [[ "$type" == "rotation" ]]; then
+        entry_node="$(echo "$info" | json_get "next((r.get('Node') for r in d['tail_message']['rotation'] if isinstance(r, dict) and r.get('File')=='$wavfile' and r.get('Node')), '')")"
+    else
+        entry_node="$(echo "$info" | json_get "next((s.get('Node') for s in d['scheduled'] if s.get('Name')=='$name' and s.get('Node')), next((r.get('Node') for r in d['tail_message']['rotation'] if isinstance(r, dict) and r.get('File')=='$wavfile' and r.get('Node')), ''))")"
+    fi
     [[ -n "$entry_node" ]] && node="$entry_node"
 
     # Distinguishes a Tail Message test-play from a Scheduled Announcement
     # test-play in the Playback History tab, which otherwise couldn't tell
     # them apart (both used to log as a generic "test" type).
-    local entry_kind
-    entry_kind="$(echo "$info" | json_get "'scheduled' if any(s.get('Name')=='$name' for s in d['scheduled']) else 'tail'")"
+    local entry_kind="$type"
+    [[ "$entry_kind" == "rotation" ]] && entry_kind="tail"
+    if [[ -z "$entry_kind" ]]; then
+        entry_kind="$(echo "$info" | json_get "'scheduled' if any(s.get('Name')=='$name' for s in d['scheduled']) else 'tail'")"
+    fi
 
     local path_no_ext="${wavfile%.wav}"
     echo "Testing (local playback) $name on node $node ..."
@@ -829,7 +903,7 @@ cmd_add_schedule() {
     fi
 
     local outfile
-    outfile="$(generate_tts_file "$text" "$name" "$voice" "$speed")" || exit 1
+    outfile="$(generate_tts_file "$text" "$name" "$voice" "$speed" "$SCHEDULED_DIR")" || exit 1
 
     local args=(add-scheduled --name "$name" --cron "$cron" --file "$outfile" --text "$text")
     [[ -n "$voice" ]] && args+=(--voice "$voice")
@@ -855,8 +929,8 @@ cmd_add_schedule_file() {
         exit 1
     fi
 
-    mkdir -p "$ANNOUNCE_DIR"
-    local dest="$ANNOUNCE_DIR/${name}.wav"
+    mkdir -p "$SCHEDULED_DIR"
+    local dest="$SCHEDULED_DIR/${name}.wav"
     cp "$src" "$dest"
     echo "Copied to: $dest"
 
@@ -891,20 +965,31 @@ cmd_edit_schedule() {
     fi
     [[ -z "$new_name" ]] && new_name="$old_name"
 
-    local old_wav="$ANNOUNCE_DIR/${old_name}.wav"
-    local new_wav="$ANNOUNCE_DIR/${new_name}.wav"
+    local old_wav
+    old_wav="$(find_existing_wav "$old_name" "$SCHEDULED_DIR")"
+    local new_wav="$SCHEDULED_DIR/${new_name}.wav"
     local final_file=""
 
+    # Compares old_wav to new_wav by path, not old_name to new_name - a
+    # same-named edit of a pre-fix entry still needs its stale copy in the
+    # legacy flat ANNOUNCE_DIR cleaned up once the new one lands in
+    # SCHEDULED_DIR, even though the name itself didn't change.
     if $has_text; then
-        generate_tts_file "$text" "$new_name" "$voice" "$speed" >/dev/null || exit 1
+        generate_tts_file "$text" "$new_name" "$voice" "$speed" "$SCHEDULED_DIR" >/dev/null || exit 1
         final_file="$new_wav"
-        [[ "$old_name" != "$new_name" && -f "$old_wav" ]] && rm -f "$old_wav"
+        [[ -n "$old_wav" && "$old_wav" != "$new_wav" && -f "$old_wav" ]] && rm -f "$old_wav"
     elif $has_file; then
-        mkdir -p "$ANNOUNCE_DIR"
+        mkdir -p "$SCHEDULED_DIR"
         cp "$file" "$new_wav"
         final_file="$new_wav"
-        [[ "$old_name" != "$new_name" && -f "$old_wav" ]] && rm -f "$old_wav"
-    elif [[ "$old_name" != "$new_name" && -f "$old_wav" ]]; then
+        [[ -n "$old_wav" && "$old_wav" != "$new_wav" && -f "$old_wav" ]] && rm -f "$old_wav"
+    elif [[ -n "$old_wav" && "$old_wav" != "$new_wav" && -f "$old_wav" ]]; then
+        # No new text/audio - keep the existing file content, just move it.
+        # Fires on an actual rename, or on any edit at all to a pre-fix
+        # entry still sitting in the legacy flat ANNOUNCE_DIR (old_wav !=
+        # new_wav even with the name unchanged) - either way it ends up
+        # migrated into SCHEDULED_DIR instead of left behind.
+        mkdir -p "$SCHEDULED_DIR"
         mv "$old_wav" "$new_wav"
         final_file="$new_wav"
     fi

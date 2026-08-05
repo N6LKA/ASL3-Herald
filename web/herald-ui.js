@@ -371,9 +371,9 @@
         '<td>' +
         '<button class="btn-reorder" data-name="' + name + '" data-direction="up" title="Move up"' + (canMoveUp ? '' : ' disabled') + '>&uarr;</button>' +
         '<button class="btn-reorder" data-name="' + name + '" data-direction="down" title="Move down"' + (canMoveDown ? '' : ' disabled') + '>&darr;</button>' +
-        '<button class="btn-play" data-name="' + name + '">Test (local playback)</button>' +
+        '<button class="btn-play" data-type="tail" data-name="' + name + '">Test (local playback)</button>' +
         '<button class="btn-edit" data-type="tail" data-name="' + name + '" data-text="' + escapeAttr(text) + '" data-voice="' + escapeAttr(voice) + '" data-speed="' + escapeAttr(speed) + '" data-days="' + escapeAttr(daysAttr) + '" data-time-start="' + escapeAttr(timeStart) + '" data-time-end="' + escapeAttr(timeEnd) + '" data-node="' + escapeAttr(node) + '">Edit</button>' +
-        '<button class="btn-danger" data-name="' + name + '">Remove</button></td>';
+        '<button class="btn-danger" data-type="tail" data-name="' + name + '">Remove</button></td>';
       tbody.appendChild(tr);
     });
     const stbody = document.querySelector('#sched-table tbody');
@@ -404,9 +404,9 @@
         '<td>' + schedVoiceDisplay + '</td><td>' + schedSpeedDisplay + '</td>' +
         '<td><button class="' + (enabled ? 'btn-enable' : 'btn-disable') + ' btn-toggle-sched" data-name="' + escapeAttr(s.Name) + '">' + (enabled ? 'Enabled' : 'Disabled') + '</button></td>' +
         '<td>' +
-        '<button class="btn-play" data-name="' + escapeAttr(s.Name) + '">Test (local playback)</button>' +
+        '<button class="btn-play" data-type="sched" data-name="' + escapeAttr(s.Name) + '">Test (local playback)</button>' +
         '<button class="btn-edit" data-type="sched" data-name="' + escapeAttr(s.Name) + '" data-cron="' + escapeAttr(cron) + '" data-playmode="' + playMode + '" data-node="' + escapeAttr(s.Node) + '" data-text="' + escapeAttr(s.Text) + '" data-voice="' + escapeAttr(s.Voice) + '" data-speed="' + escapeAttr(s.Speed || 1.0) + '">Edit</button>' +
-        '<button class="btn-danger" data-name="' + escapeAttr(s.Name) + '">Remove</button>' +
+        '<button class="btn-danger" data-type="sched" data-name="' + escapeAttr(s.Name) + '">Remove</button>' +
         '</td>';
       stbody.appendChild(tr);
     });
@@ -637,8 +637,9 @@
     // dialog reading "Remove undefined?") every time this ran.
     document.querySelectorAll('table .btn-play').forEach(btn => {
       btn.onclick = async () => {
+        const type = btn.dataset.type === 'sched' ? 'scheduled' : 'rotation';
         await api('play.php', { method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ name: btn.dataset.name }) });
+          body: JSON.stringify({ name: btn.dataset.name, type }) });
         loadHistory();
       };
     });
@@ -656,8 +657,9 @@
     document.querySelectorAll('table .btn-danger').forEach(btn => {
       btn.onclick = async () => {
         if (!confirm('Remove "' + btn.dataset.name + '"?')) return;
+        const type = btn.dataset.type === 'sched' ? 'scheduled' : 'rotation';
         await api('remove.php', { method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ name: btn.dataset.name }) });
+          body: JSON.stringify({ name: btn.dataset.name, type }) });
         loadAll();
       };
     });
