@@ -3,6 +3,9 @@ name: Lint
 on:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   syntax-check:
     runs-on: ubuntu-latest
