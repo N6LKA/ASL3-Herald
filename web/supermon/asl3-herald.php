@@ -17,8 +17,8 @@ include("header.inc");
 ?>
 
 <h2 style="margin: 12px 16px 0; display: flex; align-items: center; gap: 8px;">
-    <img src="/asl3-herald/img/asl3-herald-icon.svg" alt="" width="32" height="32">
-    ASL3 Herald &mdash; Announcement Settings
+    <img src="/asl3-herald/img/herald-icon.png" alt="" width="32" height="32">
+    AllStarLink Herald &mdash; Announcement Manager Suite
 </h2>
 
 <?php if (isset($_SESSION['sm61loggedin']) && $_SESSION['sm61loggedin'] === true): ?>
@@ -34,7 +34,7 @@ include("header.inc");
     <script src="/asl3-herald/herald-ui.js?v=<?php echo $herald_ui_js_ver; ?>"></script>
 <?php else: ?>
     <p style="text-align:center; margin-top:40px;">
-        Please log in (top of page) to manage ASL3 Herald announcements.
+        Please log in (top of page) to manage AllStarLink Herald announcements.
     </p>
 <?php endif; ?>
 
