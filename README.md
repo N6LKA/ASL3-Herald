@@ -1,11 +1,11 @@
 <img src="web/img/herald-logo.png" height="240" alt="Herald logo"><img src="web/img/herald-title-banner.png" height="240" alt="AllStarLink Herald - Announcement Manager Suite">
 
-![Release Version](https://img.shields.io/github/v/release/N6LKA/ASL3-Herald?label=Version&color=f15d24)
+![Release Version](https://img.shields.io/github/v/release/N6LKA/ASL3-Herald?label=Version&color=2f6f9f)
 ![Release Date](https://img.shields.io/github/release-date/N6LKA/ASL3-Herald?label=released&color=green)
-![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
+![Last Commit](https://img.shields.io/github/last-commit/N6LKA/ASL3-Herald)
 ![Lint](https://img.shields.io/github/actions/workflow/status/N6LKA/ASL3-Herald/lint.yml?branch=main&label=lint)
 ![Open Issues](https://img.shields.io/github/issues/N6LKA/ASL3-Herald)
-![Last Commit](https://img.shields.io/github/last-commit/N6LKA/ASL3-Herald)
+![License](https://img.shields.io/badge/license-GPLv3-lightgrey)
 
 **A full-featured announcement and audio suite for ASL3/app_rpt.**
 
