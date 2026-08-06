@@ -367,6 +367,22 @@ else
     warn "Review the rest of the config before starting: $CONFIG_DIR/asl3-herald.conf"
 fi
 
+# Migrate anyone still on the pre-1.25.2 /tmp-based snapshot default — that
+# path is invisible to anything Apache exec()s when PrivateTmp=true
+# (Debian/Ubuntu's apache2.service default), which silently broke the
+# Supermon weather-line integration added in 1.25.0. Only touches the file
+# if it still has the exact old default; never touches a value the user
+# deliberately customized to something else.
+OLD_SNAPSHOT_PATH="/tmp/asl3-herald/weather.json"
+NEW_SNAPSHOT_PATH="/etc/asterisk/scripts/asl3-herald/weather.json"
+if [[ -f "$CONFIG_DIR/asl3-herald.conf" ]] && \
+   grep -qF "SnapshotPath: $OLD_SNAPSHOT_PATH" "$CONFIG_DIR/asl3-herald.conf"; then
+    info "Migrating weather SnapshotPath off /tmp (PrivateTmp compatibility) ..."
+    cp "$CONFIG_DIR/asl3-herald.conf" "$CONFIG_DIR/asl3-herald.conf.bak.$(date +%Y%m%d-%H%M%S)"
+    sed -i "s#SnapshotPath: $OLD_SNAPSHOT_PATH#SnapshotPath: $NEW_SNAPSHOT_PATH#" "$CONFIG_DIR/asl3-herald.conf"
+    info "  Old value backed up in asl3-herald.conf.bak.*  — restart/reload picks up the new path below."
+fi
+
 # ── systemd service ────────────────────────────────────────────────────────────
 
 info "Installing systemd service ..."
