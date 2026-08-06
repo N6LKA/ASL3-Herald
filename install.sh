@@ -586,6 +586,33 @@ with open(path, 'w') as f:
     fi
 fi
 
+# Supermon weather line — link.php calls
+#   exec("/usr/local/sbin/supermon/weather.sh $LOCALZIP v")
+# for its "Weather conditions: ..." display, and Supermon ships its own
+# weather.sh there. We replace that with a symlink to a Herald-owned wrapper
+# (scripts/supermon-weather.sh) that reads the same weather snapshot Allmon3
+# uses, so both panels always agree instead of running two independent
+# weather fetches that can drift apart. Only wired up when a snapshot is
+# actually being written — no point relinking this for nothing.
+SUPERMON_WEATHER_LINK="/usr/local/sbin/supermon/weather.sh"
+SUPERMON_WEATHER_TARGET="$CONFIG_DIR/supermon-weather.sh"
+if [[ -d "/usr/local/sbin/supermon" ]] && \
+   grep -qE '^\s*SnapshotEnable:\s*true' "$CONFIG_DIR/asl3-herald.conf" 2>/dev/null; then
+    fetch_repo_file "scripts/supermon-weather.sh" "$SUPERMON_WEATHER_TARGET"
+    chmod 755 "$SUPERMON_WEATHER_TARGET"
+    if [[ -e "$SUPERMON_WEATHER_LINK" && ! -L "$SUPERMON_WEATHER_LINK" ]] && \
+       [[ ! -f "${SUPERMON_WEATHER_LINK}.bak-original" ]]; then
+        # A real file, not a symlink — Supermon's stock weather.sh (or some
+        # other integration's leftover). Preserve it exactly once so
+        # uninstall can put it back; we never want to be the reason someone
+        # loses their original weather.sh with no way to recover it.
+        info "Backing up Supermon's existing weather.sh -> ${SUPERMON_WEATHER_LINK}.bak-original"
+        cp "$SUPERMON_WEATHER_LINK" "${SUPERMON_WEATHER_LINK}.bak-original"
+    fi
+    ln -sf "$SUPERMON_WEATHER_TARGET" "$SUPERMON_WEATHER_LINK"
+    info "Supermon weather line now reads Herald's weather snapshot ($SUPERMON_WEATHER_LINK -> $SUPERMON_WEATHER_TARGET)"
+fi
+
 # ── Start / restart the service ───────────────────────────────────────────────
 # Always start (or restart) — never leave the service stopped after an install.
 if $WAS_ACTIVE; then
