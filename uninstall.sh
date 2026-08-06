@@ -119,6 +119,18 @@ if [[ -f "$SUPERMON_DIR/asl3-herald.php" ]]; then
     rm -f "$SUPERMON_DIR/asl3-herald.php"
 fi
 
+SUPERMON_WEATHER_LINK="/usr/local/sbin/supermon/weather.sh"
+SUPERMON_WEATHER_TARGET="$CONFIG_DIR/supermon-weather.sh"
+if [[ -L "$SUPERMON_WEATHER_LINK" ]] && [[ "$(readlink "$SUPERMON_WEATHER_LINK")" == "$SUPERMON_WEATHER_TARGET" ]]; then
+    if [[ -f "${SUPERMON_WEATHER_LINK}.bak-original" ]]; then
+        info "Restoring Supermon's original weather.sh..."
+        mv "${SUPERMON_WEATHER_LINK}.bak-original" "$SUPERMON_WEATHER_LINK"
+    else
+        info "Removing Supermon weather.sh symlink (no original backup found to restore)..."
+        rm -f "$SUPERMON_WEATHER_LINK"
+    fi
+fi
+
 # ── Config / announcements / state (preserved by default) ─────────────────────
 
 if [[ "$PURGE_CONFIG" == "true" ]]; then
