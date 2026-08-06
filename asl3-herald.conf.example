@@ -228,13 +228,22 @@ TimeWeather:
       StationID: ""   # e.g. KCASTATION1
 
     # Writes a small current-conditions JSON snapshot for other local
-    # programs to read (e.g. ASL3-SkywarnPlus-NG-Bridge, for the Allmon3
-    # panel — see that repo's README, "Weather snapshot contract"). Reuses
-    # this section's own cached fetch above (CacheMaxAgeMin), so enabling
-    # this does not cause any extra API calls beyond what Time & Weather's
-    # own announcements already make. Checked once a minute internally.
+    # programs to read (e.g. ASL3-SkywarnPlus-NG-Bridge for the Allmon3
+    # panel, and install.sh's own Supermon weather-line wrapper — see that
+    # repo's README, "Weather snapshot contract"). Reuses this section's own
+    # cached fetch above (CacheMaxAgeMin), so enabling this does not cause
+    # any extra API calls beyond what Time & Weather's own announcements
+    # already make. Checked once a minute internally.
+    #
+    # Deliberately NOT under /tmp: Debian/Ubuntu's default apache2.service
+    # sets PrivateTmp=true, which gives Apache (and anything it exec()s,
+    # e.g. Supermon's link.php calling the weather-line wrapper) its own
+    # isolated /tmp — a file written to the real /tmp by this daemon would
+    # be invisible to it. If you change this path, keep it off /tmp/ and
+    # /var/tmp/ for the same reason, and update ASL3-SkywarnPlus-NG-Bridge's
+    # Weather.JsonPath to match.
     SnapshotEnable: false
-    SnapshotPath: /tmp/asl3-herald/weather.json
+    SnapshotPath: /etc/asterisk/scripts/asl3-herald/weather.json
     SnapshotLabel: ""   # optional, shown on the Allmon3 panel e.g. "Home Station"
 
   # ── Template mode settings (ignored when Mode: recordings) ────────────────
