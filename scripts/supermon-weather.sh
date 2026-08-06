@@ -18,7 +18,7 @@
 set -euo pipefail
 
 CONF="/etc/asterisk/scripts/asl3-herald/asl3-herald.conf"
-DEFAULT_SNAPSHOT_PATH="/tmp/asl3-herald/weather.json"
+DEFAULT_SNAPSHOT_PATH="/etc/asterisk/scripts/asl3-herald/weather.json"
 MAX_AGE_MIN=30
 
 SNAPSHOT_PATH="$DEFAULT_SNAPSHOT_PATH"

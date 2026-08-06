@@ -1351,7 +1351,7 @@ def fetch_weather_cached(state, provider, location, tempest_token, tempest_stati
         weather = cache["weather"]
     return weather
 
-DEFAULT_WEATHER_SNAPSHOT_PATH = "/tmp/asl3-herald/weather.json"
+DEFAULT_WEATHER_SNAPSHOT_PATH = "/etc/asterisk/scripts/asl3-herald/weather.json"
 
 def write_weather_snapshot(weather, label, path):
     """Writes a small current-conditions JSON snapshot for other local
